@@ -51,12 +51,15 @@ make core-test     # cargo test
 make core-lint     # cargo fmt --check + clippy -D warnings
 
 # iOS app
-make ios-gen       # tuist generate  →  Kaname.xcworkspace
+make core-xcframework  # build the Rust engine → KanameCoreFFI.xcframework + Swift bindings
+make ios-gen       # core-xcframework + tuist generate  →  Kaname.xcworkspace
 make ios-test      # generate + xcodebuild test on a simulator
 make lint          # core + Swift lint/format checks
 ```
 
-Open `ios/Kaname.xcworkspace` in Xcode after `make ios-gen`.
+Open `ios/Kaname.xcworkspace` in Xcode after `make ios-gen`. The Rust↔Swift bridge
+(UniFFI) build & verify steps are detailed in
+[`specs/001-rust-swift-bridge/quickstart.md`](specs/001-rust-swift-bridge/quickstart.md).
 
 ## Development workflow
 We use **GitHub Spec Kit** for spec-driven development. For a new feature, run the

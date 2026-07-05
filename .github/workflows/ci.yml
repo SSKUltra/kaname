@@ -47,6 +47,17 @@ jobs:
         run: swiftlint --strict
       - name: swift-format lint
         run: swift-format lint --recursive --strict Sources Tests
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Add iOS Rust targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Build engine XCFramework (must precede tuist generate)
+        working-directory: ${{ github.workspace }}
+        run: make core-xcframework
       - name: Generate Xcode project
         run: tuist generate --no-open
       # NOTE: pin the simulator/runner + Xcode versions once the toolchain is locked.
