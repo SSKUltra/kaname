@@ -35,7 +35,7 @@ jobs:
 
   ios:
     name: iOS app (SwiftUI)
-    runs-on: macos-14
+    runs-on: macos-15
     defaults:
       run:
         working-directory: ios
