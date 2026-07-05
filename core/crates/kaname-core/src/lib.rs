@@ -20,6 +20,7 @@
 //! `make core-xcframework`.
 
 pub mod dedup;
+mod ffi;
 pub mod model;
 
 pub use dedup::{dedup_fingerprint, normalize_description};

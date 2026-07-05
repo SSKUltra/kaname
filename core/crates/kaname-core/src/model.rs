@@ -9,14 +9,14 @@ use serde::{Deserialize, Serialize};
 /// For bank-account (savings/current) statements the direction is derived from the
 /// running-balance delta; for credit-card statements it comes from an explicit
 /// `Dr`/`Cr` marker. Mirrors the polarity model in the web engine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 pub enum Direction {
     Debit,
     Credit,
 }
 
 /// A single normalized financial transaction produced by a statement reader.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct Transaction {
     pub date: NaiveDate,
     pub description: String,
