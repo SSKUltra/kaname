@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["crates/kaname-core"]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/SSKUltra/kaname"
+authors = ["BeaconBrain"]
+
+[workspace.dependencies]
+rust_decimal = "1"
+rust_decimal_macros = "1"
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+csv = "1"
+
+# Optimise release builds of the static/dynamic libs shipped into the iOS app.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

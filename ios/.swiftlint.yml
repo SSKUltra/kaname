@@ -1,0 +1,16 @@
+disabled_rules:
+  - todo
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - explicit_init
+  - closure_spacing
+excluded:
+  - Derived
+  - .build
+  - Tuist/.build
+line_length:
+  warning: 120
+  error: 160
+identifier_name:
+  min_length: 2

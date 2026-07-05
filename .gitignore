@@ -1,0 +1,30 @@
+# Rust
+/core/target/
+**/*.rs.bk
+
+# Swift / Xcode (Tuist generates the project/workspace)
+*.xcodeproj
+*.xcworkspace
+Derived/
+.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+Tuist/.build/
+.tuist-version
+
+# Fastlane
+ios/fastlane/report.xml
+ios/fastlane/Preview.html
+ios/fastlane/screenshots/**/*.png
+
+# macOS / editors
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Secrets (never commit — premium/secrets live server-side)
+*.env
+.env.*
+!.env.example

@@ -1,0 +1,24 @@
+[package]
+name = "kaname-core"
+version = "0.1.0"
+description = "Shared, platform-agnostic finance engine for Kaname (parse, categorize, dedup, reconcile). Runs fully on-device."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "kaname_core"
+# staticlib + cdylib make the crate FFI-ready for the iOS XCFramework (UniFFI wired in P1);
+# lib keeps it usable as a normal Rust dependency and testable with `cargo test`.
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[dependencies]
+rust_decimal.workspace = true
+serde.workspace = true
+chrono.workspace = true
+regex.workspace = true
+csv.workspace = true
+
+[dev-dependencies]
+rust_decimal_macros.workspace = true

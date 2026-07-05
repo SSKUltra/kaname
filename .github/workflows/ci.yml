@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Rust core (kaname-core)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test --all --all-features
+
+  ios:
+    name: iOS app (SwiftUI)
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: brew install tuist swiftlint swift-format
+      - name: SwiftLint
+        run: swiftlint --strict
+      - name: swift-format lint
+        run: swift-format lint --recursive --strict Sources Tests
+      - name: Generate Xcode project
+        run: tuist generate --no-open
+      # NOTE: pin the simulator/runner + Xcode versions once the toolchain is locked.
+      - name: Build & test
+        run: |
+          xcodebuild \
+            -workspace Kaname.xcworkspace \
+            -scheme Kaname \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            clean build test
