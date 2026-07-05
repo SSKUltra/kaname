@@ -1,0 +1,10 @@
+# Swift binding configuration for kaname-core.
+#
+# Presents the Rust `Decimal` custom type (bridged over the FFI as a String) as a
+# native Foundation.Decimal in Swift. Parsing uses the en_US_POSIX locale so the
+# decimal separator is always '.' regardless of device locale (determinism, FR-008).
+[bindings.swift.custom_types.Decimal]
+type_name = "Decimal"
+imports = ["Foundation"]
+lift = "Decimal(string: {}, locale: Locale(identifier: \"en_US_POSIX\"))!"
+lower = "String(describing: {})"

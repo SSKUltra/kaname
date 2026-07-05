@@ -15,6 +15,7 @@ serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 csv = "1"
+uniffi = "0.32"
 
 # Optimise release builds of the static/dynamic libs shipped into the iOS app.
 [profile.release]

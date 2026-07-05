@@ -1,4 +1,4 @@
-.PHONY: bootstrap core-test core-lint core-fmt ios-gen ios-test lint
+.PHONY: bootstrap core-test core-lint core-fmt core-xcframework ios-gen ios-test lint
 
 # Install the toolchain (idempotent).
 bootstrap:
@@ -17,8 +17,14 @@ core-lint:
 core-fmt:
 	cd core && cargo fmt --all
 
+# Build the UniFFI KanameCoreFFI.xcframework + generated Swift for the iOS app.
+core-xcframework:
+	./core/scripts/build-xcframework.sh
+
 # --- iOS app ---
-ios-gen:
+# `ios-gen` depends on `core-xcframework`: `tuist generate` resolves the xcframework
+# path at generation time, so the framework MUST be built first (research D5).
+ios-gen: core-xcframework
 	cd ios && tuist generate --no-open
 
 ios-test: ios-gen
