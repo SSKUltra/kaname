@@ -1,5 +1,8 @@
 disabled_rules:
   - todo
+  # Allow trailing commas in multi-line literals — aligns with swift-format and
+  # Xcode 16 defaults, and produces cleaner diffs.
+  - trailing_comma
 opt_in_rules:
   - empty_count
   - force_unwrapping
