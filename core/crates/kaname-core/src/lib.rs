@@ -13,9 +13,11 @@
 //!   PDF rendering engine.
 //! - **Money is never a float.** All amounts use [`rust_decimal::Decimal`].
 //!
-//! ## P1 TODO
-//! Wire UniFFI (`uniffi::setup_scaffolding!()` + `#[uniffi::export]`) and produce the
-//! `KanameCore.xcframework` consumed by `ios/`. The crate-type is already FFI-ready.
+//! ## Swift bindings (UniFFI)
+//! `uniffi::setup_scaffolding!()` wires the FFI scaffolding and `#[uniffi::export]`
+//! exposes engine functions (e.g. `engine_version()`) to Swift. The
+//! `KanameCoreFFI.xcframework` and generated `KanameCore.swift` are produced by
+//! `make core-xcframework`.
 
 pub mod dedup;
 pub mod model;
@@ -23,9 +25,15 @@ pub mod model;
 pub use dedup::{dedup_fingerprint, normalize_description};
 pub use model::{Direction, Transaction};
 
+uniffi::setup_scaffolding!();
+
 /// Crate version, surfaced to the app so the UI can display the engine build.
-pub fn engine_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+///
+/// Returns an owned `String` (not `&'static str`) because UniFFI exports cannot
+/// return borrowed data; the value is still `CARGO_PKG_VERSION`.
+#[uniffi::export]
+pub fn engine_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[cfg(test)]

@@ -19,6 +19,20 @@ serde.workspace = true
 chrono.workspace = true
 regex.workspace = true
 csv.workspace = true
+uniffi.workspace = true
 
 [dev-dependencies]
 rust_decimal_macros.workspace = true
+
+# `cli` pulls in UniFFI's bindgen CLI (clap). It is enabled only to build the
+# `uniffi-bindgen` helper binary; the shipped static/cdylib slices use default
+# features so the app binary never links clap.
+[features]
+cli = ["uniffi/cli"]
+
+# Pins the bindings generator to the exact `uniffi` dependency version so
+# `make core-xcframework` produces reproducible Swift bindings.
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["cli"]
