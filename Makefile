@@ -1,4 +1,4 @@
-.PHONY: bootstrap core-test core-lint core-fmt core-xcframework ios-gen ios-test lint
+.PHONY: bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test lint
 
 # Install the toolchain (idempotent).
 bootstrap:
@@ -16,6 +16,11 @@ core-lint:
 
 core-fmt:
 	cd core && cargo fmt --all
+
+# Constitution Principle I gate: fail if any networking crate is in kaname-core's
+# shipped (default-feature) dependency graph.
+core-privacy-audit:
+	./core/scripts/privacy-egress-audit.sh
 
 # Build the UniFFI KanameCoreFFI.xcframework + generated Swift for the iOS app.
 core-xcframework:

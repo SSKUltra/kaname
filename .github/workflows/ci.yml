@@ -32,6 +32,9 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --all --all-features
+      - name: Privacy-egress audit (no networking crate in shipped deps)
+        working-directory: ${{ github.workspace }}
+        run: make core-privacy-audit
 
   ios:
     name: iOS app (SwiftUI)

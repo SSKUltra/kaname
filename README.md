@@ -47,8 +47,9 @@ swift-format.
 make bootstrap     # install Rust + Tuist + SwiftLint + swift-format (idempotent)
 
 # Rust core
-make core-test     # cargo test
-make core-lint     # cargo fmt --check + clippy -D warnings
+make core-test          # cargo test (unit + golden-fixture parity harness)
+make core-lint          # cargo fmt --check + clippy -D warnings
+make core-privacy-audit # fail if any networking crate is in the shipped deps (Principle I)
 
 # iOS app
 make core-xcframework  # build the Rust engine → KanameCoreFFI.xcframework + Swift bindings
@@ -58,8 +59,10 @@ make lint          # core + Swift lint/format checks
 ```
 
 Open `ios/Kaname.xcworkspace` in Xcode after `make ios-gen`. The Rust↔Swift bridge
-(UniFFI) build & verify steps are detailed in
-[`specs/001-rust-swift-bridge/quickstart.md`](specs/001-rust-swift-bridge/quickstart.md).
+(UniFFI) is detailed in
+[`specs/001-rust-swift-bridge/quickstart.md`](specs/001-rust-swift-bridge/quickstart.md);
+the first on-device statement parser (ICICI credit card) in
+[`specs/002-icici-cc-parser/quickstart.md`](specs/002-icici-cc-parser/quickstart.md).
 
 ## Development workflow
 We use **GitHub Spec Kit** for spec-driven development. For a new feature, run the
