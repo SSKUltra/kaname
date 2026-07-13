@@ -23,6 +23,10 @@ uniffi.workspace = true
 
 [dev-dependencies]
 rust_decimal_macros.workspace = true
+# Fixture-harness only (tests/parity.rs) — NOT a runtime dependency, so it is
+# excluded from the shipped graph the privacy-egress audit (`cargo tree -e normal`)
+# inspects.
+serde_json.workspace = true
 
 # `cli` pulls in UniFFI's bindgen CLI (clap). It is enabled only to build the
 # `uniffi-bindgen` helper binary; the shipped static/cdylib slices use default

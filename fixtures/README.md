@@ -17,13 +17,18 @@ Each fixture is a redacted/synthetic statement plus its expected engine output:
 - **Privacy egress** — asserts **zero network** in free/core paths
   (`test_statement_privacy_egress`) → enforced as a constitution gate.
 
-## Format (proposed)
+## Format
+Line-based readers (credit-card statements) use a single self-contained JSON per
+vector — extracted `lines` + `full_text` in, `expected` engine output out:
 ```
 fixtures/
   <bank_code>/<account_kind>/
-    input/    # extracted lines + word x-positions (JSON) — never a real PDF
-    expected/ # expected Transaction[] + reconciliation result (JSON)
+    <name>.json   # { lines[], full_text, expected: { rows[], period_end, card_last4, errored_lines[] } }
 ```
+Amounts and dates are stored as **strings** (re-parsed to `Decimal`/`NaiveDate`), so
+no floating-point value ever touches money. Word x-positions arrive with the future
+bank-ledger reader; line readers do not need them.
+
 Fixtures MUST be synthetic or fully redacted — **no real account data**.
 
-> Not yet populated. Tracked for P2 in `docs/kaname-ios-plan.md`.
+> First populated in P2: `icici/credit_card/basic.json` (see `specs/002-icici-cc-parser/`).

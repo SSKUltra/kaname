@@ -8,6 +8,9 @@
 
 use crate::model::Transaction;
 use crate::normalize_description;
+use crate::statement::base::ParsedStatement;
+use crate::statement::icici::IciciReader;
+use crate::statement::line_reader::{claims, read_lines};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
@@ -38,6 +41,22 @@ pub fn normalize_transaction(input: Transaction) -> Transaction {
         amount: input.amount,
         direction: input.direction,
     }
+}
+
+/// Parse an ICICI credit-card statement from already-extracted text (lines + full
+/// text). The platform (iOS PDFKit) extracts the text natively; the engine never opens
+/// a PDF. Pure and total — a row that matches the shape but whose fields will not parse
+/// is captured in `errored_lines`, never surfaced as an error.
+#[uniffi::export]
+pub fn read_icici_statement(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_lines(&IciciReader, &lines, &full_text)
+}
+
+/// Whether `full_text` is recognizably an ICICI credit-card statement (the
+/// document-plausibility gate); `false` for other issuers.
+#[uniffi::export]
+pub fn icici_claims(full_text: String) -> bool {
+    claims(&IciciReader, &full_text, "ICICI")
 }
 
 #[cfg(test)]

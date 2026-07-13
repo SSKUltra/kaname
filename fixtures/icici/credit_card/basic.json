@@ -1,0 +1,29 @@
+{
+  "_comment": "Synthetic ICICI credit-card golden vector (no real data). Ported from the web engine's test_cc_reader_characterization.py _ICICI case; values captured from a live run of icici.reader.read_lines. amount/date are strings (re-parsed to Decimal/NaiveDate — never float). description_raw keeps the leading serial exactly as the web engine emits it.",
+  "lines": [
+    "29/04/2026 4262 BBPS Payment received 0 13,628.36 CR",
+    "26/05/2026 1814 Fee on gaming transaction 0 10.20"
+  ],
+  "full_text": "ICICI Bank Statement\nStatement Date May 28, 2026\n4315XXXXXXXX1002\n29/04/2026 4262 BBPS Payment received 0 13,628.36 CR\n26/05/2026 1814 Fee on gaming transaction 0 10.20",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-29",
+        "amount": "13628.36",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "4262 BBPS Payment received"
+      },
+      {
+        "date": "2026-05-26",
+        "amount": "10.20",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "1814 Fee on gaming transaction"
+      }
+    ],
+    "period_end": "2026-05-28",
+    "card_last4": "1002",
+    "errored_lines": []
+  }
+}
