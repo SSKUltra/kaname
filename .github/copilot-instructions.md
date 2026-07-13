@@ -46,6 +46,8 @@ UI polish work should apply the `make-interfaces-feel-better` skill.
 ## Active Technologies
 - Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 deployment target + UniFFI `0.32` (new); existing `rust_decimal`, `chrono`, `serde`, `regex`, `csv`; iOS: SwiftUI, Foundation, Tuist (project gen), Swift Testing (001-rust-swift-bridge)
 - N/A (no persistence in this slice; encrypted SQLite/SQLCipher arrives P2+) (001-rust-swift-bridge)
+- Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 target + existing `regex 1.12`, `rust_decimal 1.42`, `chrono 0.4`, `serde 1`, `uniffi 0.32`; **new dev-only** `serde_json` (fixture harness). No new runtime deps. (002-icici-cc-parser)
+- N/A (no persistence this slice; encrypted SQLite/SQLCipher is out of scope) (002-icici-cc-parser)
 
 ## Recent Changes
 - 001-rust-swift-bridge: Added Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 deployment target + UniFFI `0.32` (new); existing `rust_decimal`, `chrono`, `serde`, `regex`, `csv`; iOS: SwiftUI, Foundation, Tuist (project gen), Swift Testing
