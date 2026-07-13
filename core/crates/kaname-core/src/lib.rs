@@ -22,9 +22,12 @@
 pub mod dedup;
 mod ffi;
 pub mod model;
+pub mod statement;
 
 pub use dedup::{dedup_fingerprint, normalize_description};
+pub use ffi::{icici_claims, read_icici_statement};
 pub use model::{Direction, Transaction};
+pub use statement::{ParsedStatement, ParsedTransaction};
 
 uniffi::setup_scaffolding!();
 
