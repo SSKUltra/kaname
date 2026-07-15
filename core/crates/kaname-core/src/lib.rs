@@ -25,7 +25,7 @@ pub mod model;
 pub mod statement;
 
 pub use dedup::{dedup_fingerprint, normalize_description};
-pub use ffi::{icici_claims, read_icici_statement};
+pub use ffi::{hdfc_claims, icici_claims, read_hdfc_statement, read_icici_statement};
 pub use model::{Direction, Transaction};
 pub use statement::{ParsedStatement, ParsedTransaction};
 

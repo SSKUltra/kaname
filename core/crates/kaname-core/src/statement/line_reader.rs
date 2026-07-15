@@ -33,7 +33,7 @@ pub trait LineReaderConfig {
 
 /// True when `cfg` recognises `text` as a statement for `bank_code` (document-type +
 /// issuer plausibility).
-pub fn claims<C: LineReaderConfig>(cfg: &C, text: &str, bank_code: &str) -> bool {
+pub fn claims<C: LineReaderConfig + ?Sized>(cfg: &C, text: &str, bank_code: &str) -> bool {
     if bank_code != cfg.bank_code() {
         return false;
     }
@@ -47,7 +47,7 @@ pub fn claims<C: LineReaderConfig>(cfg: &C, text: &str, bank_code: &str) -> bool
 /// [`ParsedStatement`]. Pure and total: a row that matches the shape but whose date or
 /// amount will not parse is captured in `errored_lines` — never panics, never drops a
 /// good row.
-pub fn read_lines<C: LineReaderConfig>(
+pub fn read_lines<C: LineReaderConfig + ?Sized>(
     cfg: &C,
     lines: &[String],
     full_text: &str,
@@ -85,6 +85,28 @@ pub fn read_lines<C: LineReaderConfig>(
     }
     cfg.enrich(&mut statement, full_text);
     statement
+}
+
+/// Try each `config` in order and return the first statement that produced rows —
+/// mirroring a composite reader that supports several layouts behind one entry point
+/// (e.g. HDFC's year-end + monthly). If none produced rows, the last (empty) statement
+/// is returned so its enrichment/`bank_code` is preserved; an empty `configs` yields an
+/// empty statement for `default_bank_code`.
+pub fn read_lines_first_match(
+    configs: &[&dyn LineReaderConfig],
+    lines: &[String],
+    full_text: &str,
+    default_bank_code: &str,
+) -> ParsedStatement {
+    let mut last: Option<ParsedStatement> = None;
+    for cfg in configs {
+        let statement = read_lines(*cfg, lines, full_text);
+        if !statement.lines.is_empty() {
+            return statement;
+        }
+        last = Some(statement);
+    }
+    last.unwrap_or_else(|| ParsedStatement::new(default_bank_code))
 }
 
 #[cfg(test)]

@@ -1,0 +1,30 @@
+{
+  "_comment": "Synthetic HDFC credit-card MONTHLY co-brand golden vector (fabricated; no real data). Expected output captured from a live run of the web engine's hdfc reader. Monthly layout: DD/MM/YYYY| HH:MM <merchant> [+ ]C <amount> — the Rupee glyph extracts as a leading 'C' (not the amount, not part of the description); a leading '+' before the amount marks a payment/credit, its absence a spend (debit). Dates are day-first.",
+  "lines": [
+    "15/05/2026| 13:30 EXAMPLE MERCHANT BANGALORE C 1,639.00",
+    "20/05/2026| 09:05 CC PAYMENT RECEIVED + C 6,738.00"
+  ],
+  "full_text": "HDFC Bank Credit Card\nBilling Period 15 May, 2026 - 14 Jun, 2026\nCard Number XXXX1234XXXXXX5678\n15/05/2026| 13:30 EXAMPLE MERCHANT BANGALORE C 1,639.00\n20/05/2026| 09:05 CC PAYMENT RECEIVED + C 6,738.00",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-05-15",
+        "amount": "1639.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "EXAMPLE MERCHANT BANGALORE"
+      },
+      {
+        "date": "2026-05-20",
+        "amount": "6738.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "CC PAYMENT RECEIVED"
+      }
+    ],
+    "period_start": "2026-05-15",
+    "period_end": "2026-06-14",
+    "card_last4": "5678",
+    "errored_lines": []
+  }
+}
