@@ -1,0 +1,30 @@
+{
+  "_comment": "Synthetic HDFC credit-card YEAR-END golden vector (no real data). Ported from the web engine's test_cc_reader_characterization.py _HDFC case; values captured from a live run of hdfc.reader.read_lines. Year-end layout: DD-Mon-YYYY <desc> <amount> DR|CR, marker mid-line (trailing card number ignored). period_end = last day of the closing month (MARCH-26), period_start = first day of the opening month (APRIL-25).",
+  "lines": [
+    "16-Apr-2025 ONLINE TRF - PYMT RECD - THANK YOU 10,610.00 CR 526873XXXXXX9070",
+    "04-Apr-2025 WWW EXAMPLE COM GURGAON 1,071.00 DR 526873XXXXXX9070"
+  ],
+  "full_text": "HDFC Bank Credit Cards\nAccount Summary for the period from APRIL-25 to MARCH-26\nCard Number XXXX6873XXXXXX9070\n16-Apr-2025 ONLINE TRF - PYMT RECD - THANK YOU 10,610.00 CR 526873XXXXXX9070\n04-Apr-2025 WWW EXAMPLE COM GURGAON 1,071.00 DR 526873XXXXXX9070",
+  "expected": {
+    "rows": [
+      {
+        "date": "2025-04-16",
+        "amount": "10610.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "ONLINE TRF - PYMT RECD - THANK YOU"
+      },
+      {
+        "date": "2025-04-04",
+        "amount": "1071.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "WWW EXAMPLE COM GURGAON"
+      }
+    ],
+    "period_start": "2025-04-01",
+    "period_end": "2026-03-31",
+    "card_last4": "9070",
+    "errored_lines": []
+  }
+}

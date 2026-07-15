@@ -59,6 +59,21 @@ pub fn icici_claims(full_text: String) -> bool {
     claims(&IciciReader, &full_text, "ICICI")
 }
 
+/// Parse an HDFC credit-card statement from already-extracted text (both the year-end
+/// and monthly layouts, auto-selected). Same purity/robustness contract as
+/// [`read_icici_statement`].
+#[uniffi::export]
+pub fn read_hdfc_statement(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    crate::statement::hdfc::read_hdfc_statement(&lines, &full_text)
+}
+
+/// Whether `full_text` is recognizably an HDFC credit-card statement; `false` for other
+/// issuers.
+#[uniffi::export]
+pub fn hdfc_claims(full_text: String) -> bool {
+    crate::statement::hdfc::hdfc_claims(&full_text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::normalize_transaction;

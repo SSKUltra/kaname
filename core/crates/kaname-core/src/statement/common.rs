@@ -62,6 +62,43 @@ pub fn parse_date(raw: &str) -> Option<NaiveDate> {
         .find_map(|fmt| NaiveDate::parse_from_str(token, fmt).ok())
 }
 
+// Month name (first three letters, upper-case) → month number.
+const MONTHS: &[(&str, u32)] = &[
+    ("JAN", 1),
+    ("FEB", 2),
+    ("MAR", 3),
+    ("APR", 4),
+    ("MAY", 5),
+    ("JUN", 6),
+    ("JUL", 7),
+    ("AUG", 8),
+    ("SEP", 9),
+    ("OCT", 10),
+    ("NOV", 11),
+    ("DEC", 12),
+];
+
+fn last_day_of_month(year: i32, month: u32) -> Option<NaiveDate> {
+    let (y, m) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    NaiveDate::from_ymd_opt(y, m, 1)?.pred_opt()
+}
+
+/// Parse a `"MONTHNAME-YY"` token (e.g. `"MARCH-26"`) to the LAST day of that month
+/// (`2026-03-31`). The month is matched on its first three letters (case-insensitive)
+/// and the two-digit year is 2000-based. `None` for an unrecognised token. Used by
+/// readers whose billing period is printed as month-year ranges (e.g. HDFC year-end).
+pub fn month_year_end(token: &str) -> Option<NaiveDate> {
+    let (name, yy) = token.split_once('-')?;
+    let key: String = name.chars().take(3).collect::<String>().to_uppercase();
+    let month = MONTHS.iter().find(|(m, _)| *m == key).map(|(_, n)| *n)?;
+    let year = 2000 + yy.trim().parse::<i32>().ok()?;
+    last_day_of_month(year, month)
+}
+
 fn is_pan_char(c: char) -> bool {
     c.is_ascii_digit() || c == 'X' || c == 'x' || c == '*'
 }
@@ -152,5 +189,22 @@ mod tests {
             Some("1002")
         );
         assert_eq!(find_last4("no card here", None), None);
+    }
+
+    #[test]
+    fn month_year_end_returns_last_day_of_month() {
+        assert_eq!(
+            month_year_end("MARCH-26"),
+            NaiveDate::from_ymd_opt(2026, 3, 31)
+        );
+        assert_eq!(
+            month_year_end("APRIL-25"),
+            NaiveDate::from_ymd_opt(2025, 4, 30)
+        );
+        assert_eq!(
+            month_year_end("FEB-24"),
+            NaiveDate::from_ymd_opt(2024, 2, 29)
+        ); // leap
+        assert_eq!(month_year_end("BOGUS-99"), None);
     }
 }

@@ -9,7 +9,10 @@
 use std::str::FromStr;
 
 use chrono::NaiveDate;
-use kaname_core::{icici_claims, read_icici_statement, Direction, ParsedStatement};
+use kaname_core::{
+    hdfc_claims, icici_claims, read_hdfc_statement, read_icici_statement, Direction,
+    ParsedStatement,
+};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
@@ -23,6 +26,9 @@ struct Fixture {
 #[derive(Deserialize)]
 struct Expected {
     rows: Vec<ExpectedRow>,
+    // Optional so pre-`period_start` fixtures (e.g. ICICI) deserialize unchanged as None.
+    #[serde(default)]
+    period_start: Option<String>,
     period_end: Option<String>,
     card_last4: Option<String>,
     #[serde(default)]
@@ -45,11 +51,23 @@ struct Case {
     rel_path: &'static str,
 }
 
-const CASES: &[Case] = &[Case {
-    label: "ICICI",
-    parse: read_icici_statement,
-    rel_path: "icici/credit_card/basic.json",
-}];
+const CASES: &[Case] = &[
+    Case {
+        label: "ICICI",
+        parse: read_icici_statement,
+        rel_path: "icici/credit_card/basic.json",
+    },
+    Case {
+        label: "HDFC year-end",
+        parse: read_hdfc_statement,
+        rel_path: "hdfc/credit_card/year_end.json",
+    },
+    Case {
+        label: "HDFC monthly",
+        parse: read_hdfc_statement,
+        rel_path: "hdfc/credit_card/monthly.json",
+    },
+];
 
 fn load_fixture(rel_path: &str) -> Fixture {
     let path = format!(
@@ -80,10 +98,13 @@ fn assert_matches_expected(label: &str, statement: &ParsedStatement, expected: &
             "{label} row {i}: description_raw"
         );
     }
-    let want_period_end = expected
-        .period_end
-        .as_deref()
-        .map(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap());
+    let parse_iso = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    let want_period_start = expected.period_start.as_deref().map(parse_iso);
+    assert_eq!(
+        statement.period_start, want_period_start,
+        "{label}: period_start"
+    );
+    let want_period_end = expected.period_end.as_deref().map(parse_iso);
     assert_eq!(statement.period_end, want_period_end, "{label}: period_end");
     assert_eq!(
         statement.card_last4, expected.card_last4,
@@ -124,6 +145,19 @@ fn icici_claims_accepts_own_document_and_rejects_others() {
     assert!(
         !icici_claims("HDFC Bank Credit Cards statement".to_string()),
         "ICICI must not claim an HDFC statement"
+    );
+}
+
+#[test]
+fn hdfc_claims_accepts_own_document_and_rejects_others() {
+    let fx = load_fixture("hdfc/credit_card/year_end.json");
+    assert!(
+        hdfc_claims(fx.full_text),
+        "HDFC must claim its own statement"
+    );
+    assert!(
+        !hdfc_claims("ICICI Bank Statement".to_string()),
+        "HDFC must not claim an ICICI statement"
     );
 }
 
