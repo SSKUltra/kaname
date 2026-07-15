@@ -1,0 +1,30 @@
+{
+  "_comment": "Synthetic Yes Bank (Kiwi) credit-card golden vector (no real data). Ported from the web engine's test_cc_reader_characterization.py _YES case; values captured from a live run of the web reader. Layout: DD/MM/YYYY <details ... Ref No> <Merchant Category> <amount> Dr|Cr. Reconciliation printed-totals are intentionally not modeled (later slice).",
+  "lines": [
+    "29/04/2026 PAYMENT RECEIVED BBPS - Ref No: RT0001 9,000.00 Cr",
+    "19/04/2026 UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores 100.00 Dr"
+  ],
+  "full_text": "YES BANK KLICK\nStatement for YES BANK Card Number 3561XXXXXXXX6686\nStatement Period: 17/04/2026 To 16/05/2026\n29/04/2026 PAYMENT RECEIVED BBPS - Ref No: RT0001 9,000.00 Cr\n19/04/2026 UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores 100.00 Dr",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-29",
+        "amount": "9000.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "PAYMENT RECEIVED BBPS - Ref No: RT0001"
+      },
+      {
+        "date": "2026-04-19",
+        "amount": "100.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores"
+      }
+    ],
+    "period_start": "2026-04-17",
+    "period_end": "2026-05-16",
+    "card_last4": "6686",
+    "errored_lines": []
+  }
+}

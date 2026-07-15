@@ -12,6 +12,7 @@ use crate::statement::base::ParsedStatement;
 use crate::statement::icici::IciciReader;
 use crate::statement::line_reader::{claims, read_lines};
 use crate::statement::sbi::SbiReader;
+use crate::statement::yes::YesReader;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
@@ -86,6 +87,19 @@ pub fn read_sbi_statement(lines: Vec<String>, full_text: String) -> ParsedStatem
 #[uniffi::export]
 pub fn sbi_claims(full_text: String) -> bool {
     claims(&SbiReader, &full_text, "SBI_CARD")
+}
+
+/// Parse a Yes Bank (Kiwi) credit-card statement from already-extracted text. Same
+/// purity/robustness contract as [`read_icici_statement`].
+#[uniffi::export]
+pub fn read_yes_statement(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_lines(&YesReader, &lines, &full_text)
+}
+
+/// Whether `full_text` is recognizably a Yes Bank statement; `false` for other issuers.
+#[uniffi::export]
+pub fn yes_claims(full_text: String) -> bool {
+    claims(&YesReader, &full_text, "YES")
 }
 
 #[cfg(test)]

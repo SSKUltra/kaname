@@ -13,5 +13,6 @@ pub mod icici;
 pub mod line_reader;
 pub mod polarity;
 pub mod sbi;
+pub mod yes;
 
 pub use base::{ParsedStatement, ParsedTransaction};
