@@ -11,6 +11,7 @@ use crate::normalize_description;
 use crate::statement::base::ParsedStatement;
 use crate::statement::icici::IciciReader;
 use crate::statement::line_reader::{claims, read_lines};
+use crate::statement::sbi::SbiReader;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
@@ -72,6 +73,19 @@ pub fn read_hdfc_statement(lines: Vec<String>, full_text: String) -> ParsedState
 #[uniffi::export]
 pub fn hdfc_claims(full_text: String) -> bool {
     crate::statement::hdfc::hdfc_claims(&full_text)
+}
+
+/// Parse an SBI Card credit-card statement from already-extracted text. Same
+/// purity/robustness contract as [`read_icici_statement`].
+#[uniffi::export]
+pub fn read_sbi_statement(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_lines(&SbiReader, &lines, &full_text)
+}
+
+/// Whether `full_text` is recognizably an SBI Card statement; `false` for other issuers.
+#[uniffi::export]
+pub fn sbi_claims(full_text: String) -> bool {
+    claims(&SbiReader, &full_text, "SBI_CARD")
 }
 
 #[cfg(test)]

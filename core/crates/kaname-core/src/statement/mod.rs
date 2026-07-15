@@ -12,5 +12,6 @@ pub mod hdfc;
 pub mod icici;
 pub mod line_reader;
 pub mod polarity;
+pub mod sbi;
 
 pub use base::{ParsedStatement, ParsedTransaction};

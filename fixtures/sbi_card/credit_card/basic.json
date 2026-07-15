@@ -1,0 +1,30 @@
+{
+  "_comment": "Synthetic SBI Card credit-card golden vector (no real data). Ported from the web engine's test_cc_reader_characterization.py _SBI case; values captured from a live run of the web reader. Layout: DD Mon YY <details> <amount> C|D (C=Credit, D=Debit). card_last4 is null because the masked card 'XXXX XXXX XXXX XX61' shows only two trailing digits — a last-4 is never fabricated.",
+  "lines": [
+    "21 Apr 26 CARD CASHBACK CREDIT 643.00 C",
+    "20 May 26 APPLE INDIA STORE MUMBAI IN 82,900.00 D"
+  ],
+  "full_text": "GSTIN of SBI Card\nCredit Card Number XXXX XXXX XXXX XX61\nfor Statement Period: 22 Apr 26 to 21 May 26\n21 Apr 26 CARD CASHBACK CREDIT 643.00 C\n20 May 26 APPLE INDIA STORE MUMBAI IN 82,900.00 D",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-21",
+        "amount": "643.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "CARD CASHBACK CREDIT"
+      },
+      {
+        "date": "2026-05-20",
+        "amount": "82900.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "APPLE INDIA STORE MUMBAI IN"
+      }
+    ],
+    "period_start": "2026-04-22",
+    "period_end": "2026-05-21",
+    "card_last4": null,
+    "errored_lines": []
+  }
+}
