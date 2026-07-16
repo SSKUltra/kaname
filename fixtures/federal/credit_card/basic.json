@@ -1,0 +1,30 @@
+{
+  "_comment": "Synthetic Scapia / Federal Bank credit-card golden vector (no real data). Ported from the web engine's federal_scapia.py reader; values captured from a live run of the web reader. Layout: DD-MM-YYYY·HH:MM <description> [+]₹<amount> — the separator between date and time is a middle dot (U+00B7) and the amount is prefixed by the rupee sign (U+20B9); a leading '+' is Scapia's own credit marker, otherwise the transaction type decides. Billing cycle like '20Apr2026-19May2026'; the card is fully masked (XXXXXXXXXXXX4836).",
+  "lines": [
+    "29-04-2026·16:18 Billpayment Payment +₹324.45",
+    "24-04-2026·06:03 ExampleMerchantTokyo ₹2,353.13"
+  ],
+  "full_text": "Scapia by Federal Bank\nXXXXXXXXXXXX4836 20Apr2026-19May2026\n29-04-2026·16:18 Billpayment Payment +₹324.45\n24-04-2026·06:03 ExampleMerchantTokyo ₹2,353.13",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-29",
+        "amount": "324.45",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "Billpayment Payment"
+      },
+      {
+        "date": "2026-04-24",
+        "amount": "2353.13",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "ExampleMerchantTokyo"
+      }
+    ],
+    "period_start": "2026-04-20",
+    "period_end": "2026-05-19",
+    "card_last4": "4836",
+    "errored_lines": []
+  }
+}

@@ -9,6 +9,7 @@
 use crate::model::Transaction;
 use crate::normalize_description;
 use crate::statement::base::ParsedStatement;
+use crate::statement::federal::FederalReader;
 use crate::statement::icici::IciciReader;
 use crate::statement::line_reader::{claims, read_lines};
 use crate::statement::sbi::SbiReader;
@@ -100,6 +101,20 @@ pub fn read_yes_statement(lines: Vec<String>, full_text: String) -> ParsedStatem
 #[uniffi::export]
 pub fn yes_claims(full_text: String) -> bool {
     claims(&YesReader, &full_text, "YES")
+}
+
+/// Parse a Scapia / Federal Bank credit-card statement from already-extracted text. Same
+/// purity/robustness contract as [`read_icici_statement`].
+#[uniffi::export]
+pub fn read_federal_statement(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_lines(&FederalReader, &lines, &full_text)
+}
+
+/// Whether `full_text` is recognizably a Scapia / Federal Bank statement; `false` for
+/// other issuers.
+#[uniffi::export]
+pub fn federal_claims(full_text: String) -> bool {
+    claims(&FederalReader, &full_text, "FEDERAL")
 }
 
 #[cfg(test)]
