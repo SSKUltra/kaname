@@ -10,9 +10,9 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    federal_claims, hdfc_claims, icici_claims, read_federal_statement, read_hdfc_statement,
-    read_icici_statement, read_sbi_statement, read_yes_statement, sbi_claims, yes_claims,
-    Direction, ParsedStatement,
+    check_balance_chain, federal_claims, hdfc_claims, icici_claims, read_federal_statement,
+    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_sbi_statement,
+    read_yes_statement, sbi_claims, yes_claims, ChainStatus, Direction, ParsedStatement,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -32,6 +32,11 @@ struct Expected {
     period_start: Option<String>,
     period_end: Option<String>,
     card_last4: Option<String>,
+    // Bank-account (ledger) statements only; credit-card fixtures omit these → None.
+    #[serde(default)]
+    printed_opening_balance: Option<String>,
+    #[serde(default)]
+    printed_closing_balance: Option<String>,
     #[serde(default)]
     errored_lines: Vec<String>,
 }
@@ -43,6 +48,20 @@ struct ExpectedRow {
     direction: Direction,
     currency: String,
     description_raw: String,
+    // Present only for bank-account (ledger) rows; credit-card rows omit it → None.
+    #[serde(default)]
+    ledger: Option<ExpectedLedger>,
+}
+
+#[derive(Deserialize)]
+struct ExpectedLedger {
+    balance: String,
+    #[serde(default)]
+    balance_delta: Option<String>,
+    amount_matches_delta: bool,
+    is_suspect: bool,
+    direction_source: String,
+    serial: String,
 }
 
 /// A reader registered with the parity harness. Adding a future reader is one row.
@@ -83,7 +102,19 @@ const CASES: &[Case] = &[
         parse: read_federal_statement,
         rel_path: "federal/credit_card/basic.json",
     },
+    Case {
+        label: "ICICI bank",
+        parse: parse_icici_bank,
+        rel_path: "icici/bank_account/basic.json",
+    },
 ];
+
+/// Wrapper so the bank-account ledger reader fits the shared `Case` signature. The
+/// reference fixture is opening-balance-anchored, so no first-row word geometry is
+/// needed (the native platform supplies it in production).
+fn parse_icici_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_icici_bank_statement(lines, full_text, Vec::new())
+}
 
 fn load_fixture(rel_path: &str) -> Fixture {
     let path = format!(
@@ -113,6 +144,7 @@ fn assert_matches_expected(label: &str, statement: &ParsedStatement, expected: &
             got.description_raw, want.description_raw,
             "{label} row {i}: description_raw"
         );
+        assert_ledger(label, i, got, want);
     }
     let parse_iso = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
     let want_period_start = expected.period_start.as_deref().map(parse_iso);
@@ -126,10 +158,63 @@ fn assert_matches_expected(label: &str, statement: &ParsedStatement, expected: &
         statement.card_last4, expected.card_last4,
         "{label}: card_last4"
     );
+    let parse_dec = |s: &str| Decimal::from_str(s).unwrap();
+    assert_eq!(
+        statement.printed_opening_balance,
+        expected.printed_opening_balance.as_deref().map(parse_dec),
+        "{label}: printed_opening_balance"
+    );
+    assert_eq!(
+        statement.printed_closing_balance,
+        expected.printed_closing_balance.as_deref().map(parse_dec),
+        "{label}: printed_closing_balance"
+    );
     assert_eq!(
         statement.errored_lines, expected.errored_lines,
         "{label}: errored_lines"
     );
+}
+
+/// Assert a row's bank-account ledger metadata when the fixture pins it (credit-card
+/// fixtures omit it, so the row's `ledger` must then be `None`).
+fn assert_ledger(label: &str, i: usize, got: &kaname_core::ParsedTransaction, want: &ExpectedRow) {
+    match (&got.ledger, &want.ledger) {
+        (None, None) => {}
+        (Some(_), None) => panic!("{label} row {i}: unexpected ledger metadata on a CC row"),
+        (None, Some(_)) => panic!("{label} row {i}: missing ledger metadata"),
+        (Some(got_l), Some(want_l)) => {
+            assert_eq!(
+                got_l.balance,
+                Decimal::from_str(&want_l.balance).unwrap(),
+                "{label} row {i}: ledger.balance"
+            );
+            assert_eq!(
+                got_l.balance_delta,
+                want_l
+                    .balance_delta
+                    .as_deref()
+                    .map(|s| Decimal::from_str(s).unwrap()),
+                "{label} row {i}: ledger.balance_delta"
+            );
+            assert_eq!(
+                got_l.amount_matches_delta, want_l.amount_matches_delta,
+                "{label} row {i}: ledger.amount_matches_delta"
+            );
+            assert_eq!(
+                got_l.is_suspect, want_l.is_suspect,
+                "{label} row {i}: ledger.is_suspect"
+            );
+            assert_eq!(
+                format!("{:?}", got_l.direction_source),
+                want_l.direction_source,
+                "{label} row {i}: ledger.direction_source"
+            );
+            assert_eq!(
+                got_l.serial, want_l.serial,
+                "{label} row {i}: ledger.serial"
+            );
+        }
+    }
 }
 
 #[test]
@@ -208,6 +293,22 @@ fn federal_claims_accepts_own_document_and_rejects_others() {
         !federal_claims("ICICI Bank Statement".to_string()),
         "Federal must not claim an ICICI statement"
     );
+}
+
+#[test]
+fn icici_bank_statement_balance_chain_reconciles() {
+    // The reference savings vector is opening-balance-anchored and every printed amount
+    // equals its balance delta, so the independent balance-chain check reconciles.
+    let fx = load_fixture("icici/bank_account/basic.json");
+    let statement = read_icici_bank_statement(fx.lines, fx.full_text, Vec::new());
+    let result = check_balance_chain(statement);
+    assert_eq!(result.status, ChainStatus::Reconciled);
+    assert_eq!(result.suspect_count, 0, "no suspect rows");
+    assert!(
+        !result.row1_direction_fallback,
+        "row-1 was opening-anchored"
+    );
+    assert_eq!(result.checked_rows, 3);
 }
 
 #[test]

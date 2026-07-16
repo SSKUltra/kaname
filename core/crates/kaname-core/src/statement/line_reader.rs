@@ -81,6 +81,7 @@ pub fn read_lines<C: LineReaderConfig + ?Sized>(
             currency: "INR".to_string(),
             description_raw: truncate_chars(description, MAX_RAW),
             bank_code: cfg.bank_code().to_string(),
+            ledger: None,
         });
     }
     cfg.enrich(&mut statement, full_text);

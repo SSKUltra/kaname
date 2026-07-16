@@ -8,9 +8,12 @@
 
 use crate::model::Transaction;
 use crate::normalize_description;
-use crate::statement::base::ParsedStatement;
+use crate::statement::balance_chain::{check, ChainResult};
+use crate::statement::base::{ParsedStatement, Word};
 use crate::statement::federal::FederalReader;
 use crate::statement::icici::IciciReader;
+use crate::statement::icici_bank::IciciBankReader;
+use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
 use crate::statement::line_reader::{claims, read_lines};
 use crate::statement::sbi::SbiReader;
 use crate::statement::yes::YesReader;
@@ -115,6 +118,37 @@ pub fn read_federal_statement(lines: Vec<String>, full_text: String) -> ParsedSt
 #[uniffi::export]
 pub fn federal_claims(full_text: String) -> bool {
     claims(&FederalReader, &full_text, "FEDERAL")
+}
+
+/// Parse an ICICI savings/current bank-account statement from already-extracted text.
+///
+/// Bank-account statements are running-balance ledgers with no `Dr`/`Cr` marker, so
+/// direction comes from the balance delta. `first_row_words` carries the first anchor
+/// row's word geometry (text + x-extents), extracted natively by the platform (iOS
+/// PDFKit), for the row-1 bootstrap when no opening balance is printed; pass an empty
+/// list when unavailable. Same purity/robustness contract as [`read_icici_statement`].
+#[uniffi::export]
+pub fn read_icici_bank_statement(
+    lines: Vec<String>,
+    full_text: String,
+    first_row_words: Vec<Word>,
+) -> ParsedStatement {
+    read_ledger_lines(&IciciBankReader, &lines, &full_text, &first_row_words)
+}
+
+/// Whether `full_text` is recognizably an ICICI *bank-account* (savings/current)
+/// statement; `false` for other issuers and for an ICICI *credit-card* statement.
+#[uniffi::export]
+pub fn icici_bank_claims(full_text: String) -> bool {
+    claims_ledger(&IciciBankReader, &full_text, "ICICI")
+}
+
+/// Verify a bank-account statement's running-balance chain: that each printed amount
+/// equals its balance delta (within ₹1.00) and the first row's direction was reliably
+/// anchored. Reports `Reconciled` or `NeedsReview` with the suspect rows. Pure.
+#[uniffi::export]
+pub fn check_balance_chain(statement: ParsedStatement) -> ChainResult {
+    check(&statement)
 }
 
 #[cfg(test)]

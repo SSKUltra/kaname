@@ -1,0 +1,73 @@
+{
+  "_comment": "Synthetic ICICI savings/current bank-account golden vector (no real data). Ported from the web engine's icici_bank.py (BalanceLedgerStatementReader) — a Withdrawal/Deposit/running-Balance ledger with NO Dr/Cr marker; direction is derived from the running-balance delta and the printed amount is an independent integrity check (amount == |balance delta|). Values captured from a live run of the web reader + balance_chain.check (RECONCILED). Row-1 is anchored by the printed Opening Balance (geometry-free, so first_row_words is empty).",
+  "lines": [
+    "ICICI Bank Limited",
+    "Statement of Transactions in Savings Account",
+    "Account Number 000401000123456",
+    "Statement Period June 16, 2025 to July 15, 2025",
+    "Opening Balance 1,00,000.00",
+    "S No. Value Date Transaction Date Cheque No. Transaction Remarks Withdrawal Deposit Balance",
+    "UPI/512345/ALICE STORE/Payment",
+    "1 16.06.2025 16.06.2025 5,000.00 95,000.00",
+    "NEFT-N123-EMPLOYER PRIVATE LIMITED-SALARY",
+    "2 18.06.2025 18.06.2025 50,000.00 1,45,000.00",
+    "3 20.06.2025 20.06.2025 ATM CASH WITHDRAWAL 2,000.00 1,43,000.00",
+    "Closing Balance 1,43,000.00"
+  ],
+  "full_text": "ICICI Bank Limited\nStatement of Transactions in Savings Account\nAccount Number 000401000123456\nStatement Period June 16, 2025 to July 15, 2025\nOpening Balance 1,00,000.00\nS No. Value Date Transaction Date Cheque No. Transaction Remarks Withdrawal Deposit Balance\nUPI/512345/ALICE STORE/Payment\n1 16.06.2025 16.06.2025 5,000.00 95,000.00\nNEFT-N123-EMPLOYER PRIVATE LIMITED-SALARY\n2 18.06.2025 18.06.2025 50,000.00 1,45,000.00\n3 20.06.2025 20.06.2025 ATM CASH WITHDRAWAL 2,000.00 1,43,000.00\nClosing Balance 1,43,000.00",
+  "expected": {
+    "rows": [
+      {
+        "date": "2025-06-16",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "UPI/512345/ALICE STORE/Payment",
+        "ledger": {
+          "balance": "95000.00",
+          "balance_delta": "-5000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "OpeningBalance",
+          "serial": "1"
+        }
+      },
+      {
+        "date": "2025-06-18",
+        "amount": "50000.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "NEFT-N123-EMPLOYER PRIVATE LIMITED-SALARY",
+        "ledger": {
+          "balance": "145000.00",
+          "balance_delta": "50000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": "2"
+        }
+      },
+      {
+        "date": "2025-06-20",
+        "amount": "2000.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "ATM CASH WITHDRAWAL",
+        "ledger": {
+          "balance": "143000.00",
+          "balance_delta": "-2000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": "3"
+        }
+      }
+    ],
+    "period_start": "2025-06-16",
+    "period_end": "2025-07-15",
+    "card_last4": "3456",
+    "printed_opening_balance": "100000.00",
+    "printed_closing_balance": "143000.00",
+    "errored_lines": []
+  }
+}
