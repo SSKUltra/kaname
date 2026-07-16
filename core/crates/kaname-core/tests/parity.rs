@@ -10,8 +10,9 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    hdfc_claims, icici_claims, read_hdfc_statement, read_icici_statement, read_sbi_statement,
-    read_yes_statement, sbi_claims, yes_claims, Direction, ParsedStatement,
+    federal_claims, hdfc_claims, icici_claims, read_federal_statement, read_hdfc_statement,
+    read_icici_statement, read_sbi_statement, read_yes_statement, sbi_claims, yes_claims,
+    Direction, ParsedStatement,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -76,6 +77,11 @@ const CASES: &[Case] = &[
         label: "Yes Bank",
         parse: read_yes_statement,
         rel_path: "yes/credit_card/basic.json",
+    },
+    Case {
+        label: "Federal/Scapia",
+        parse: read_federal_statement,
+        rel_path: "federal/credit_card/basic.json",
     },
 ];
 
@@ -188,6 +194,19 @@ fn yes_claims_accepts_own_document_and_rejects_others() {
     assert!(
         !yes_claims("ICICI Bank Statement".to_string()),
         "Yes must not claim an ICICI statement"
+    );
+}
+
+#[test]
+fn federal_claims_accepts_own_document_and_rejects_others() {
+    let fx = load_fixture("federal/credit_card/basic.json");
+    assert!(
+        federal_claims(fx.full_text),
+        "Federal must claim its own statement"
+    );
+    assert!(
+        !federal_claims("ICICI Bank Statement".to_string()),
+        "Federal must not claim an ICICI statement"
     );
 }
 
