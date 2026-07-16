@@ -1,0 +1,47 @@
+# Specification Quality Checklist: Read an HDFC Bank (Savings/Current) Statement On-Device — the Second Balance-Ledger Reference Reader (HDFC Config on the Existing Ledger Base, Two Export Layouts)
+
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-07-16
+**Feature**: [spec.md](../spec.md)
+
+## Content Quality
+
+- [x] No implementation details (languages, frameworks, APIs)
+- [x] Focused on user value and business needs
+- [x] Written for non-technical stakeholders
+- [x] All mandatory sections completed
+
+## Requirement Completeness
+
+- [x] No [NEEDS CLARIFICATION] markers remain
+- [x] Requirements are testable and unambiguous
+- [x] Success criteria are measurable
+- [x] Success criteria are technology-agnostic (no implementation details)
+- [x] All acceptance scenarios are defined
+- [x] Edge cases are identified
+- [x] Scope is clearly bounded
+- [x] Dependencies and assumptions identified
+
+## Feature Readiness
+
+- [x] All functional requirements have clear acceptance criteria
+- [x] User scenarios cover primary flows
+- [x] Feature meets measurable outcomes defined in Success Criteria
+- [x] No implementation details leak into specification
+
+## Notes
+
+- **Validation result**: All items pass; the specification is ready for `/speckit.clarify` or `/speckit.plan`. Zero `[NEEDS CLARIFICATION]` markers were needed — the feature description carried the complete reference ground truth for **both** layouts (every row's date/amount/direction/stitched-description/balance/delta/serial/direction-source, the printed opening/closing balances, the billing period, the account last-4, the gate markers, the two anchor shapes, the opening/period/account patterns, and the RECONCILED balance-chain result), which is additionally persisted as a captured JSON ground-truth artifact. That, plus the constitution, the ICICI reference slice (`specs/007-bank-account-ledger-reader/`), and the web-engine source of truth (`hdfc_bank.py` + the shared balance-ledger reader / balance-chain / common), made the context complete, so open details were resolved as documented Assumptions (informed defaults deferred to `/speckit.plan`) rather than questions.
+- **Verified against the repo**: The claim that this is a *config-on-an-existing-base* slice (not new infrastructure) was confirmed directly. The reusable base already exists (`core/crates/kaname-core/src/statement/ledger_reader.rs`) and its `LedgerReaderConfig` trait already: recognizes a transaction against an **ordered list** of anchor patterns (`anchor_res() -> Vec<&Regex>`, "tried in order (first match wins)", `ledger_reader.rs:60`) — so HDFC's two layouts are pure configuration; exposes `opening_balance_re`, `enrich`, and `account_tail` hooks HDFC needs; and defaults `column_split_x` to `None` (so HDFC's "no column split" simply omits it). The balance-chain check (`balance_chain.rs`) and ICICI reference reader (`icici_bank.rs`) exist alongside it, and `fixtures/icici/bank_account/` confirms the ledger fixture subtree.
+- **Verified — the shared date parser already carries both HDFC formats**: `core/crates/kaname-core/src/statement/common.rs:21-22` already lists `"%d/%m/%Y"` and `"%d/%m/%y"` (the latter annotated "HDFC savings, 2-digit year"), so the compact (`DD/MM/YY`) and detailed (`DD/MM/YYYY`) dates need no date-parser change — supporting FR-023 and the "no new shared engine internals" boundary.
+- **Verified — the one new shared addition is real and minimal**: ICICI's `account_tail` (currently private in `icici_bank.rs:66-76`) already implements exactly "primary account regex, else the longest standalone ≥9-digit run → trailing 4". HDFC needs the *same* fallback with a *different* primary regex (optional masked `X*` prefix, 4+ digits), so factoring that helper into the shared common module (FR-022) is a faithful, minimal shared addition that will also serve Federal/AU — not new infrastructure.
+- **Judgment call — the ledger behaviour is data, not implementation**: The two anchor shapes (compact single-amount `… <ref> <value-date> <amount> <balance>` with a `DD/MM/YY` date; detailed `DD/MM/YYYY` with explicit Withdrawals/Deposits columns whose empty side prints `0.00`), the mutual exclusivity (2- vs 4-digit year), the direction-from-delta rule in both layouts, the printed-amount-as-independent-check (compact single amount; detailed non-zero column), and the per-layout opening-balance sources describe the *statement's own printed format and the engine's proven behaviour* the reader must reproduce — behavioural inputs/outcomes, exactly like the landed HDFC/ICICI credit-card specs quoting their own row formats. The requirements prescribe no engine technology (no raw regex/module/type appears in the FRs); the concrete regex realizations, module placement, and fixture paths are deferred to `/speckit.plan` (Assumptions).
+- **Judgment call — the narration-stitching quirk is faithful parity data, not a bug**: The requirement that row 0's narration includes the adjacent column-header line (both layouts) and the compact row 1's narration includes the trailing summary rows — reproduced byte-for-byte, "not cleaned up" — is behavioural ground truth ported from the web engine and pinned by the golden fixtures. It is stated as a verifiable outcome (exact expected strings) rather than prescribed code.
+- **Judgment call — `direction_source`, RECONCILED/NEEDS_REVIEW, and suspect vs errored are reused domain vocabulary**: The `direction_source` values (`opening_balance` for row 1 in both fixtures; `balance_delta` thereafter), the balance-chain statuses (RECONCILED / NEEDS_REVIEW), and the suspect-vs-errored distinction are inherited unchanged from the base/balance-chain and verified against the golden vectors — behavioural acceptance labels, not prescribed code. `NEEDS_REVIEW` (with an underscore) is a status literal, not a `[NEEDS CLARIFICATION]` marker.
+- **Judgment call — the savings-vs-credit-card `claims` gate**: HDFC issues both document types under one issuer (like ICICI), so the bank reader's gate requires the HDFC bank code + all required markers (`HDFC`) + any optional marker (`WithdrawalAmt`, `Savings Account Details`, `Statementof account`), and must reject an HDFC credit-card statement (User Story 7, FR-001/FR-002, SC-008). This is a behavioural routing rule (verifiable by asking the gate about each document); the concrete marker strings are ported ground truth and the registry identity is deferred to `/speckit.plan`. The joined-word markers (`WithdrawalAmt`, `Statementof account`) are faithful to the extracted-text ground truth, not typos.
+- **Judgment call — the account last-4 extractor and privacy**: The last-4 is the trailing four digits of the printed account number via HDFC's own primary pattern (optional masked `X*` prefix, 4+ digits — explicitly different from ICICI's), else the longest ≥9-digit run, keeping only the trailing four (the full number is never logged/persisted). This is an accuracy + privacy outcome (FR-018, User Story 6, SC-009), stated as a testable outcome rather than prescribed code.
+- **Judgment call — behavioural characterization data**: The spec quotes the two synthetic HDFC statements' expected outputs for both layouts (compact rows 2026-04-01 / 5000.00 / debit and 2026-04-16 / 50000.00 / credit with serials `0000600000000001` / `CITIN26653417445`; detailed rows 2026-04-01 / 5000.00 / debit and 2026-04-20 / 50000.00 / credit with empty serials), the balances (95000.00, 145000.00) and deltas (−5000.00, +50000.00), the printed opening/closing balances (100000.00 / 145000.00), the billing period (2026-04-01 → 2026-04-30), the account last-4 (`3425`), and the RECONCILED balance-chain result. These are the constitution's golden-fixture parity vectors (Principle V) — behavioural acceptance data, not implementation details — and all data is synthetic/redacted.
+- **Judgment call — technology proper nouns**: The only technology names in the document are intentional and confined to non-prescriptive locations: the verbatim **Input** line; the **Assumptions / Dependencies / Out of Scope** sections (recording locked decisions such as UniFFI, native PDFKit text/geometry extraction, Apache-2.0, decimal money, the reused base/balance-chain/harness/gate, and deferred scope like SQLCipher, each noted as belonging to `/speckit.plan`); and constitution-mandated gate names (privacy-egress test, iOS Local Verification Gate, CI). SC-013's "reachable over the UniFFI bridge to Swift" mirrors the accepted phrasing in the landed ICICI bank-account and credit-card success criteria.
+- **Judgment call — accessibility & privacy vocabulary**: References to Human Interface Guidelines, Dynamic Type, Dark Mode, VoiceOver, "zero network I/O", "no new networking dependency", and "no telemetry" are treated as user-facing outcomes mandated by the constitution's Privacy and Native Experience principles, not framework/API implementation choices.
+- **Scope-boundary note on IOB (recorded for the reviewer, not a blocker)**: This spec records IOB as **out of scope** and characterizes it as a **credit-card** reader, per the feature description's explicit framing (consistent with the ICICI reference slice). This classification does not affect this slice's scope (IOB is deferred either way), so it is surfaced here rather than raised as a `[NEEDS CLARIFICATION]` marker.
+- Items marked incomplete would require spec updates before `/speckit.clarify` or `/speckit.plan`; none are incomplete.
