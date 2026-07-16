@@ -18,8 +18,11 @@ static AMOUNT_RE: LazyLock<Regex> =
 
 // Date formats seen across the issuers' statements (ported in order from `_common.py`).
 const DATE_FORMATS: &[&str] = &[
+    // `%d/%m/%y` MUST precede `%d/%m/%Y`: Rust's chrono `%Y` greedily accepts a 2-digit
+    // year (e.g. `01/04/26` → year 0026), whereas `%d/%m/%y` rejects a 4-digit token, so
+    // this order parses both `01/04/26` → 2026 and `01/04/2026` → 2026 correctly.
+    "%d/%m/%y",  // 01/04/26 (HDFC savings compact, 2-digit year)
     "%d/%m/%Y",  // 19/04/2026 (ICICI, Yes)
-    "%d/%m/%y",  // 01/04/26 (HDFC savings, 2-digit year — tried after %d/%m/%Y)
     "%Y-%m-%d",  // 2026-04-19 (ISO)
     "%d-%m-%Y",  // 24-04-2026 (Scapia/Federal)
     "%d-%b-%Y",  // 04-Apr-2025 (HDFC)
@@ -41,6 +44,11 @@ static STRICT_PAN_RE: LazyLock<Regex> =
 // Looser near-full masked PAN (>= 12 leading card chars then four digits).
 static LOOSE_PAN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?:[0-9Xx*][ \-]?){12,}[0-9]{4}").unwrap());
+
+// A standalone long-digit run (a bank account number, never a money token — those carry
+// decimals). Rust `regex` has no lookaround, but a greedy, non-overlapping `\d{9,}`
+// already yields maximal digit runs, matching Python's `(?<!\d)(\d{9,})(?!\d)`.
+static DIGIT_RUN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\d{9,}").unwrap());
 
 /// Parse an Indian-formatted money token to a non-negative [`Decimal`].
 ///
@@ -155,6 +163,30 @@ pub fn find_last4(text: &str, anchor: Option<&str>) -> Option<String> {
     find_last4_in(text)
 }
 
+/// Trailing 4 characters (bytes) of an ASCII digit string.
+fn tail4(digits: &str) -> String {
+    digits[digits.len().saturating_sub(4)..].to_string()
+}
+
+/// Best-effort bank-ACCOUNT tail: the trailing four of the printed account number.
+///
+/// Distinct from the credit-card masked-PAN matcher [`find_last4`]. Tries `primary`
+/// (its first capture group), else the longest standalone >= 9-digit run; `None` if
+/// neither hits. Only the trailing four is ever surfaced — the full number is never
+/// logged or persisted.
+pub fn account_tail_last4(text: &str, primary: &Regex) -> Option<String> {
+    if let Some(caps) = primary.captures(text) {
+        if let Some(m) = caps.get(1) {
+            return Some(tail4(m.as_str()));
+        }
+    }
+    let best = DIGIT_RUN_RE
+        .find_iter(text)
+        .map(|m| m.as_str())
+        .max_by_key(|run| run.len())?;
+    Some(tail4(best))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +212,33 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 5, 28)
         );
         assert_eq!(parse_date("not a date"), None);
+    }
+
+    #[test]
+    fn two_and_four_digit_slash_years_both_resolve_to_2026() {
+        // Rust chrono's `%Y` greedily accepts a 2-digit year, so `%d/%m/%y` MUST be tried
+        // first (regression guard for the HDFC-compact 2-digit dates).
+        assert_eq!(parse_date("01/04/26"), NaiveDate::from_ymd_opt(2026, 4, 1));
+        assert_eq!(parse_date("16/04/26"), NaiveDate::from_ymd_opt(2026, 4, 16));
+        assert_eq!(
+            parse_date("01/04/2026"),
+            NaiveDate::from_ymd_opt(2026, 4, 1)
+        );
+    }
+
+    #[test]
+    fn account_tail_last4_prefers_primary_then_falls_back_to_digit_run() {
+        let re = Regex::new(r"(?i)Account\s*(?:Number|No\.?)\s*:?\s*X*([0-9]{4,})").unwrap();
+        assert_eq!(
+            account_tail_last4("AccountNo : 50100359253425", &re).as_deref(),
+            Some("3425")
+        );
+        // No primary match → longest standalone >= 9-digit run.
+        assert_eq!(
+            account_tail_last4("holder 000401000123456 ref", &re).as_deref(),
+            Some("3456")
+        );
+        assert_eq!(account_tail_last4("no account here", &re), None);
     }
 
     #[test]

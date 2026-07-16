@@ -1,0 +1,54 @@
+{
+  "_comment": "Synthetic HDFC Bank savings/current DETAILED-layout golden vector (no real data). Ported from the web engine's hdfc_bank.py (BalanceLedgerStatementReader); values captured from a live run of the web reader + balance_chain.check (RECONCILED). Detailed layout: DD/MM/YYYY dates with explicit Withdrawals and Deposits columns (the empty side prints 0.00) then the closing balance; an inline 'Opening Balance :'. The non-zero column is the transaction amount; direction comes from the running-balance delta.",
+  "lines": [
+    "HDFC Bank",
+    "Savings Account Details",
+    "Statement From : 01/04/2026 To 30/04/2026",
+    "Account Number : 50100359253425",
+    "Opening Balance : 1,00,000.00 Limit : 0.00",
+    "Txn Date Narration Withdrawals Deposits Closing Balance",
+    "01/04/2026 UPI-EXAMPLEMERCHANT 5,000.00 0.00 95,000.00",
+    "20/04/2026 UPI-EXAMPLEEMPLOYER salary 0.00 50,000.00 1,45,000.00"
+  ],
+  "full_text": "HDFC Bank\nSavings Account Details\nStatement From : 01/04/2026 To 30/04/2026\nAccount Number : 50100359253425\nOpening Balance : 1,00,000.00 Limit : 0.00\nTxn Date Narration Withdrawals Deposits Closing Balance\n01/04/2026 UPI-EXAMPLEMERCHANT 5,000.00 0.00 95,000.00\n20/04/2026 UPI-EXAMPLEEMPLOYER salary 0.00 50,000.00 1,45,000.00",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-01",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "UPI-EXAMPLEMERCHANT Txn Date Narration Withdrawals Deposits Closing Balance",
+        "ledger": {
+          "balance": "95000.00",
+          "balance_delta": "-5000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "OpeningBalance",
+          "serial": ""
+        }
+      },
+      {
+        "date": "2026-04-20",
+        "amount": "50000.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "UPI-EXAMPLEEMPLOYER salary",
+        "ledger": {
+          "balance": "145000.00",
+          "balance_delta": "50000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": ""
+        }
+      }
+    ],
+    "period_start": "2026-04-01",
+    "period_end": "2026-04-30",
+    "card_last4": "3425",
+    "printed_opening_balance": "100000.00",
+    "printed_closing_balance": "145000.00",
+    "errored_lines": []
+  }
+}
