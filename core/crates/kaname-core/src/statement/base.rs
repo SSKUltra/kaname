@@ -19,6 +19,48 @@ pub fn truncate_chars(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
 
+/// How a bank-account (ledger) row's [`Direction`] was decided — the trust signal the
+/// balance-chain check consults. `BalanceDelta` (and an `OpeningBalance`-anchored first
+/// row) are reliable; the two `Row1*` fallbacks mean no predecessor balance was
+/// available, so the run is surfaced for review rather than silently trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+pub enum DirectionSource {
+    /// First row anchored by a printed opening balance.
+    OpeningBalance,
+    /// Derived from the running-balance delta against the previous row.
+    BalanceDelta,
+    /// First row bootstrapped from the amount word's x-position (withdrawal vs deposit
+    /// column) — a fallback that forces the balance-chain to `NeedsReview`.
+    Row1XPosition,
+    /// First row fell back to a provisional direction — also forces `NeedsReview`.
+    Row1Provisional,
+}
+
+/// One word of the first anchor row's text plus its horizontal extent, supplied by the
+/// native platform (iOS PDFKit) for the row-1 x-position bootstrap. The x-coordinates
+/// are layout points (not money), so `f64` is appropriate here — amounts stay
+/// [`Decimal`]. The core never opens a PDF (constitution: platform boundary).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct Word {
+    pub text: String,
+    pub x0: f64,
+    pub x1: f64,
+}
+
+/// Ledger-specific per-row metadata for bank-account statements: the printed running
+/// balance, its delta from the previous row, whether the printed amount reconciles with
+/// that delta (`amount == |delta|`), and how the direction was decided. Absent (`None`)
+/// on credit-card rows, whose direction comes from an explicit `Dr`/`Cr` marker.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct LedgerMetadata {
+    pub balance: Decimal,
+    pub balance_delta: Option<Decimal>,
+    pub amount_matches_delta: bool,
+    pub is_suspect: bool,
+    pub direction_source: DirectionSource,
+    pub serial: String,
+}
+
 /// One successfully-parsed statement row. Distinct from the normalized
 /// [`crate::model::Transaction`] used by dedup — this is the raw reader output; a later
 /// slice maps it into a `Transaction`.
@@ -30,6 +72,8 @@ pub struct ParsedTransaction {
     pub currency: String,
     pub description_raw: String,
     pub bank_code: String,
+    /// Present only for bank-account (ledger) rows; `None` for credit-card rows.
+    pub ledger: Option<LedgerMetadata>,
 }
 
 /// The full result of reading one statement.
@@ -44,6 +88,13 @@ pub struct ParsedStatement {
     pub period_start: Option<NaiveDate>,
     pub period_end: Option<NaiveDate>,
     pub card_last4: Option<String>,
+    /// Printed (or, when only derivable, back-derived) opening balance of a bank-account
+    /// statement — the anchor the balance-chain check walks from. `None` for credit-card
+    /// statements and bank statements with no recoverable opening balance.
+    pub printed_opening_balance: Option<Decimal>,
+    /// Printed closing balance of a bank-account statement (the last row's running
+    /// balance). `None` for credit-card statements.
+    pub printed_closing_balance: Option<Decimal>,
     pub confidence: f64,
 }
 
@@ -57,6 +108,8 @@ impl ParsedStatement {
             period_start: None,
             period_end: None,
             card_last4: None,
+            printed_opening_balance: None,
+            printed_closing_balance: None,
             confidence: 1.0,
         }
     }
