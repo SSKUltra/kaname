@@ -14,7 +14,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::statement::base::ParsedStatement;
-use crate::statement::common::parse_date;
+use crate::statement::common::{account_tail_last4, parse_date};
 use crate::statement::ledger_reader::LedgerReaderConfig;
 
 pub const BANK_CODE: &str = "ICICI";
@@ -46,11 +46,6 @@ static PERIOD_RE: LazyLock<Regex> = LazyLock::new(|| {
 static ACCOUNT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)Account\s+(?:Number|No\.?)\s*:?\s*([0-9]{6,})").unwrap());
 
-// Fallback: a standalone long-digit run (an account number, never a money token — those
-// carry decimals). Rust `regex` has no lookaround, so `\d{9,}` (greedy, non-overlapping)
-// already yields maximal digit runs, matching the Python `(?<!\d)(\d{9,})(?!\d)`.
-static DIGIT_RUN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\d{9,}").unwrap());
-
 // Withdrawal (debit) column sits left of this x; deposit (credit) column to its right.
 // Only consulted for the FIRST row when no opening balance is printed; any such row is
 // flagged NeedsReview by the balance-chain check regardless.
@@ -58,22 +53,6 @@ const COLUMN_SPLIT_X: f64 = 400.0;
 
 const CLAIM_ALL: &[&str] = &["Statement of Transactions", "ICICI"];
 const CLAIM_ANY: &[&str] = &["Saving", "Current"];
-
-fn last4(digits: &str) -> String {
-    digits[digits.len().saturating_sub(4)..].to_string()
-}
-
-fn account_tail(text: &str) -> Option<String> {
-    if let Some(caps) = ACCOUNT_RE.captures(text) {
-        return Some(last4(caps.get(1)?.as_str()));
-    }
-    // Fallback: the longest standalone long-digit run.
-    let best = DIGIT_RUN_RE
-        .find_iter(text)
-        .map(|m| m.as_str())
-        .max_by_key(|run| run.len())?;
-    Some(last4(best))
-}
 
 /// The ICICI bank-account reader (zero-sized; all state is in the statics above).
 pub struct IciciBankReader;
@@ -108,7 +87,7 @@ impl LedgerReaderConfig for IciciBankReader {
     }
 
     fn account_tail(&self, text: &str) -> Option<String> {
-        account_tail(text)
+        account_tail_last4(text, &ACCOUNT_RE)
     }
 
     fn enrich(&self, statement: &mut ParsedStatement, full_text: &str) {

@@ -11,6 +11,7 @@ use crate::normalize_description;
 use crate::statement::balance_chain::{check, ChainResult};
 use crate::statement::base::{ParsedStatement, Word};
 use crate::statement::federal::FederalReader;
+use crate::statement::hdfc_bank::HdfcBankReader;
 use crate::statement::icici::IciciReader;
 use crate::statement::icici_bank::IciciBankReader;
 use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
@@ -149,6 +150,26 @@ pub fn icici_bank_claims(full_text: String) -> bool {
 #[uniffi::export]
 pub fn check_balance_chain(statement: ParsedStatement) -> ChainResult {
     check(&statement)
+}
+
+/// Parse an HDFC Bank savings/current statement from already-extracted text (both the
+/// compact and detailed layouts, auto-selected). `first_row_words` carries the first
+/// anchor row's word geometry for the row-1 bootstrap; pass an empty list when
+/// unavailable. Same purity/robustness contract as [`read_icici_bank_statement`].
+#[uniffi::export]
+pub fn read_hdfc_bank_statement(
+    lines: Vec<String>,
+    full_text: String,
+    first_row_words: Vec<Word>,
+) -> ParsedStatement {
+    read_ledger_lines(&HdfcBankReader, &lines, &full_text, &first_row_words)
+}
+
+/// Whether `full_text` is recognizably an HDFC *bank-account* (savings/current)
+/// statement; `false` for other issuers and for an HDFC *credit-card* statement.
+#[uniffi::export]
+pub fn hdfc_bank_claims(full_text: String) -> bool {
+    claims_ledger(&HdfcBankReader, &full_text, "HDFC")
 }
 
 #[cfg(test)]

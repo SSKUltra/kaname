@@ -11,8 +11,9 @@ use std::str::FromStr;
 use chrono::NaiveDate;
 use kaname_core::{
     check_balance_chain, federal_claims, hdfc_claims, icici_claims, read_federal_statement,
-    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_sbi_statement,
-    read_yes_statement, sbi_claims, yes_claims, ChainStatus, Direction, ParsedStatement,
+    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
+    read_sbi_statement, read_yes_statement, sbi_claims, yes_claims, ChainStatus, Direction,
+    ParsedStatement,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -107,6 +108,16 @@ const CASES: &[Case] = &[
         parse: parse_icici_bank,
         rel_path: "icici/bank_account/basic.json",
     },
+    Case {
+        label: "HDFC bank compact",
+        parse: parse_hdfc_bank,
+        rel_path: "hdfc/bank_account/compact.json",
+    },
+    Case {
+        label: "HDFC bank detailed",
+        parse: parse_hdfc_bank,
+        rel_path: "hdfc/bank_account/detailed.json",
+    },
 ];
 
 /// Wrapper so the bank-account ledger reader fits the shared `Case` signature. The
@@ -114,6 +125,12 @@ const CASES: &[Case] = &[
 /// needed (the native platform supplies it in production).
 fn parse_icici_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
     read_icici_bank_statement(lines, full_text, Vec::new())
+}
+
+/// Wrapper for the HDFC bank-account reader (both layouts are opening-anchored → no
+/// geometry needed).
+fn parse_hdfc_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_hdfc_bank_statement(lines, full_text, Vec::new())
 }
 
 fn load_fixture(rel_path: &str) -> Fixture {
@@ -309,6 +326,25 @@ fn icici_bank_statement_balance_chain_reconciles() {
         "row-1 was opening-anchored"
     );
     assert_eq!(result.checked_rows, 3);
+}
+
+#[test]
+fn hdfc_bank_statements_balance_chain_reconciles() {
+    for rel_path in [
+        "hdfc/bank_account/compact.json",
+        "hdfc/bank_account/detailed.json",
+    ] {
+        let fx = load_fixture(rel_path);
+        let statement = read_hdfc_bank_statement(fx.lines, fx.full_text, Vec::new());
+        let result = check_balance_chain(statement);
+        assert_eq!(result.status, ChainStatus::Reconciled, "{rel_path}");
+        assert_eq!(result.suspect_count, 0, "{rel_path}: no suspects");
+        assert!(
+            !result.row1_direction_fallback,
+            "{rel_path}: opening-anchored"
+        );
+        assert_eq!(result.checked_rows, 2, "{rel_path}");
+    }
 }
 
 #[test]

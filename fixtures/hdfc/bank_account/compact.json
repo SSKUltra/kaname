@@ -1,0 +1,55 @@
+{
+  "_comment": "Synthetic HDFC Bank savings/current COMPACT-layout golden vector (no real data). Ported from the web engine's hdfc_bank.py (BalanceLedgerStatementReader); values captured from a live run of the web reader + balance_chain.check (RECONCILED). Compact layout: DD/MM/YY dates, one row ending <ref> <value-date> <amount> <balance>; a single printed amount and an alphanumeric reference (captured as the serial); the opening balance is the first figure of the end-of-statement summary row. Narration is reproduced byte-for-byte incl. the web engine's stitching of adjacent header/summary lines.",
+  "lines": [
+    "HDFC BANK LIMITED",
+    "Statementof account",
+    "From : 01/04/2026 To : 30/04/2026",
+    "AccountNo : 50100359253425",
+    "Date Narration Chq./Ref.No. ValueDt WithdrawalAmt. DepositAmt. ClosingBalance",
+    "01/04/26 UPI-EXAMPLEMERCHANT 0000600000000001 01/04/26 5,000.00 95,000.00",
+    "16/04/26 NEFTCR-EXAMPLEEMPLOYER CITIN26653417445 16/04/26 50,000.00 1,45,000.00",
+    "OpeningBalance DrCount CrCount Debits Credits ClosingBal",
+    "1,00,000.00 1 1 5,000.00 50,000.00 1,45,000.00"
+  ],
+  "full_text": "HDFC BANK LIMITED\nStatementof account\nFrom : 01/04/2026 To : 30/04/2026\nAccountNo : 50100359253425\nDate Narration Chq./Ref.No. ValueDt WithdrawalAmt. DepositAmt. ClosingBalance\n01/04/26 UPI-EXAMPLEMERCHANT 0000600000000001 01/04/26 5,000.00 95,000.00\n16/04/26 NEFTCR-EXAMPLEEMPLOYER CITIN26653417445 16/04/26 50,000.00 1,45,000.00\nOpeningBalance DrCount CrCount Debits Credits ClosingBal\n1,00,000.00 1 1 5,000.00 50,000.00 1,45,000.00",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-01",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "UPI-EXAMPLEMERCHANT Date Narration Chq./Ref.No. ValueDt WithdrawalAmt. DepositAmt. ClosingBalance",
+        "ledger": {
+          "balance": "95000.00",
+          "balance_delta": "-5000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "OpeningBalance",
+          "serial": "0000600000000001"
+        }
+      },
+      {
+        "date": "2026-04-16",
+        "amount": "50000.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "NEFTCR-EXAMPLEEMPLOYER OpeningBalance DrCount CrCount Debits Credits ClosingBal 1,00,000.00 1 1 5,000.00 50,000.00 1,45,000.00",
+        "ledger": {
+          "balance": "145000.00",
+          "balance_delta": "50000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": "CITIN26653417445"
+        }
+      }
+    ],
+    "period_start": "2026-04-01",
+    "period_end": "2026-04-30",
+    "card_last4": "3425",
+    "printed_opening_balance": "100000.00",
+    "printed_closing_balance": "145000.00",
+    "errored_lines": []
+  }
+}

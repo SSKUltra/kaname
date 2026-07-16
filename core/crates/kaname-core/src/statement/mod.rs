@@ -11,6 +11,7 @@ pub mod base;
 pub mod common;
 pub mod federal;
 pub mod hdfc;
+pub mod hdfc_bank;
 pub mod icici;
 pub mod icici_bank;
 pub mod ledger_reader;
