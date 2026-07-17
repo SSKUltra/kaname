@@ -44,6 +44,11 @@ jobs:
         working-directory: ios
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode (newest 16.x for the iOS 18 target)
+        run: |
+          xcode="$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          xcodebuild -version
       - name: Install tooling
         run: brew install tuist swiftlint swift-format
       - name: SwiftLint
@@ -63,11 +68,18 @@ jobs:
         run: make core-xcframework
       - name: Generate Xcode project
         run: tuist generate --no-open
-      # NOTE: pin the simulator/runner + Xcode versions once the toolchain is locked.
+      - name: Prepare iOS simulator
+        id: sim
+        working-directory: ${{ github.workspace }}
+        run: |
+          udid="$(bash .github/scripts/select-ios-simulator.sh)"
+          echo "Using simulator UDID: $udid"
+          xcrun simctl boot "$udid" || true
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
       - name: Build & test
         run: |
           xcodebuild \
             -workspace Kaname.xcworkspace \
             -scheme Kaname \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
             clean build test
