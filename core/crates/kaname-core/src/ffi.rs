@@ -11,6 +11,7 @@ use crate::normalize_description;
 use crate::statement::balance_chain::{check, ChainResult};
 use crate::statement::base::{ParsedStatement, Word};
 use crate::statement::federal::FederalReader;
+use crate::statement::federal_bank::FederalBankReader;
 use crate::statement::hdfc_bank::HdfcBankReader;
 use crate::statement::icici::IciciReader;
 use crate::statement::icici_bank::IciciBankReader;
@@ -170,6 +171,28 @@ pub fn read_hdfc_bank_statement(
 #[uniffi::export]
 pub fn hdfc_bank_claims(full_text: String) -> bool {
     claims_ledger(&HdfcBankReader, &full_text, "HDFC")
+}
+
+/// Parse a Federal Bank savings/current statement from already-extracted text (both the
+/// classic and neobank/Fi templates, auto-selected). `first_row_words` carries the first
+/// anchor row's word geometry for the row-1 bootstrap; pass an empty list when
+/// unavailable. Coexists with [`read_federal_statement`] (the Scapia credit-card reader,
+/// same `FEDERAL` issuer, different account kind). Same purity/robustness contract as
+/// [`read_icici_bank_statement`].
+#[uniffi::export]
+pub fn read_federal_bank_statement(
+    lines: Vec<String>,
+    full_text: String,
+    first_row_words: Vec<Word>,
+) -> ParsedStatement {
+    read_ledger_lines(&FederalBankReader, &lines, &full_text, &first_row_words)
+}
+
+/// Whether `full_text` is recognizably a Federal *bank-account* (savings/current)
+/// statement; `false` for other issuers and for a Scapia/Federal *credit-card* statement.
+#[uniffi::export]
+pub fn federal_bank_claims(full_text: String) -> bool {
+    claims_ledger(&FederalBankReader, &full_text, "FEDERAL")
 }
 
 #[cfg(test)]

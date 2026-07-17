@@ -1,0 +1,74 @@
+{
+  "_comment": "Synthetic Federal Bank CLASSIC (direct) savings golden vector (no real data). Ported from the web engine's federal_bank.py; captured from a live run + balance_chain.check (RECONCILED). Classic layout: DD-MON-YYYY dates, a single amount then the running balance and a trailing Cr/Dr that marks the BALANCE's sign (consumed but IGNORED — direction comes from the running-balance delta). The optional S-prefixed Tran ID is captured as the serial and kept OUT of the description. Narration is byte-for-byte incl. the web engine's stitching of continuation and GRAND TOTAL lines.",
+  "lines": [
+    "The Federal Bank Ltd.",
+    "Statement of Account for the period 2026-04-01 to 2026-04-30",
+    "Account Number : 99990100001234",
+    "Type of Account : Savings Account",
+    "Date Value Date Particulars Tran Type Tran ID Withdrawals Deposits Balance DR/CR",
+    "Opening Balance 1,00,000.00 Cr",
+    "08-APR-2026 08-APR-2026 TO ECM/600000000001 TFR S10000001 5,000.00 95,000.00 Cr",
+    "/EXAMPLEMERCHANT \\EXAM/07:17",
+    "11-APR-2026 11-APR-2026 UPI IN/600000000002 TFR S10000002 50,000.00 1,45,000.00 Cr",
+    "/payer@example/Payment/0000",
+    "13-APR-2026 13-APR-2026 POS/600000000003/EXAMPLESTORE TFR S10000003 45,000.00 1,00,000.00 Cr",
+    "\\EXAM/12:34",
+    "GRAND TOTAL 50,000.00 50,000.00"
+  ],
+  "full_text": "The Federal Bank Ltd.\nStatement of Account for the period 2026-04-01 to 2026-04-30\nAccount Number : 99990100001234\nType of Account : Savings Account\nDate Value Date Particulars Tran Type Tran ID Withdrawals Deposits Balance DR/CR\nOpening Balance 1,00,000.00 Cr\n08-APR-2026 08-APR-2026 TO ECM/600000000001 TFR S10000001 5,000.00 95,000.00 Cr\n/EXAMPLEMERCHANT \\EXAM/07:17\n11-APR-2026 11-APR-2026 UPI IN/600000000002 TFR S10000002 50,000.00 1,45,000.00 Cr\n/payer@example/Payment/0000\n13-APR-2026 13-APR-2026 POS/600000000003/EXAMPLESTORE TFR S10000003 45,000.00 1,00,000.00 Cr\n\\EXAM/12:34\nGRAND TOTAL 50,000.00 50,000.00\n",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-08",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "TO ECM/600000000001 TFR",
+        "ledger": {
+          "balance": "95000.00",
+          "balance_delta": "-5000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "OpeningBalance",
+          "serial": "S10000001"
+        }
+      },
+      {
+        "date": "2026-04-11",
+        "amount": "50000.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "UPI IN/600000000002 TFR /EXAMPLEMERCHANT \\EXAM/07:17",
+        "ledger": {
+          "balance": "145000.00",
+          "balance_delta": "50000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": "S10000002"
+        }
+      },
+      {
+        "date": "2026-04-13",
+        "amount": "45000.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "POS/600000000003/EXAMPLESTORE TFR /payer@example/Payment/0000 \\EXAM/12:34 GRAND TOTAL 50,000.00 50,000.00",
+        "ledger": {
+          "balance": "100000.00",
+          "balance_delta": "-45000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": "S10000003"
+        }
+      }
+    ],
+    "period_start": "2026-04-01",
+    "period_end": "2026-04-30",
+    "card_last4": "1234",
+    "printed_opening_balance": "100000.00",
+    "printed_closing_balance": "100000.00",
+    "errored_lines": []
+  }
+}
