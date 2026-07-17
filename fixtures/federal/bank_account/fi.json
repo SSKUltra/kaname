@@ -1,0 +1,55 @@
+{
+  "_comment": "Synthetic Federal Bank NEOBANK/Fi (Epifi) savings golden vector (no real data). Ported from federal_bank.py; captured from a live run + balance_chain.check (RECONCILED). Fi layout: DD/MM/YYYY dates with both Withdrawal and Deposit columns (the empty side prints 0), WHOLE-NUMBER amounts, a masked account number, and an uppercase CR marker that is consumed but ignored — direction comes from the balance delta.",
+  "lines": [
+    "The Federal Bank Ltd. NEO BANKING- EPIFI",
+    "Statement of account for the period of 08/04/2026 to 07/05/2026",
+    "Account Number: XXXXX4222",
+    "Value Tran Cheque Dr/",
+    "Opening Balance OPNBAL 1,00,000.00 CR",
+    "08/04/2026 08/04/2026 TO ECM/600000000001/EXAMPLE TFR S10000001 5000 0 95,000.00 CR",
+    "MERCHANT \\EXAM",
+    "20/04/2026 20/04/2026 UPI IN/600000000002/payer TFR S10000002 0 50000 1,45,000.00 CR",
+    "Payment f/0000"
+  ],
+  "full_text": "The Federal Bank Ltd. NEO BANKING- EPIFI\nStatement of account for the period of 08/04/2026 to 07/05/2026\nAccount Number: XXXXX4222\nValue Tran Cheque Dr/\nOpening Balance OPNBAL 1,00,000.00 CR\n08/04/2026 08/04/2026 TO ECM/600000000001/EXAMPLE TFR S10000001 5000 0 95,000.00 CR\nMERCHANT \\EXAM\n20/04/2026 20/04/2026 UPI IN/600000000002/payer TFR S10000002 0 50000 1,45,000.00 CR\nPayment f/0000\n",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-04-08",
+        "amount": "5000",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "TO ECM/600000000001/EXAMPLE TFR",
+        "ledger": {
+          "balance": "95000.00",
+          "balance_delta": "-5000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "OpeningBalance",
+          "serial": "S10000001"
+        }
+      },
+      {
+        "date": "2026-04-20",
+        "amount": "50000",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "UPI IN/600000000002/payer TFR MERCHANT \\EXAM Payment f/0000",
+        "ledger": {
+          "balance": "145000.00",
+          "balance_delta": "50000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": "S10000002"
+        }
+      }
+    ],
+    "period_start": "2026-04-08",
+    "period_end": "2026-05-07",
+    "card_last4": "4222",
+    "printed_opening_balance": "100000.00",
+    "printed_closing_balance": "145000.00",
+    "errored_lines": []
+  }
+}

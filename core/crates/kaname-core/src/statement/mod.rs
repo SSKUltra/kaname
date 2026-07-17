@@ -10,6 +10,7 @@ pub mod balance_chain;
 pub mod base;
 pub mod common;
 pub mod federal;
+pub mod federal_bank;
 pub mod hdfc;
 pub mod hdfc_bank;
 pub mod icici;

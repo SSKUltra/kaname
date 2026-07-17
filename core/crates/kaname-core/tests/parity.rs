@@ -10,10 +10,10 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    check_balance_chain, federal_claims, hdfc_claims, icici_claims, read_federal_statement,
-    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
-    read_sbi_statement, read_yes_statement, sbi_claims, yes_claims, ChainStatus, Direction,
-    ParsedStatement,
+    check_balance_chain, federal_claims, hdfc_claims, icici_claims, read_federal_bank_statement,
+    read_federal_statement, read_hdfc_bank_statement, read_hdfc_statement,
+    read_icici_bank_statement, read_icici_statement, read_sbi_statement, read_yes_statement,
+    sbi_claims, yes_claims, ChainStatus, Direction, ParsedStatement,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -118,6 +118,16 @@ const CASES: &[Case] = &[
         parse: parse_hdfc_bank,
         rel_path: "hdfc/bank_account/detailed.json",
     },
+    Case {
+        label: "Federal bank classic",
+        parse: parse_federal_bank,
+        rel_path: "federal/bank_account/classic.json",
+    },
+    Case {
+        label: "Federal bank fi",
+        parse: parse_federal_bank,
+        rel_path: "federal/bank_account/fi.json",
+    },
 ];
 
 /// Wrapper so the bank-account ledger reader fits the shared `Case` signature. The
@@ -131,6 +141,12 @@ fn parse_icici_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
 /// geometry needed).
 fn parse_hdfc_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
     read_hdfc_bank_statement(lines, full_text, Vec::new())
+}
+
+/// Wrapper for the Federal bank-account reader (both templates are opening-anchored → no
+/// geometry needed).
+fn parse_federal_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_federal_bank_statement(lines, full_text, Vec::new())
 }
 
 fn load_fixture(rel_path: &str) -> Fixture {
@@ -344,6 +360,25 @@ fn hdfc_bank_statements_balance_chain_reconciles() {
             "{rel_path}: opening-anchored"
         );
         assert_eq!(result.checked_rows, 2, "{rel_path}");
+    }
+}
+
+#[test]
+fn federal_bank_statements_balance_chain_reconciles() {
+    for (rel_path, rows) in [
+        ("federal/bank_account/classic.json", 3),
+        ("federal/bank_account/fi.json", 2),
+    ] {
+        let fx = load_fixture(rel_path);
+        let statement = read_federal_bank_statement(fx.lines, fx.full_text, Vec::new());
+        let result = check_balance_chain(statement);
+        assert_eq!(result.status, ChainStatus::Reconciled, "{rel_path}");
+        assert_eq!(result.suspect_count, 0, "{rel_path}: no suspects");
+        assert!(
+            !result.row1_direction_fallback,
+            "{rel_path}: opening-anchored"
+        );
+        assert_eq!(result.checked_rows, rows, "{rel_path}");
     }
 }
 
