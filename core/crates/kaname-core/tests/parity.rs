@@ -10,10 +10,11 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    check_balance_chain, federal_claims, hdfc_claims, icici_claims, read_au_bank_statement,
-    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
-    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_sbi_statement,
-    read_yes_statement, sbi_claims, yes_claims, ChainStatus, Direction, ParsedStatement,
+    check_balance_chain, federal_claims, hdfc_claims, icici_claims, iob_claims,
+    read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
+    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
+    read_iob_statement, read_sbi_statement, read_yes_statement, sbi_claims, yes_claims,
+    ChainStatus, Direction, ParsedStatement,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -97,6 +98,11 @@ const CASES: &[Case] = &[
         label: "Yes Bank",
         parse: read_yes_statement,
         rel_path: "yes/credit_card/basic.json",
+    },
+    Case {
+        label: "IOB",
+        parse: read_iob_statement,
+        rel_path: "iob/credit_card/basic.json",
     },
     Case {
         label: "Federal/Scapia",
@@ -322,6 +328,16 @@ fn yes_claims_accepts_own_document_and_rejects_others() {
     assert!(
         !yes_claims("ICICI Bank Statement".to_string()),
         "Yes must not claim an ICICI statement"
+    );
+}
+
+#[test]
+fn iob_claims_accepts_own_document_and_rejects_others() {
+    let fx = load_fixture("iob/credit_card/basic.json");
+    assert!(iob_claims(fx.full_text), "IOB must claim its own statement");
+    assert!(
+        !iob_claims("HDFC Bank Credit Cards statement".to_string()),
+        "IOB must not claim an HDFC statement"
     );
 }
 

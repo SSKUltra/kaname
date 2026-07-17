@@ -16,6 +16,7 @@ use crate::statement::federal_bank::FederalBankReader;
 use crate::statement::hdfc_bank::HdfcBankReader;
 use crate::statement::icici::IciciReader;
 use crate::statement::icici_bank::IciciBankReader;
+use crate::statement::iob::IobReader;
 use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
 use crate::statement::line_reader::{claims, read_lines};
 use crate::statement::sbi::SbiReader;
@@ -107,6 +108,20 @@ pub fn read_yes_statement(lines: Vec<String>, full_text: String) -> ParsedStatem
 #[uniffi::export]
 pub fn yes_claims(full_text: String) -> bool {
     claims(&YesReader, &full_text, "YES")
+}
+
+/// Parse an Indian Overseas Bank (IOB) credit-card statement from already-extracted text.
+/// Same purity/robustness contract as [`read_icici_statement`].
+#[uniffi::export]
+pub fn read_iob_statement(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_lines(&IobReader, &lines, &full_text)
+}
+
+/// Whether `full_text` is recognizably an IOB credit-card statement; `false` for other
+/// issuers.
+#[uniffi::export]
+pub fn iob_claims(full_text: String) -> bool {
+    claims(&IobReader, &full_text, "IOB")
 }
 
 /// Parse a Scapia / Federal Bank credit-card statement from already-extracted text. Same
