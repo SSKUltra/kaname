@@ -26,10 +26,11 @@ pub mod statement;
 
 pub use dedup::{dedup_fingerprint, normalize_description};
 pub use ffi::{
-    check_balance_chain, federal_bank_claims, federal_claims, hdfc_bank_claims, hdfc_claims,
-    icici_bank_claims, icici_claims, read_federal_bank_statement, read_federal_statement,
-    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
-    read_sbi_statement, read_yes_statement, sbi_claims, yes_claims,
+    au_bank_claims, check_balance_chain, federal_bank_claims, federal_claims, hdfc_bank_claims,
+    hdfc_claims, icici_bank_claims, icici_claims, read_au_bank_statement,
+    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
+    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_sbi_statement,
+    read_yes_statement, sbi_claims, yes_claims,
 };
 pub use model::{Direction, Transaction};
 pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};

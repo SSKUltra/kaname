@@ -1,0 +1,61 @@
+{
+  "_comment": "Synthetic AU Small Finance Bank savings golden vector (no real data). Ported from the web engine's au_bank.py; captured from a live run + balance_chain.check (RECONCILED). Single template: two DD Mon YYYY dates then Debit/Credit columns where the empty side prints a dash '-', then the running balance. Direction is from the balance delta, NEVER the UPI/DR / UPI/CR counterparty text in the narration. printed_closing_balance is the last row's running balance (16570.79), not the header's printed Closing Balance (223.34).",
+  "lines": [
+    "ACCOUNT STATEMENT",
+    "Name : Test User Account Number : 1234567890120042",
+    "Customer ID : 99999999 Account Type : AU Lite Savings Account",
+    "Statement Date : 22 Jun 2026 Opening Balance(₹) : 11,570.79",
+    "Statement Period : 01 Mar 2026 to 31 May 2026 Closing Balance(₹) : 223.34",
+    "Transaction Cheque/",
+    "Value Date Description/Narration Debit (₹) Credit (₹) Balance (₹)",
+    "Date Reference No.",
+    "UPI/DR/000000000001/EXAMPLE ABC0000000001ref",
+    "01 Mar 2026 01 Mar 2026 STORE 1111ref2222tail 5,000.00 - 6,570.79",
+    "MERCHANT/UTIB/0000/UPI AU",
+    "UPI/CR/000000000002/EXAMPLE XYZ0000000002ref",
+    "02 Mar 2026 02 Mar 2026 EMPLOYER 3333ref4444tail - 10,000.00 16,570.79",
+    "SALARY/UTIB/0000/UPI AU",
+    "1800 1200 1200 www.aubank.in customercare@aubank.in"
+  ],
+  "full_text": "ACCOUNT STATEMENT\nName : Test User Account Number : 1234567890120042\nCustomer ID : 99999999 Account Type : AU Lite Savings Account\nStatement Date : 22 Jun 2026 Opening Balance(₹) : 11,570.79\nStatement Period : 01 Mar 2026 to 31 May 2026 Closing Balance(₹) : 223.34\nTransaction Cheque/\nValue Date Description/Narration Debit (₹) Credit (₹) Balance (₹)\nDate Reference No.\nUPI/DR/000000000001/EXAMPLE ABC0000000001ref\n01 Mar 2026 01 Mar 2026 STORE 1111ref2222tail 5,000.00 - 6,570.79\nMERCHANT/UTIB/0000/UPI AU\nUPI/CR/000000000002/EXAMPLE XYZ0000000002ref\n02 Mar 2026 02 Mar 2026 EMPLOYER 3333ref4444tail - 10,000.00 16,570.79\nSALARY/UTIB/0000/UPI AU\n1800 1200 1200 www.aubank.in customercare@aubank.in\n",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-03-01",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "STORE 1111ref2222tail UPI/DR/000000000001/EXAMPLE ABC0000000001ref MERCHANT/UTIB/0000/UPI AU",
+        "ledger": {
+          "balance": "6570.79",
+          "balance_delta": "-5000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "OpeningBalance",
+          "serial": ""
+        }
+      },
+      {
+        "date": "2026-03-02",
+        "amount": "10000.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "EMPLOYER 3333ref4444tail UPI/CR/000000000002/EXAMPLE XYZ0000000002ref SALARY/UTIB/0000/UPI AU 1800 1200 1200 www.aubank.in customercare@aubank.in",
+        "ledger": {
+          "balance": "16570.79",
+          "balance_delta": "10000.00",
+          "amount_matches_delta": true,
+          "is_suspect": false,
+          "direction_source": "BalanceDelta",
+          "serial": ""
+        }
+      }
+    ],
+    "period_start": "2026-03-01",
+    "period_end": "2026-05-31",
+    "card_last4": "0042",
+    "printed_opening_balance": "11570.79",
+    "printed_closing_balance": "16570.79",
+    "errored_lines": []
+  }
+}
