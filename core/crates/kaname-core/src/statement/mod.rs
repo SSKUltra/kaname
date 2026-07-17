@@ -6,6 +6,7 @@
 //! `read_lines` seam ([`line_reader`]) is the reusable "one transaction per text line"
 //! reader that each issuer ([`icici`], HDFC, SBI, Yes, [`federal`]) configures.
 
+pub mod au_bank;
 pub mod balance_chain;
 pub mod base;
 pub mod common;

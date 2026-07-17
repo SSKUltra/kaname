@@ -8,6 +8,7 @@
 
 use crate::model::Transaction;
 use crate::normalize_description;
+use crate::statement::au_bank::AuBankReader;
 use crate::statement::balance_chain::{check, ChainResult};
 use crate::statement::base::{ParsedStatement, Word};
 use crate::statement::federal::FederalReader;
@@ -193,6 +194,26 @@ pub fn read_federal_bank_statement(
 #[uniffi::export]
 pub fn federal_bank_claims(full_text: String) -> bool {
     claims_ledger(&FederalBankReader, &full_text, "FEDERAL")
+}
+
+/// Parse an AU Small Finance Bank savings/current statement from already-extracted text.
+/// `first_row_words` carries the first anchor row's word geometry for the row-1
+/// bootstrap; pass an empty list when unavailable. Same purity/robustness contract as
+/// [`read_icici_bank_statement`].
+#[uniffi::export]
+pub fn read_au_bank_statement(
+    lines: Vec<String>,
+    full_text: String,
+    first_row_words: Vec<Word>,
+) -> ParsedStatement {
+    read_ledger_lines(&AuBankReader, &lines, &full_text, &first_row_words)
+}
+
+/// Whether `full_text` is recognizably an AU *bank-account* (savings/current) statement;
+/// `false` for other issuers and for a credit-card statement.
+#[uniffi::export]
+pub fn au_bank_claims(full_text: String) -> bool {
+    claims_ledger(&AuBankReader, &full_text, "AU")
 }
 
 #[cfg(test)]

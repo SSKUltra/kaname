@@ -10,10 +10,10 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    check_balance_chain, federal_claims, hdfc_claims, icici_claims, read_federal_bank_statement,
-    read_federal_statement, read_hdfc_bank_statement, read_hdfc_statement,
-    read_icici_bank_statement, read_icici_statement, read_sbi_statement, read_yes_statement,
-    sbi_claims, yes_claims, ChainStatus, Direction, ParsedStatement,
+    check_balance_chain, federal_claims, hdfc_claims, icici_claims, read_au_bank_statement,
+    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
+    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_sbi_statement,
+    read_yes_statement, sbi_claims, yes_claims, ChainStatus, Direction, ParsedStatement,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -128,6 +128,11 @@ const CASES: &[Case] = &[
         parse: parse_federal_bank,
         rel_path: "federal/bank_account/fi.json",
     },
+    Case {
+        label: "AU bank",
+        parse: parse_au_bank,
+        rel_path: "au/bank_account/savings.json",
+    },
 ];
 
 /// Wrapper so the bank-account ledger reader fits the shared `Case` signature. The
@@ -147,6 +152,11 @@ fn parse_hdfc_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
 /// geometry needed).
 fn parse_federal_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
     read_federal_bank_statement(lines, full_text, Vec::new())
+}
+
+/// Wrapper for the AU bank-account reader (opening-anchored → no geometry needed).
+fn parse_au_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
+    read_au_bank_statement(lines, full_text, Vec::new())
 }
 
 fn load_fixture(rel_path: &str) -> Fixture {
@@ -380,6 +390,20 @@ fn federal_bank_statements_balance_chain_reconciles() {
         );
         assert_eq!(result.checked_rows, rows, "{rel_path}");
     }
+}
+
+#[test]
+fn au_bank_statement_balance_chain_reconciles() {
+    let fx = load_fixture("au/bank_account/savings.json");
+    let statement = read_au_bank_statement(fx.lines, fx.full_text, Vec::new());
+    let result = check_balance_chain(statement);
+    assert_eq!(result.status, ChainStatus::Reconciled);
+    assert_eq!(result.suspect_count, 0, "no suspect rows");
+    assert!(
+        !result.row1_direction_fallback,
+        "row-1 was opening-anchored"
+    );
+    assert_eq!(result.checked_rows, 2);
 }
 
 #[test]
