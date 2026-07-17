@@ -47,8 +47,8 @@ Mirror the web repo's `FinTrack India Constitution`, adapted for on-device mobil
 ### 3.1 `kaname-core` (Rust)
 Deterministic, platform-agnostic engine:
 - **Parsers** — port of the Python `statement_readers`:
-  - Credit-card (LineStatementReader + reconciliation): `icici`, `hdfc`, `sbi_card`, `yes_kiwi`, `federal_scapia`.
-  - Bank-account (BalanceLedgerStatementReader + balance-chain): `icici_bank`, `hdfc_bank`, `federal_bank`, `au_bank`, `iob`.
+  - Credit-card (LineStatementReader + reconciliation): `icici`, `hdfc`, `sbi_card`, `yes_kiwi`, `federal_scapia`, `iob`.
+  - Bank-account (BalanceLedgerStatementReader + balance-chain): `icici_bank`, `hdfc_bank`, `federal_bank`, `au_bank`.
   - Registry keyed by `(bank_code, account_kind)`; shared `base` / `_ledger_reader` / `_line_reader` / `polarity` / `_common`.
 - **Categorization** — T1 (history) + T2 (rules): deterministic, offline, free.
 - **Dedup + transfer detection**, **balance-chain integrity**, **reconciliation**.

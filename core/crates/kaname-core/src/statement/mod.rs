@@ -16,6 +16,7 @@ pub mod hdfc;
 pub mod hdfc_bank;
 pub mod icici;
 pub mod icici_bank;
+pub mod iob;
 pub mod ledger_reader;
 pub mod line_reader;
 pub mod polarity;

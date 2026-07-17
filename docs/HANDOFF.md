@@ -53,10 +53,10 @@ machine: `finance-tracker-phase` (phase dev), `finance-tracker-fixes`, `finance-
 - Shared: `base.py`, `_line_reader.py` (LineStatementReader), `_ledger_reader.py`
   (BalanceLedgerStatementReader), `_common.py`, `registry.py`, `polarity.py`, `ai_fallback.py`.
 - **Credit-card** readers (use `LineStatementReader` + `reconciliation.reconcile`):
-  `icici.py`, `hdfc.py`, `sbi_card.py`, `yes_kiwi.py`, `federal_scapia.py`.
+  `icici.py`, `hdfc.py`, `sbi_card.py`, `yes_kiwi.py`, `federal_scapia.py`, `iob.py`.
 - **Bank-account** readers (use `BalanceLedgerStatementReader`; direction from running-balance
   delta; integrity via `balance_chain.check`): `icici_bank.py`, `hdfc_bank.py`,
-  `federal_bank.py`, `au_bank.py`, `iob.py`.
+  `federal_bank.py`, `au_bank.py`.
 - `registry` is keyed by **`(bank_code, account_kind)`**; `register()` defaults
   `account_kind="credit_card"`. **ICICI has BOTH** a CC and a bank reader.
 

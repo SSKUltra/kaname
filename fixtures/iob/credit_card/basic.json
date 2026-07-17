@@ -1,0 +1,42 @@
+{
+  "_comment": "Synthetic Indian Overseas Bank (IOB) credit-card golden vector (no real data). Ported from the web engine's iob.py; captured from a live run of the web reader. Layout: DD-MON-YYYY <merchant> <amount> Dr|Cr — direction from the trailing Dr/Cr marker, never the amount. The masked card number is printed inline with the credit/cash limits; the cycle end comes from 'Stmt Date' (no period range is printed). Reconciliation printed-totals are intentionally not modeled (same carve-out as the Yes reader).",
+  "lines": [
+    "Monthly Statement",
+    "INDIAN OVERSEAS BANK CREDIT CARD DIVISION",
+    "Stmt No: 2026CC0000001 Stmt Date: 20-APR-2026 E-Mail: creditcard@iobnet.co.in",
+    "YOUR CREDIT CARD STATEMENT",
+    "Credit Card Number Cash Limit (as part of credit limit) Available Credit Limit",
+    "123456XXXXXX0042 16000 25091.5",
+    "ACCOUNT SUMMARY",
+    "Previous Balance Payment / Credits Purchases / Debits Fee, Taxes and Interest Charge Total Outstanding",
+    "- + + =",
+    "345.50 1,000.00 3,500.00 0 2,845.50",
+    "Date Transaction Details Amount Rs.",
+    "31-MAR-2026 ExampleRefundMerchant 1,000.00 Cr",
+    "04-APR-2026 ExampleStorePurchase 3,500.00 Dr",
+    "Total Purchase : 2845.50",
+    "*********** End of Statement ***********"
+  ],
+  "full_text": "Monthly Statement\nINDIAN OVERSEAS BANK CREDIT CARD DIVISION\nStmt No: 2026CC0000001 Stmt Date: 20-APR-2026 E-Mail: creditcard@iobnet.co.in\nYOUR CREDIT CARD STATEMENT\nCredit Card Number Cash Limit (as part of credit limit) Available Credit Limit\n123456XXXXXX0042 16000 25091.5\nACCOUNT SUMMARY\nPrevious Balance Payment / Credits Purchases / Debits Fee, Taxes and Interest Charge Total Outstanding\n- + + =\n345.50 1,000.00 3,500.00 0 2,845.50\nDate Transaction Details Amount Rs.\n31-MAR-2026 ExampleRefundMerchant 1,000.00 Cr\n04-APR-2026 ExampleStorePurchase 3,500.00 Dr\nTotal Purchase : 2845.50\n*********** End of Statement ***********\n",
+  "expected": {
+    "rows": [
+      {
+        "date": "2026-03-31",
+        "amount": "1000.00",
+        "direction": "Credit",
+        "currency": "INR",
+        "description_raw": "ExampleRefundMerchant"
+      },
+      {
+        "date": "2026-04-04",
+        "amount": "3500.00",
+        "direction": "Debit",
+        "currency": "INR",
+        "description_raw": "ExampleStorePurchase"
+      }
+    ],
+    "period_end": "2026-04-20",
+    "card_last4": "0042",
+    "errored_lines": []
+  }
+}
