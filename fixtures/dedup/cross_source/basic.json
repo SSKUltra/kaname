@@ -1,0 +1,23 @@
+{
+  "_comment": "Synthetic cross-source de-dup golden vector (no real data). Two already-parsed transaction lists (an existing bank-ledger list and an incoming card list) plus the duplicate matches the web engine's L3 CANONICAL + L4 FUZZY logic identifies (normalise_narration + rapidfuzz Jaro-Winkler); expected_matches captured from a live web-engine run. amount is a string (re-parsed to Decimal - never float); direction Debit|Credit; layer Canonical|Fuzzy. Scenarios: (0) canonical match on same date/amount/direction + same 60-char normalised prefix 'swiggy bangalore'; (1) fuzzy match with a +1-day posting skew and JW('swiggy bangalore','swiggy bangaluru')=0.95>=0.92; (2) below-threshold survivor JW('acme corp','acme corporation')=0.9125<0.92; (3) direction-guard survivor (same date/amount/narration, Debit vs Credit); (4) canonical multiplicity match; (5) surplus identical repeat survives (the single existing 'uber' was already consumed by 4).",
+  "existing": [
+    { "date": "2026-07-04", "description": "Swiggy Bangalore", "amount": "250.00", "direction": "Debit" },
+    { "date": "2026-07-10", "description": "swiggy bangalore", "amount": "500.00", "direction": "Debit" },
+    { "date": "2026-07-15", "description": "acme corp", "amount": "400.00", "direction": "Debit" },
+    { "date": "2026-07-20", "description": "netflix", "amount": "600.00", "direction": "Debit" },
+    { "date": "2026-07-25", "description": "uber", "amount": "200.00", "direction": "Debit" }
+  ],
+  "incoming": [
+    { "date": "2026-07-04", "description": "swiggy   bangalore", "amount": "250.00", "direction": "Debit" },
+    { "date": "2026-07-11", "description": "swiggy bangaluru", "amount": "500.00", "direction": "Debit" },
+    { "date": "2026-07-15", "description": "acme corporation", "amount": "400.00", "direction": "Debit" },
+    { "date": "2026-07-20", "description": "netflix", "amount": "600.00", "direction": "Credit" },
+    { "date": "2026-07-25", "description": "uber", "amount": "200.00", "direction": "Debit" },
+    { "date": "2026-07-25", "description": "uber", "amount": "200.00", "direction": "Debit" }
+  ],
+  "expected_matches": [
+    { "incoming_index": 0, "existing_index": 0, "layer": "Canonical" },
+    { "incoming_index": 1, "existing_index": 1, "layer": "Fuzzy" },
+    { "incoming_index": 4, "existing_index": 4, "layer": "Canonical" }
+  ]
+}

@@ -10,11 +10,12 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    check_balance_chain, federal_claims, hdfc_claims, icici_claims, iob_claims,
-    read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
+    check_balance_chain, cross_source_duplicates, federal_claims, hdfc_claims, icici_claims,
+    iob_claims, read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
     read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
     read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
-    yes_claims, ChainStatus, Direction, ParsedStatement, ReconcileStatus,
+    yes_claims, ChainStatus, CrossSourceMatch, DedupLayer, Direction, ParsedStatement,
+    ReconcileStatus, Transaction,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -492,5 +493,65 @@ fn statement_without_printed_totals_is_neutral() {
     assert_eq!(
         result.reason.as_deref(),
         Some("no printed totals extracted")
+    );
+}
+
+#[derive(Deserialize)]
+struct DedupFixture {
+    existing: Vec<DedupRow>,
+    incoming: Vec<DedupRow>,
+    expected_matches: Vec<ExpectedMatch>,
+}
+
+#[derive(Deserialize)]
+struct DedupRow {
+    date: String,
+    description: String,
+    amount: String,
+    direction: Direction,
+}
+
+#[derive(Deserialize)]
+struct ExpectedMatch {
+    incoming_index: u32,
+    existing_index: u32,
+    layer: DedupLayer,
+}
+
+fn to_txns(rows: &[DedupRow]) -> Vec<Transaction> {
+    rows.iter()
+        .map(|r| {
+            Transaction::new(
+                NaiveDate::parse_from_str(&r.date, "%Y-%m-%d").unwrap(),
+                r.description.clone(),
+                Decimal::from_str(&r.amount).unwrap(),
+                r.direction,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn cross_source_dedup_matches_expected() {
+    let path = format!(
+        "{}/../../../fixtures/dedup/cross_source/basic.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    let fx: DedupFixture =
+        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+    let got = cross_source_duplicates(to_txns(&fx.existing), to_txns(&fx.incoming));
+    let want: Vec<CrossSourceMatch> = fx
+        .expected_matches
+        .iter()
+        .map(|m| CrossSourceMatch {
+            incoming_index: m.incoming_index,
+            existing_index: m.existing_index,
+            layer: m.layer,
+        })
+        .collect();
+    assert_eq!(
+        got, want,
+        "cross-source dedup must equal the golden expected_matches"
     );
 }
