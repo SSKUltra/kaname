@@ -30,10 +30,11 @@ pub use ffi::{
     hdfc_claims, icici_bank_claims, icici_claims, iob_claims, read_au_bank_statement,
     read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
     read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_iob_statement,
-    read_sbi_statement, read_yes_statement, sbi_claims, yes_claims,
+    read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims, yes_claims,
 };
 pub use model::{Direction, Transaction};
 pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};
+pub use statement::reconcile::{ReconcileResult, ReconcileStatus};
 pub use statement::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
 
 uniffi::setup_scaffolding!();

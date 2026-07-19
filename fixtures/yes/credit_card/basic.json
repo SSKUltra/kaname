@@ -1,10 +1,10 @@
 {
-  "_comment": "Synthetic Yes Bank (Kiwi) credit-card golden vector (no real data). Ported from the web engine's test_cc_reader_characterization.py _YES case; values captured from a live run of the web reader. Layout: DD/MM/YYYY <details ... Ref No> <Merchant Category> <amount> Dr|Cr. Reconciliation printed-totals are intentionally not modeled (later slice).",
+  "_comment": "Synthetic Yes Bank (Kiwi) credit-card golden vector (no real data). Ported from the web engine's test_cc_reader_characterization.py _YES case; values captured from a live run of the web reader (rows) and reconciliation.py (printed totals). Layout: DD/MM/YYYY <details ... Ref No> <Merchant Category> <amount> Dr|Cr. The printed per-statement totals (Current Purchases ... Rs. X Dr / Payment & Credits Received ... Rs. Y Cr) are surfaced for the reconcile check: read debit 100.00 == printed 100.00, read credit 9000.00 == printed 9000.00 -> RECONCILED.",
   "lines": [
     "29/04/2026 PAYMENT RECEIVED BBPS - Ref No: RT0001 9,000.00 Cr",
     "19/04/2026 UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores 100.00 Dr"
   ],
-  "full_text": "YES BANK KLICK\nStatement for YES BANK Card Number 3561XXXXXXXX6686\nStatement Period: 17/04/2026 To 16/05/2026\n29/04/2026 PAYMENT RECEIVED BBPS - Ref No: RT0001 9,000.00 Cr\n19/04/2026 UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores 100.00 Dr",
+  "full_text": "YES BANK KLICK\nStatement for YES BANK Card Number 3561XXXXXXXX6686\nStatement Period: 17/04/2026 To 16/05/2026\nCurrent Purchases / Cash Advance & Other Charges : Rs. 100.00 Dr\nPayment & Credits Received : Rs. 9,000.00 Cr\n29/04/2026 PAYMENT RECEIVED BBPS - Ref No: RT0001 9,000.00 Cr\n19/04/2026 UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores 100.00 Dr",
   "expected": {
     "rows": [
       {
@@ -25,6 +25,8 @@
     "period_start": "2026-04-17",
     "period_end": "2026-05-16",
     "card_last4": "6686",
+    "printed_total_debits": "100.00",
+    "printed_total_credits": "9000.00",
     "errored_lines": []
   }
 }

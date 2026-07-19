@@ -2,8 +2,7 @@
 //!
 //! A reader turns extracted statement text into a [`ParsedStatement`]: the canonical
 //! per-line [`ParsedTransaction`] rows plus statement-level metadata (billing period,
-//! card last-4). Only the fields this slice needs are ported — the reconciliation
-//! `printed_*` totals arrive with a later slice.
+//! card last-4) and the printed balances/totals that drive reconciliation.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -95,6 +94,13 @@ pub struct ParsedStatement {
     /// Printed closing balance of a bank-account statement (the last row's running
     /// balance). `None` for credit-card statements.
     pub printed_closing_balance: Option<Decimal>,
+    /// Printed per-statement debit total, as printed by the issuer (an `ACCOUNT SUMMARY`
+    /// block or a "Purchases … Dr" figure). Surfaced only by the Yes/Kiwi and IOB
+    /// credit-card readers; `None` otherwise. Drives the primary reconcile check.
+    pub printed_total_debits: Option<Decimal>,
+    /// Printed per-statement credit total (a "Payment & Credits Received … Cr" figure, or the
+    /// `ACCOUNT SUMMARY` credits column). Surfaced only by Yes/Kiwi and IOB; `None` otherwise.
+    pub printed_total_credits: Option<Decimal>,
     pub confidence: f64,
 }
 
@@ -110,6 +116,8 @@ impl ParsedStatement {
             card_last4: None,
             printed_opening_balance: None,
             printed_closing_balance: None,
+            printed_total_debits: None,
+            printed_total_credits: None,
             confidence: 1.0,
         }
     }
