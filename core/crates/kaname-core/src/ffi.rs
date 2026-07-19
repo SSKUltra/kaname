@@ -6,6 +6,7 @@
 //! (constitution: money is never a float). The functions here are pure and
 //! deterministic: no clock, no locale, no network, no global state.
 
+use crate::coverage::{MonthCoverage, StatementCoverage, TransactionCoverage};
 use crate::dedup::CrossSourceMatch;
 use crate::model::Transaction;
 use crate::normalize_description;
@@ -65,6 +66,19 @@ pub fn cross_source_duplicates(
     incoming: Vec<Transaction>,
 ) -> Vec<CrossSourceMatch> {
     crate::dedup::cross_source_duplicates(&existing, &incoming)
+}
+
+/// Classify the rolling 24 months ending at `today` for one account as GAP / PARTIAL / COVERED
+/// (+ `needs_review`), from the platform-supplied statement and transaction facts — the coverage
+/// counterpart to the balance-chain / reconciliation / de-dup checks. Pure and deterministic; the
+/// engine never reads the wall-clock (`today` is passed in). Returns the 24 months oldest first.
+#[uniffi::export]
+pub fn compute_coverage(
+    today: NaiveDate,
+    statements: Vec<StatementCoverage>,
+    transactions: Vec<TransactionCoverage>,
+) -> Vec<MonthCoverage> {
+    crate::coverage::compute_coverage(today, &statements, &transactions)
 }
 
 /// Parse an ICICI credit-card statement from already-extracted text (lines + full
