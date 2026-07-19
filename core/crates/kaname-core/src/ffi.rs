@@ -6,6 +6,7 @@
 //! (constitution: money is never a float). The functions here are pure and
 //! deterministic: no clock, no locale, no network, no global state.
 
+use crate::dedup::CrossSourceMatch;
 use crate::model::Transaction;
 use crate::normalize_description;
 use crate::statement::au_bank::AuBankReader;
@@ -52,6 +53,18 @@ pub fn normalize_transaction(input: Transaction) -> Transaction {
         amount: input.amount,
         direction: input.direction,
     }
+}
+
+/// Identify cross-source duplicate transactions between two already-parsed lists (e.g. a bank
+/// ledger and a credit-card statement) via the canonical + fuzzy layers — the de-dup counterpart
+/// to the balance-chain and reconciliation checks. Pure and deterministic; neither list is
+/// mutated. Returns, for each identified duplicate, the incoming and existing indices + the layer.
+#[uniffi::export]
+pub fn cross_source_duplicates(
+    existing: Vec<Transaction>,
+    incoming: Vec<Transaction>,
+) -> Vec<CrossSourceMatch> {
+    crate::dedup::cross_source_duplicates(&existing, &incoming)
 }
 
 /// Parse an ICICI credit-card statement from already-extracted text (lines + full
