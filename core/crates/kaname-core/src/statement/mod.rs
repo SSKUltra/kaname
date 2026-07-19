@@ -20,6 +20,7 @@ pub mod iob;
 pub mod ledger_reader;
 pub mod line_reader;
 pub mod polarity;
+pub mod reconcile;
 pub mod sbi;
 pub mod yes;
 

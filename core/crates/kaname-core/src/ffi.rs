@@ -19,6 +19,7 @@ use crate::statement::icici_bank::IciciBankReader;
 use crate::statement::iob::IobReader;
 use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
 use crate::statement::line_reader::{claims, read_lines};
+use crate::statement::reconcile::{reconcile, ReconcileResult};
 use crate::statement::sbi::SbiReader;
 use crate::statement::yes::YesReader;
 use chrono::NaiveDate;
@@ -167,6 +168,15 @@ pub fn icici_bank_claims(full_text: String) -> bool {
 #[uniffi::export]
 pub fn check_balance_chain(statement: ParsedStatement) -> ChainResult {
     check(&statement)
+}
+
+/// Reconcile a credit-card statement's read rows against its own printed totals (or, as a
+/// fallback, its opening→closing balance change) within ₹1.00 — the credit-card counterpart to
+/// [`check_balance_chain`]. Reports `Reconciled` / `NeedsReview`, or a neutral `None` status when
+/// the statement prints no totals. Pure.
+#[uniffi::export]
+pub fn reconcile_statement(statement: ParsedStatement) -> ReconcileResult {
+    reconcile(&statement)
 }
 
 /// Parse an HDFC Bank savings/current statement from already-extracted text (both the

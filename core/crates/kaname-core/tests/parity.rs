@@ -13,8 +13,8 @@ use kaname_core::{
     check_balance_chain, federal_claims, hdfc_claims, icici_claims, iob_claims,
     read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
     read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
-    read_iob_statement, read_sbi_statement, read_yes_statement, sbi_claims, yes_claims,
-    ChainStatus, Direction, ParsedStatement,
+    read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
+    yes_claims, ChainStatus, Direction, ParsedStatement, ReconcileStatus,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -39,6 +39,12 @@ struct Expected {
     printed_opening_balance: Option<String>,
     #[serde(default)]
     printed_closing_balance: Option<String>,
+    // Printed per-statement debit/credit totals (Yes/IOB credit-card statements only); other
+    // fixtures omit them → None. These drive the reconcile check.
+    #[serde(default)]
+    printed_total_debits: Option<String>,
+    #[serde(default)]
+    printed_total_credits: Option<String>,
     #[serde(default)]
     errored_lines: Vec<String>,
 }
@@ -217,6 +223,16 @@ fn assert_matches_expected(label: &str, statement: &ParsedStatement, expected: &
         statement.printed_closing_balance,
         expected.printed_closing_balance.as_deref().map(parse_dec),
         "{label}: printed_closing_balance"
+    );
+    assert_eq!(
+        statement.printed_total_debits,
+        expected.printed_total_debits.as_deref().map(parse_dec),
+        "{label}: printed_total_debits"
+    );
+    assert_eq!(
+        statement.printed_total_credits,
+        expected.printed_total_credits.as_deref().map(parse_dec),
+        "{label}: printed_total_credits"
     );
     assert_eq!(
         statement.errored_lines, expected.errored_lines,
@@ -434,4 +450,47 @@ fn malformed_row_is_captured_not_fatal() {
     assert_eq!(statement.lines.len(), 1, "the one valid row is returned");
     assert_eq!(statement.errored_lines.len(), 1, "the bad row is captured");
     assert!(statement.errored_lines[0].starts_with("99/99/9999"));
+}
+
+#[test]
+fn yes_statement_reconciles_against_its_printed_totals() {
+    // Read debit 100.00 == printed 100.00 and read credit 9000.00 == printed 9000.00, so the
+    // primary reconcile check (the credit-card counterpart to the ledger balance-chain) matches.
+    let fx = load_fixture("yes/credit_card/basic.json");
+    let statement = read_yes_statement(fx.lines, fx.full_text);
+    let result = reconcile_statement(statement);
+    let dec = |s: &str| Decimal::from_str(s).unwrap();
+    assert_eq!(result.status, Some(ReconcileStatus::Reconciled));
+    assert_eq!(result.read_debits, dec("100.00"));
+    assert_eq!(result.read_credits, dec("9000.00"));
+    assert_eq!(result.printed_debits, Some(dec("100.00")));
+    assert_eq!(result.printed_credits, Some(dec("9000.00")));
+}
+
+#[test]
+fn iob_statement_reconciles_against_its_account_summary() {
+    // Read debit 3500.00 == printed 3500.00 and read credit 1000.00 == printed 1000.00.
+    let fx = load_fixture("iob/credit_card/basic.json");
+    let statement = read_iob_statement(fx.lines, fx.full_text);
+    let result = reconcile_statement(statement);
+    let dec = |s: &str| Decimal::from_str(s).unwrap();
+    assert_eq!(result.status, Some(ReconcileStatus::Reconciled));
+    assert_eq!(result.read_debits, dec("3500.00"));
+    assert_eq!(result.read_credits, dec("1000.00"));
+    assert_eq!(result.printed_debits, Some(dec("3500.00")));
+    assert_eq!(result.printed_credits, Some(dec("1000.00")));
+}
+
+#[test]
+fn statement_without_printed_totals_is_neutral() {
+    // The ICICI card fixture prints no per-statement totals → neutral (status None), which is
+    // explicitly distinct from a NEEDS_REVIEW mismatch (FR-004).
+    let fx = load_fixture("icici/credit_card/basic.json");
+    let statement = read_icici_statement(fx.lines, fx.full_text);
+    let result = reconcile_statement(statement);
+    assert_eq!(result.status, None);
+    assert_eq!(
+        result.reason.as_deref(),
+        Some("no printed totals extracted")
+    );
 }

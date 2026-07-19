@@ -8,10 +8,9 @@
 //! Issuer markers "INDIAN OVERSEAS BANK" / "iobnet.co.in"; the statement date reads
 //! "Stmt Date: 20-APR-2026" and gives the cycle end (no explicit period range is printed).
 //!
-//! The web reader also scrapes the `ACCOUNT SUMMARY` printed credit/debit totals for
-//! reconciliation; those `printed_total_*` fields are out of scope for this slice and are
-//! intentionally not ported — enrichment here is the statement-date cycle end + card
-//! last-4 only (the same carve-out already applied to the Yes reader).
+//! The web reader's `ACCOUNT SUMMARY` block prints per-statement credit/debit totals;
+//! enrichment surfaces them (the 2nd figure = credits, the 3rd = debits) for the reconcile
+//! check, alongside the statement-date cycle end and card last-4.
 
 use std::sync::LazyLock;
 
@@ -19,7 +18,7 @@ use regex::{Captures, Regex};
 
 use crate::model::Direction;
 use crate::statement::base::ParsedStatement;
-use crate::statement::common::{find_last4, parse_date};
+use crate::statement::common::{find_last4, parse_amount, parse_date};
 use crate::statement::line_reader::LineReaderConfig;
 use crate::statement::polarity::classify;
 
@@ -34,6 +33,16 @@ static ROW_RE: LazyLock<Regex> = LazyLock::new(|| {
 // explicit period range is printed).
 static STMT_DATE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)Stmt Date\s*:\s*(\d{2}-[A-Za-z]{3}-\d{4})").unwrap());
+
+// ACCOUNT SUMMARY values row: Previous | Payment/Credits | Purchases/Debits | Fees… | Total. The
+// five figures land on one extracted line; the 2nd is the printed credits total and the 3rd the
+// printed debits total (both two-decimal). Case-insensitive + dotall to span the label rows.
+static SUMMARY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?is)ACCOUNT SUMMARY\b.*?(?P<prev>[\d,]+(?:\.\d+)?)\s+(?P<credits>[\d,]+\.\d{2})\s+(?P<debits>[\d,]+\.\d{2})\s+(?P<fees>[\d,]+(?:\.\d+)?)\s+(?P<total>[\d,]+(?:\.\d+)?)",
+    )
+    .unwrap()
+});
 
 const CLAIM_MARKERS: &[&str] = &["INDIAN OVERSEAS BANK", "iobnet.co.in"];
 
@@ -62,6 +71,10 @@ impl LineReaderConfig for IobReader {
             statement.period_end = parse_date(&caps[1]);
         }
         statement.card_last4 = find_last4(full_text, Some("Credit Card Number"));
+        if let Some(caps) = SUMMARY_RE.captures(full_text) {
+            statement.printed_total_credits = parse_amount(&caps["credits"]);
+            statement.printed_total_debits = parse_amount(&caps["debits"]);
+        }
     }
 }
 
@@ -103,6 +116,20 @@ mod tests {
         let (lines, full_text) = sample();
         let st = read_lines(&IobReader, &lines, &full_text);
         assert_eq!(st.card_last4.as_deref(), Some("0042"));
+    }
+
+    #[test]
+    fn surfaces_account_summary_printed_totals() {
+        // The ACCOUNT SUMMARY values row prints Previous | Credits | Debits | Fees | Total; the
+        // 2nd figure (1,000.00) is the credits total and the 3rd (3,500.00) the debits total.
+        let lines = vec![
+            "31-MAR-2026 ExampleRefundMerchant 1,000.00 Cr".to_string(),
+            "04-APR-2026 ExampleStorePurchase 3,500.00 Dr".to_string(),
+        ];
+        let full_text = "ACCOUNT SUMMARY\nPrevious Balance Payment / Credits Purchases / Debits Fee, Taxes and Interest Charge Total Outstanding\n- + + =\n345.50 1,000.00 3,500.00 0 2,845.50".to_string();
+        let st = read_lines(&IobReader, &lines, &full_text);
+        assert_eq!(st.printed_total_credits, Some(dec!(1000.00)));
+        assert_eq!(st.printed_total_debits, Some(dec!(3500.00)));
     }
 
     #[test]
