@@ -61,6 +61,8 @@ UI polish work should apply the `make-interfaces-feel-better` skill.
 - N/A (no persistence this slice; persisting the verdict / encrypted SQLite is explicitly out of scope) (012-cc-reconciliation)
 - Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 target + existing `regex 1`, `rust_decimal 1`, `chrono 0.4`, `serde 1`, `uniffi 0.32`; dev-only `serde_json 1` (already present, fixture harness). **No new runtime OR dev dependency** (Jaro-Winkler is hand-rolled) (013-cross-source-dedup)
 - N/A (no persistence this slice; encrypted SQLite/SQLCipher and any stored de-dup state are explicitly out of scope) (013-cross-source-dedup)
+- Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 target + existing `regex 1`, `rust_decimal 1`, `chrono 0.4`, `serde 1`, `uniffi 0.32`; dev-only `serde_json 1` (already present, fixture harness). **No new runtime OR dev dependency** (`std::collections::HashMap` + `chrono::Datelike` only) (014-coverage)
+- N/A (no persistence this slice; the platform supplies the pre-aggregated facts; encrypted SQLite/SQLCipher and any on-device aggregation are explicitly out of scope) (014-coverage)
 
 ## Recent Changes
 - 001-rust-swift-bridge: Added Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 deployment target + UniFFI `0.32` (new); existing `rust_decimal`, `chrono`, `serde`, `regex`, `csv`; iOS: SwiftUI, Foundation, Tuist (project gen), Swift Testing
