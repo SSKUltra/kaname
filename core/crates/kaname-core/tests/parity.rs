@@ -10,12 +10,13 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    check_balance_chain, cross_source_duplicates, federal_claims, hdfc_claims, icici_claims,
-    iob_claims, read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
-    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
-    read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
-    yes_claims, ChainStatus, CrossSourceMatch, DedupLayer, Direction, ParsedStatement,
-    ReconcileStatus, Transaction,
+    check_balance_chain, compute_coverage, cross_source_duplicates, federal_claims, hdfc_claims,
+    icici_claims, iob_claims, read_au_bank_statement, read_federal_bank_statement,
+    read_federal_statement, read_hdfc_bank_statement, read_hdfc_statement,
+    read_icici_bank_statement, read_icici_statement, read_iob_statement, read_sbi_statement,
+    read_yes_statement, reconcile_statement, sbi_claims, yes_claims, ChainStatus, CoverageState,
+    CrossSourceMatch, DedupLayer, Direction, MonthCoverage, ParsedStatement, ReconcileStatus,
+    StatementCoverage, Transaction, TransactionCoverage,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -553,5 +554,74 @@ fn cross_source_dedup_matches_expected() {
     assert_eq!(
         got, want,
         "cross-source dedup must equal the golden expected_matches"
+    );
+}
+
+#[derive(Deserialize)]
+struct CoverageFixture {
+    today: String,
+    statements: Vec<StmtRow>,
+    transactions: Vec<TxnRow>,
+    expected_months: Vec<ExpectedMonth>,
+}
+
+#[derive(Deserialize)]
+struct StmtRow {
+    period_end: String,
+    needs_review: bool,
+}
+
+#[derive(Deserialize)]
+struct TxnRow {
+    date: String,
+    from_full_statement: bool,
+}
+
+#[derive(Deserialize)]
+struct ExpectedMonth {
+    month: String,
+    state: CoverageState,
+    needs_review: bool,
+}
+
+#[test]
+fn coverage_map_matches_expected() {
+    let path = format!(
+        "{}/../../../fixtures/coverage/basic.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    let fx: CoverageFixture =
+        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+    let parse = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    let statements: Vec<StatementCoverage> = fx
+        .statements
+        .iter()
+        .map(|s| StatementCoverage {
+            period_end: parse(&s.period_end),
+            needs_review: s.needs_review,
+        })
+        .collect();
+    let transactions: Vec<TransactionCoverage> = fx
+        .transactions
+        .iter()
+        .map(|t| TransactionCoverage {
+            date: parse(&t.date),
+            from_full_statement: t.from_full_statement,
+        })
+        .collect();
+    let got = compute_coverage(parse(&fx.today), statements, transactions);
+    let want: Vec<MonthCoverage> = fx
+        .expected_months
+        .iter()
+        .map(|m| MonthCoverage {
+            month: m.month.clone(),
+            state: m.state,
+            needs_review: m.needs_review,
+        })
+        .collect();
+    assert_eq!(
+        got, want,
+        "coverage map must equal the golden expected_months"
     );
 }

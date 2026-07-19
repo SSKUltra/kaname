@@ -1,0 +1,150 @@
+{
+  "_comment": "Synthetic coverage-map golden vector (no real data). Rolling 24 months ending at today=2026-06-14; expected_months captured from a live web-engine run (coverage.py month_window + GAP/PARTIAL/COVERED + needsReview classification). state Gap|Partial|Covered; dates ISO. Scenario: a full statement (period_end 2026-05-16, run OK) covers 2026-05; a full statement (period_end 2026-02-28, run needs review) covers 2026-02 with needs_review true; an alert-only transaction on 2026-04-10 makes 2026-04 PARTIAL; a full-statement transaction on 2026-01-20 (no statement record) covers 2026-01 with needs_review false; the 2026-05-05 full-statement transaction reinforces 2026-05. Every other month in the window is GAP.",
+  "today": "2026-06-14",
+  "statements": [
+    {
+      "period_end": "2026-05-16",
+      "needs_review": false
+    },
+    {
+      "period_end": "2026-02-28",
+      "needs_review": true
+    }
+  ],
+  "transactions": [
+    {
+      "date": "2026-04-10",
+      "from_full_statement": false
+    },
+    {
+      "date": "2026-05-05",
+      "from_full_statement": true
+    },
+    {
+      "date": "2026-01-20",
+      "from_full_statement": true
+    }
+  ],
+  "expected_months": [
+    {
+      "month": "2024-07",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2024-08",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2024-09",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2024-10",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2024-11",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2024-12",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-01",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-02",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-03",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-04",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-05",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-06",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-07",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-08",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-09",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-10",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-11",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2025-12",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2026-01",
+      "state": "Covered",
+      "needs_review": false
+    },
+    {
+      "month": "2026-02",
+      "state": "Covered",
+      "needs_review": true
+    },
+    {
+      "month": "2026-03",
+      "state": "Gap",
+      "needs_review": false
+    },
+    {
+      "month": "2026-04",
+      "state": "Partial",
+      "needs_review": false
+    },
+    {
+      "month": "2026-05",
+      "state": "Covered",
+      "needs_review": false
+    },
+    {
+      "month": "2026-06",
+      "state": "Gap",
+      "needs_review": false
+    }
+  ]
+}
