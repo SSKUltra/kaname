@@ -6,13 +6,15 @@
 
 ## 0. TL;DR — where we are
 Kaname is the **privacy-first, local-first** open-source iOS client (Rust core + SwiftUI)
-for personal finance, by BeaconBrain. The **entire statement-reader porting effort is
-DONE**: all **10** readers from the closed web engine are ported, each proven **byte-for-byte**
-against golden fixtures and reachable across the Rust↔Swift UniFFI bridge.
+for personal finance, by BeaconBrain. The **statement-reader porting effort is DONE** (all
+**10** readers) **and so is the web engine's `ingestion/` layer**: balance-chain integrity,
+credit-card **reconciliation**, **cross-source de-duplication**, and the **coverage map** are
+all ported — each proven **byte-for-byte** against golden fixtures and reachable across the
+Rust↔Swift UniFFI bridge.
 
-- **`main` tip when this handoff was written:** `c361865`.
-- **Merged PRs #1 → #12** (11 feature slices + 1 CI-hardening chore). All CI-green.
-- **Engine tests on `main`:** 63 Rust unit + 13 Rust parity + 27 Swift (11 suites); 0 network deps.
+- **`main` tip when this handoff was written:** `b70f0f8`.
+- **Merged PRs #1 → #15** (14 feature slices + 1 CI-hardening chore). All CI-green.
+- **Engine tests on `main`:** 93 Rust unit + 18 Rust parity + 32 Swift (14 suites); 0 network deps.
 
 ## 1. What's DONE
 | Layer | Status |
@@ -22,37 +24,45 @@ against golden fixtures and reachable across the Rust↔Swift UniFFI bridge.
 | **P2 credit-card readers (6)** | ✅ ICICI, HDFC (2 layouts), SBI, Yes, Federal/Scapia, IOB |
 | **P2 bank-account ledger readers (4)** | ✅ ICICI, HDFC (2 layouts), Federal (2 templates), AU |
 | **Balance-chain integrity** | ✅ `balance_chain::check` → Reconciled/NeedsReview + suspects |
-| **Golden-parity harness** | ✅ `core/crates/kaname-core/tests/parity.rs` (1 fixture + 1 Case row per bank) |
+| **P2 CC reconciliation** | ✅ PR #13 — `reconcile.rs` `reconcile()` (printed debit/credit totals → opening/closing fallback → neutral `status: None`) |
+| **P2 cross-source de-dup** | ✅ PR #14 — `dedup.rs` `cross_source_duplicates()` (canonical + fuzzy, hand-rolled Jaro-Winkler = rapidfuzz; multiplicity-aware) |
+| **P2 coverage map** | ✅ PR #15 — `coverage.rs` `compute_coverage()` (rolling-24-month GAP/PARTIAL/COVERED + needsReview; clock-free) |
+| **Golden-parity harness** | ✅ `core/crates/kaname-core/tests/parity.rs` (per-bank statement Cases + reconcile/dedup/coverage tests) |
 | **Privacy-egress gate** | ✅ `make core-privacy-audit` (CI-enforced) |
 | **iOS CI hardening** | ✅ PR #9 — dynamic simulator selection by UDID (`.github/scripts/select-ios-simulator.sh`) |
 
 **Reader source files** (`core/crates/kaname-core/src/statement/`):
 - Credit-card (via `LineReaderConfig` + `read_lines`): `icici.rs`, `hdfc.rs`, `sbi.rs`, `yes.rs`, `federal.rs`, `iob.rs`.
 - Bank-account (via `LedgerReaderConfig` + `read_ledger_lines` + `balance_chain`): `icici_bank.rs`, `hdfc_bank.rs`, `federal_bank.rs`, `au_bank.rs`.
-- Shared seams: `line_reader.rs`, `ledger_reader.rs`, `balance_chain.rs`, `common.rs`, `polarity.rs`, `base.rs`.
+- Shared seams: `line_reader.rs`, `ledger_reader.rs`, `balance_chain.rs`, `reconcile.rs`, `common.rs`, `polarity.rs`, `base.rs`.
+
+**Ingestion modules** (`core/crates/kaname-core/src/`): `dedup.rs` (`dedup_fingerprint`, `normalize_description`, `normalize_narration`, `cross_source_duplicates`), `coverage.rs` (`month_window`, `compute_coverage`). FFI in `ffi.rs`; all re-exported from `lib.rs`.
 
 ## 2. What's NEXT (pick one; user checkpoints at slice boundaries)
-The remaining pieces of the web engine's **ingestion** layer
-(`/Users/ssk/Projects/finance-tracker-phase/backend/app/services/ingestion/`):
+The three named ingestion pieces (**reconciliation #13, cross-source dedup #14, coverage #15**) are
+**DONE** this session — the web engine's deterministic `ingestion/` layer is essentially fully ported.
+Remaining candidates, roughly in dependency order:
 
-1. **Reconciliation** (`reconciliation.py`) — **recommended next.** The credit-card readers
-   currently DEFER the printed debit/credit totals (`printed_total_credits` / `printed_total_debits`
-   in web `base.py`; carved out on every CC reader — see the module comments in `yes.rs`/`iob.rs`).
-   This slice would: add `printed_total_*` fields to `ParsedStatement`, port each CC reader's
-   `ACCOUNT SUMMARY`/totals regex, and add a `reconcile()` check (Σ read debits/credits vs the
-   printed totals → RECONCILED/NEEDS_REVIEW). The **ledger** side already has `balance_chain`
-   (its analogue), so this is the CC counterpart. Golden fixtures already exist per bank — extend
-   their `expected` with the printed totals.
-2. **Cross-source dedup** (`deduplicator.py`) — bank ↔ credit-card matching (a card payment shows
-   up in both the CC statement and the bank ledger). `core/crates/kaname-core/src/dedup.rs` already
-   has `dedup_fingerprint` + `normalize_description` — build the cross-source matcher on top.
-3. **Coverage** (`coverage.py`) — statement date-range completeness / gap detection.
-4. **Beyond ingestion (P3+)** — categorization (T1 history + T2 rules), encrypted persistence
-   (SQLCipher, arrives P2+ per the plan), then UI surfaces.
+1. **Transfer detection** (`ingestion/transfer_detector.py`) — the remaining ingestion-adjacent module.
+   Pairs opposite-direction rows across the user's accounts within ±1 day + ±₹1 (e.g. a card-bill
+   payment: a Debit in the bank ledger ↔ a Credit "payment received" in the CC statement). The web
+   version is DB-backed; the pure on-device subset is a batch matcher over two already-parsed lists
+   (like `cross_source_duplicates`), with a deterministic scoring tuple. **Scope decision needed** (as
+   with dedup): the DB/`transfer_group_id` persistence stays platform-side. `dedup.rs` (fingerprint +
+   `normalize_narration`) is the reuse base.
+2. **Categorization** — the next major engine layer: **T1** (history/merchant memory) + **T2** (rules).
+   Deterministic, offline, free (per `docs/kaname-ios-plan.md` §3.4). T4/LLM stays out of the free core.
+3. **Encrypted persistence** (SQLCipher via `rusqlite`, key in the iOS Keychain) — the P2+ foundation
+   the DB-backed layers (dedup L1/L2/L5+supersede, coverage aggregation, transfer groups) were carved
+   away from. Once it lands, the platform-side fact aggregation can move into the core.
+4. **P3 — Core SwiftUI app.** Onboarding → import (PDFKit → readers) → transaction list → categorize →
+   dashboard (Swift Charts) → budgets → tags → search → export; the **coverage map** + **reconcile** /
+   **balance-chain** verdicts are the first natural UI surfaces (apply the `make-interfaces-feel-better`
+   skill; `gem-designer-mobile` custom agent available).
 
-**Web parity tests to port as Rust golden vectors** (in `finance-tracker-phase/backend/tests/integration/`):
-`test_statement_reconciliation.py`, `test_statement_coverage.py`, `test_statement_cross_source_dedup.py`,
-`test_bank_statement_cross_source_dedup.py`.
+**Web parity tests still un-ported** (in `finance-tracker-phase/backend/tests/`): `test_transfer_detector.py`
+(unit) + the transfer integration tests. The reconciliation / coverage / cross-source-dedup vectors are
+**done** (their pure logic was captured from live web-engine runs, not the DB-backed integration tests).
 
 ## 3. The per-slice workflow (proven 11× this session — follow it exactly)
 Use the **Spec Kit** flow, one slice per PR:
@@ -103,6 +113,12 @@ CI (`.github/workflows/ci.yml`) mirrors these: Rust on `ubuntu-latest`, iOS on `
   `sed -i '' 's/iOS 18 targe$/iOS 18 target/g; s/iOS 18 targe /iOS 18 target /g' .github/copilot-instructions.md`.
 - **rustfmt reformats your edits:** after `edit`, run `make core-fmt` then re-`view` before the next `edit`
   (asserts/imports/arrays get re-wrapped, so old_str may no longer match).
+- **Spec Kit sub-agents sometimes return early** (empty/partial) — `speckit.specify`/`speckit.tasks` each
+  did once this session, creating the branch but no `spec.md`/`tasks.md`. Verify the artifact exists after
+  each; if missing, **write it yourself** (the design is yours to lock) rather than re-launching.
+- **Capture ground truth from the live web engine, not the DB-backed tests.** reconcile/dedup/coverage all
+  ran the real Python (`normalise_narration`, `rapidfuzz`, `reconcile`, `month_window`) on the exact fixture
+  inputs and pinned the byte-exact outputs — the integration tests are DB-coupled and can't be ported directly.
 - **UniFFI:** 0.32 proc-macro (no UDL). `#[uniffi::export]` fns, `#[derive(uniffi::Record/Enum)]`.
   `make core-xcframework` rebuilds `KanameCoreFFI.xcframework` + regenerates `ios/Generated/` (git-ignored) —
   run it **before** `tuist generate` whenever the FFI surface changes.
@@ -114,21 +130,32 @@ CI (`.github/workflows/ci.yml`) mirrors these: Rust on `ubuntu-latest`, iOS on `
   `column_split_x`, `account_tail`) + `read_ledger_lines` + `claims_ledger`. Direction from balance delta;
   the empty debit/credit column may be `0`, `0.00`, or `-` (all handled). Every ledger reader is one config.
 - `balance_chain.rs`: `check(&ParsedStatement) -> ChainResult` (Reconciled/NeedsReview + Suspect list).
+- `reconcile.rs`: `reconcile(&ParsedStatement) -> ReconcileResult` — the CC counterpart to balance-chain.
+  Three tiers: printed debit/credit totals → opening/closing balance-change fallback → neutral
+  (`status: Option<ReconcileStatus>`, `None` = "no printed totals", distinct from `NeedsReview`); ₹1.00
+  tolerance. Yes/IOB readers surface `printed_total_debits`/`printed_total_credits` in `enrich`.
+- `dedup.rs`: `cross_source_duplicates(&existing, &incoming) -> Vec<CrossSourceMatch>` — canonical
+  (date/amount/direction + 60-char `normalize_narration` prefix) then fuzzy (±1 day, hand-rolled
+  `jaro_winkler` ≥ 0.92 = rapidfuzz), multiplicity-aware. Also `normalize_narration` (≠ `normalize_description`).
+- `coverage.rs`: `compute_coverage(today, &statements, &transactions) -> Vec<MonthCoverage>` +
+  `month_window(today, count)`. Rolling-24-month GAP/PARTIAL/COVERED + needsReview; `today` is a
+  parameter (the core never reads the clock). Inputs are `StatementCoverage`/`TransactionCoverage` facts.
 - `common.rs`: `parse_amount`, `parse_date`, `find_last4(text, anchor)`, `account_tail_last4(text, primary_re)`,
   `month_year_end`.
 - `polarity.rs`: `classify(desc, dr_cr_marker, amount_cell) -> Direction`.
 - `tests/parity.rs`: the golden harness. Adding a reader = 1 fixture (`fixtures/<bank>/{credit_card,bank_account}/*.json`)
-  + 1 `Case` row + 1 claims (or balance-chain) test. `Expected`/`ExpectedRow` fields are `#[serde(default)]`-optional
+  + 1 `Case` row + 1 claims (or balance-chain) test. Non-reader checks (reconcile/dedup/coverage) add their
+  own fixture + loader + `#[test]`. `Expected`/`ExpectedRow` fields are `#[serde(default)]`-optional
   so old fixtures never need migration.
 
 ## 7. Repo map
 ```
 core/crates/kaname-core/   Rust engine (kaname-core)
-  src/statement/           the 10 readers + shared seams (see §1/§6)
-  src/{model,dedup,ffi,lib}.rs   Direction/Transaction, dedup fingerprint, UniFFI boundary, crate root
-  tests/parity.rs          golden-fixture harness
-ios/                       SwiftUI app (Tuist). Tests/*ParseTests.swift = per-bank bridge tests
-fixtures/<bank>/<kind>/    synthetic golden vectors (NO real data — Constitution I)
+  src/statement/           the 10 readers + shared seams (line/ledger reader, balance_chain, reconcile, …)
+  src/{model,dedup,coverage,ffi,lib}.rs   domain types, dedup + cross-source matcher, coverage map, UniFFI boundary, crate root
+  tests/parity.rs          golden-fixture harness (readers + reconcile + dedup + coverage)
+ios/                       SwiftUI app (Tuist). Tests/*Tests.swift = per-bank + reconcile/dedup/coverage bridge tests
+fixtures/<bank>/<kind>/    synthetic golden vectors (NO real data — Constitution I); also fixtures/{dedup,coverage}/
 specs/NNN-slug/            per-slice Spec Kit artifacts (spec/plan/tasks/…)
 .specify/memory/constitution.md   THE rules (privacy non-negotiable; wins over all)
 .github/scripts/select-ios-simulator.sh   CI simulator selector
