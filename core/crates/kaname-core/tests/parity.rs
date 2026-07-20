@@ -10,13 +10,14 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    check_balance_chain, compute_coverage, cross_source_duplicates, federal_claims, hdfc_claims,
-    icici_claims, iob_claims, read_au_bank_statement, read_federal_bank_statement,
-    read_federal_statement, read_hdfc_bank_statement, read_hdfc_statement,
-    read_icici_bank_statement, read_icici_statement, read_iob_statement, read_sbi_statement,
-    read_yes_statement, reconcile_statement, sbi_claims, yes_claims, ChainStatus, CoverageState,
-    CrossSourceMatch, DedupLayer, Direction, MonthCoverage, ParsedStatement, ReconcileStatus,
-    StatementCoverage, Transaction, TransactionCoverage,
+    check_balance_chain, compute_coverage, cross_source_duplicates, detect_transfers,
+    federal_claims, hdfc_claims, icici_claims, iob_claims, read_au_bank_statement,
+    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
+    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_iob_statement,
+    read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims, yes_claims,
+    ChainStatus, CoverageState, CrossSourceMatch, DedupLayer, Direction, MonthCoverage,
+    ParsedStatement, ReconcileStatus, StatementCoverage, Transaction, TransactionCoverage,
+    TransferInput, TransferPair,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -623,5 +624,70 @@ fn coverage_map_matches_expected() {
     assert_eq!(
         got, want,
         "coverage map must equal the golden expected_months"
+    );
+}
+
+#[derive(Deserialize)]
+struct TransferFixture {
+    rows: Vec<TransferInputRow>,
+    expected_pairs: Vec<ExpectedPair>,
+}
+
+#[derive(Deserialize)]
+struct TransferInputRow {
+    id: String,
+    account_id: String,
+    is_credit_card: bool,
+    date: String,
+    amount: String,
+    direction: Direction,
+    description: String,
+}
+
+#[derive(Deserialize)]
+struct ExpectedPair {
+    outflow_id: String,
+    inflow_id: String,
+    is_credit_card_payment: bool,
+    score: f64,
+}
+
+fn to_transfer_inputs(rows: &[TransferInputRow]) -> Vec<TransferInput> {
+    rows.iter()
+        .map(|r| TransferInput {
+            id: r.id.clone(),
+            account_id: r.account_id.clone(),
+            is_credit_card: r.is_credit_card,
+            date: NaiveDate::parse_from_str(&r.date, "%Y-%m-%d").unwrap(),
+            amount: Decimal::from_str(&r.amount).unwrap(),
+            direction: r.direction,
+            description: r.description.clone(),
+        })
+        .collect()
+}
+
+#[test]
+fn transfer_detection_matches_expected() {
+    let path = format!(
+        "{}/../../../fixtures/transfer/basic.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    let fx: TransferFixture =
+        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+    let got = detect_transfers(to_transfer_inputs(&fx.rows));
+    let want: Vec<TransferPair> = fx
+        .expected_pairs
+        .iter()
+        .map(|p| TransferPair {
+            outflow_id: p.outflow_id.clone(),
+            inflow_id: p.inflow_id.clone(),
+            is_credit_card_payment: p.is_credit_card_payment,
+            score: p.score,
+        })
+        .collect();
+    assert_eq!(
+        got, want,
+        "transfer detection must equal the golden expected_pairs"
     );
 }

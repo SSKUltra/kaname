@@ -24,6 +24,7 @@ pub mod dedup;
 mod ffi;
 pub mod model;
 pub mod statement;
+pub mod transfer;
 
 pub use coverage::{
     month_window, CoverageState, MonthCoverage, StatementCoverage, TransactionCoverage,
@@ -33,16 +34,17 @@ pub use dedup::{
 };
 pub use ffi::{
     au_bank_claims, check_balance_chain, compute_coverage, cross_source_duplicates,
-    federal_bank_claims, federal_claims, hdfc_bank_claims, hdfc_claims, icici_bank_claims,
-    icici_claims, iob_claims, read_au_bank_statement, read_federal_bank_statement,
-    read_federal_statement, read_hdfc_bank_statement, read_hdfc_statement,
-    read_icici_bank_statement, read_icici_statement, read_iob_statement, read_sbi_statement,
-    read_yes_statement, reconcile_statement, sbi_claims, yes_claims,
+    detect_transfers, federal_bank_claims, federal_claims, hdfc_bank_claims, hdfc_claims,
+    icici_bank_claims, icici_claims, iob_claims, read_au_bank_statement,
+    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
+    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_iob_statement,
+    read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims, yes_claims,
 };
 pub use model::{Direction, Transaction};
 pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};
 pub use statement::reconcile::{ReconcileResult, ReconcileStatus};
 pub use statement::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
+pub use transfer::{TransferInput, TransferPair};
 
 uniffi::setup_scaffolding!();
 

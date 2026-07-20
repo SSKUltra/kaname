@@ -24,6 +24,7 @@ use crate::statement::line_reader::{claims, read_lines};
 use crate::statement::reconcile::{reconcile, ReconcileResult};
 use crate::statement::sbi::SbiReader;
 use crate::statement::yes::YesReader;
+use crate::transfer::{TransferInput, TransferPair};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
@@ -79,6 +80,17 @@ pub fn compute_coverage(
     transactions: Vec<TransactionCoverage>,
 ) -> Vec<MonthCoverage> {
     crate::coverage::compute_coverage(today, &statements, &transactions)
+}
+
+/// Pair opposite-direction cross-account rows into self-transfers — the transfer-detection
+/// counterpart to the de-dup / reconciliation / coverage checks. Anchors on outflows in
+/// `(date, id)` order and greedily claims the best opposite-direction counterpart on a different
+/// account within ±1 day / ±₹1.00; each returned pair reports the outflow/inflow ids, an
+/// `is_credit_card_payment` flag, and a float confidence score. Pure and deterministic; the input
+/// list is not mutated.
+#[uniffi::export]
+pub fn detect_transfers(rows: Vec<TransferInput>) -> Vec<TransferPair> {
+    crate::transfer::detect_transfers(&rows)
 }
 
 /// Parse an ICICI credit-card statement from already-extracted text (lines + full
