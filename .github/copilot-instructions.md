@@ -63,6 +63,8 @@ UI polish work should apply the `make-interfaces-feel-better` skill.
 - N/A (no persistence this slice; encrypted SQLite/SQLCipher and any stored de-dup state are explicitly out of scope) (013-cross-source-dedup)
 - Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 target + existing `regex 1`, `rust_decimal 1`, `chrono 0.4`, `serde 1`, `uniffi 0.32`; dev-only `serde_json 1` (already present, fixture harness). **No new runtime OR dev dependency** (`std::collections::HashMap` + `chrono::Datelike` only) (014-coverage)
 - N/A (no persistence this slice; the platform supplies the pre-aggregated facts; encrypted SQLite/SQLCipher and any on-device aggregation are explicitly out of scope) (014-coverage)
+- Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 target + existing `regex 1`, `rust_decimal 1`, `chrono 0.4`, `serde 1`, `uniffi 0.32`; dev-only `serde_json 1` (already present, fixture harness). **No new runtime OR dev dependency** (token-Jaccard + the score are hand-rolled with `std` + `rust_decimal`'s `ToPrimitive::to_f64`) (015-transfer-detection)
+- N/A (no persistence this slice; `transfer_group_id`/`is_transfer` persistence and all DB concerns are explicitly out of scope, platform-side; encrypted SQLite/SQLCipher arrives in a later phase) (015-transfer-detection)
 
 ## Recent Changes
 - 001-rust-swift-bridge: Added Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 deployment target + UniFFI `0.32` (new); existing `rust_decimal`, `chrono`, `serde`, `regex`, `csv`; iOS: SwiftUI, Foundation, Tuist (project gen), Swift Testing
