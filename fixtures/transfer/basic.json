@@ -1,0 +1,32 @@
+{
+  "_comment": "Synthetic self-transfer detection golden vector (no real data). One single-user pool of already-parsed, still-unpaired rows exercising all 9 acceptance scenarios; expected_pairs captured from a live in-memory run of the web engine's transfer_detector.py pure helpers (_narration_similarity token-Jaccard on the raw lowercased whitespace-split description + _score, with the +-1-day and +-Rs1.00 tolerances and the outflow-anchored greedy claim from detect_pairs_for_user/_best_counterpart; the SQL path is not ported). amount is a string (re-parsed to Decimal - never float); direction Debit=outflow|Credit=inflow; is_credit_card is the reduction of the web account_type=='credit_card'; score is a JSON number at full f64 precision, compared with exact == in parity (floored at 0.0, NOT capped at 1.0). narration_similarity here is DISTINCT from dedup's normalise_narration + Jaro-Winkler. Amounts are per-scenario-isolated (>= Rs1000 apart) so greedy claiming never crosses scenarios. Scenarios: S1 matched pair (same day/amount, non-card) -> pair; S2 within tolerance (1 day, Rs0.50) -> pair; S3 amount drift (Rs500) -> none; S4 date drift (4 days) -> none; S5 same direction (two outflows) -> none; S6 same account -> none; S7 narration tiebreak (closer narration wins) -> pair; S8 id tiebreak (identical date/amount/narration -> lowest id) -> pair; S9 credit-card payment (either leg a card -> is_credit_card_payment true) -> pair.",
+  "rows": [
+    { "id": "s1-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-01", "amount": "5000.00", "direction": "Debit", "description": "NEFT TO HDFC SALARY ACCOUNT" },
+    { "id": "s1-in", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-01", "amount": "5000.00", "direction": "Credit", "description": "NEFT FROM ICICI" },
+    { "id": "s2-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-03", "amount": "1000.00", "direction": "Debit", "description": "NEFT TO KOTAK BANK" },
+    { "id": "s2-in", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-04", "amount": "1000.50", "direction": "Credit", "description": "NEFT FROM KOTAK BANK" },
+    { "id": "s3-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-05", "amount": "2000.00", "direction": "Debit", "description": "IMPS TO SAVINGS" },
+    { "id": "s3-in", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-05", "amount": "2500.00", "direction": "Credit", "description": "IMPS FROM SAVINGS" },
+    { "id": "s4-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-07", "amount": "3000.00", "direction": "Debit", "description": "RTGS TO CURRENT" },
+    { "id": "s4-in", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-11", "amount": "3000.00", "direction": "Credit", "description": "RTGS FROM CURRENT" },
+    { "id": "s5-out-a", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-09", "amount": "4000.00", "direction": "Debit", "description": "UPI TO FRIEND" },
+    { "id": "s5-out-b", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-09", "amount": "4000.00", "direction": "Debit", "description": "UPI FROM FRIEND" },
+    { "id": "s6-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-11", "amount": "6000.00", "direction": "Debit", "description": "INTERNAL TRANSFER" },
+    { "id": "s6-in", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-11", "amount": "6000.00", "direction": "Credit", "description": "INTERNAL TRANSFER" },
+    { "id": "s7-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-13", "amount": "7000.00", "direction": "Debit", "description": "NEFT TO HDFC BANK XX1234" },
+    { "id": "s7-in-a", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-13", "amount": "7000.00", "direction": "Credit", "description": "NEFT FROM ICICI BANK XX5678" },
+    { "id": "s7-in-b", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-13", "amount": "7000.00", "direction": "Credit", "description": "SALARY CREDIT FROM ACME CORP" },
+    { "id": "s8-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-15", "amount": "8000.00", "direction": "Debit", "description": "SELF TRANSFER AXIS" },
+    { "id": "s8-in-a", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-15", "amount": "8000.00", "direction": "Credit", "description": "SELF TRANSFER AXIS" },
+    { "id": "s8-in-b", "account_id": "acct-b", "is_credit_card": false, "date": "2026-06-15", "amount": "8000.00", "direction": "Credit", "description": "SELF TRANSFER AXIS" },
+    { "id": "s9-out", "account_id": "acct-a", "is_credit_card": false, "date": "2026-06-17", "amount": "9000.00", "direction": "Debit", "description": "CC BILL PAYMENT" },
+    { "id": "s9-in", "account_id": "acct-c", "is_credit_card": true, "date": "2026-06-17", "amount": "9000.00", "direction": "Credit", "description": "PAYMENT RECEIVED HDFC CARD" }
+  ],
+  "expected_pairs": [
+    { "outflow_id": "s1-out", "inflow_id": "s1-in", "is_credit_card_payment": false, "score": 1.0285714285714285 },
+    { "outflow_id": "s2-out", "inflow_id": "s2-in", "is_credit_card_payment": false, "score": 0.8200000000000001 },
+    { "outflow_id": "s7-out", "inflow_id": "s7-in-a", "is_credit_card_payment": false, "score": 1.05 },
+    { "outflow_id": "s8-out", "inflow_id": "s8-in-a", "is_credit_card_payment": false, "score": 1.2 },
+    { "outflow_id": "s9-out", "inflow_id": "s9-in", "is_credit_card_payment": true, "score": 1.0333333333333334 }
+  ]
+}
