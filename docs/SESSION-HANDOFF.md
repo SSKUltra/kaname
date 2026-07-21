@@ -8,13 +8,13 @@
 Kaname is the **privacy-first, local-first** open-source iOS client (Rust core + SwiftUI)
 for personal finance, by BeaconBrain. The **statement-reader porting effort is DONE** (all
 **10** readers) **and so is the web engine's `ingestion/` layer**: balance-chain integrity,
-credit-card **reconciliation**, **cross-source de-duplication**, and the **coverage map** are
-all ported — each proven **byte-for-byte** against golden fixtures and reachable across the
-Rust↔Swift UniFFI bridge.
+credit-card **reconciliation**, **cross-source de-duplication**, the **coverage map**, and
+**transfer (self-transfer) detection** are all ported — each proven **byte-for-byte** against
+golden fixtures and reachable across the Rust↔Swift UniFFI bridge.
 
-- **`main` tip when this handoff was written:** `b70f0f8`.
-- **Merged PRs #1 → #15** (14 feature slices + 1 CI-hardening chore). All CI-green.
-- **Engine tests on `main`:** 93 Rust unit + 18 Rust parity + 32 Swift (14 suites); 0 network deps.
+- **`main` tip when this handoff was written:** `93448fa`.
+- **Merged PRs #1 → #16** (15 feature slices + 1 CI-hardening chore). All CI-green.
+- **Engine tests on `main`:** 105 Rust unit + 19 Rust parity + 33 Swift (15 suites); 0 network deps.
 
 ## 1. What's DONE
 | Layer | Status |
@@ -27,7 +27,8 @@ Rust↔Swift UniFFI bridge.
 | **P2 CC reconciliation** | ✅ PR #13 — `reconcile.rs` `reconcile()` (printed debit/credit totals → opening/closing fallback → neutral `status: None`) |
 | **P2 cross-source de-dup** | ✅ PR #14 — `dedup.rs` `cross_source_duplicates()` (canonical + fuzzy, hand-rolled Jaro-Winkler = rapidfuzz; multiplicity-aware) |
 | **P2 coverage map** | ✅ PR #15 — `coverage.rs` `compute_coverage()` (rolling-24-month GAP/PARTIAL/COVERED + needsReview; clock-free) |
-| **Golden-parity harness** | ✅ `core/crates/kaname-core/tests/parity.rs` (per-bank statement Cases + reconcile/dedup/coverage tests) |
+| **P2 transfer detection** | ✅ PR #16 — `transfer.rs` `detect_transfers()` (outflow-anchored greedy cross-account pairing; ±1 day/±₹1; token-Jaccard tiebreak; `is_credit_card_payment` + float score) |
+| **Golden-parity harness** | ✅ `core/crates/kaname-core/tests/parity.rs` (per-bank statement Cases + reconcile/dedup/coverage/transfer tests) |
 | **Privacy-egress gate** | ✅ `make core-privacy-audit` (CI-enforced) |
 | **iOS CI hardening** | ✅ PR #9 — dynamic simulator selection by UDID (`.github/scripts/select-ios-simulator.sh`) |
 
@@ -36,35 +37,30 @@ Rust↔Swift UniFFI bridge.
 - Bank-account (via `LedgerReaderConfig` + `read_ledger_lines` + `balance_chain`): `icici_bank.rs`, `hdfc_bank.rs`, `federal_bank.rs`, `au_bank.rs`.
 - Shared seams: `line_reader.rs`, `ledger_reader.rs`, `balance_chain.rs`, `reconcile.rs`, `common.rs`, `polarity.rs`, `base.rs`.
 
-**Ingestion modules** (`core/crates/kaname-core/src/`): `dedup.rs` (`dedup_fingerprint`, `normalize_description`, `normalize_narration`, `cross_source_duplicates`), `coverage.rs` (`month_window`, `compute_coverage`). FFI in `ffi.rs`; all re-exported from `lib.rs`.
+**Ingestion modules** (`core/crates/kaname-core/src/`): `dedup.rs` (`dedup_fingerprint`, `normalize_description`, `normalize_narration`, `cross_source_duplicates`), `coverage.rs` (`month_window`, `compute_coverage`), `transfer.rs` (`detect_transfers`, `TransferInput`/`TransferPair`). FFI in `ffi.rs`; all re-exported from `lib.rs`.
 
 ## 2. What's NEXT (pick one; user checkpoints at slice boundaries)
-The three named ingestion pieces (**reconciliation #13, cross-source dedup #14, coverage #15**) are
-**DONE** this session — the web engine's deterministic `ingestion/` layer is essentially fully ported.
+The named ingestion pieces (**reconciliation #13, cross-source dedup #14, coverage #15, transfer
+detection #16**) are **DONE** — the web engine's deterministic `ingestion/` layer is now fully ported.
 Remaining candidates, roughly in dependency order:
 
-1. **Transfer detection** (`ingestion/transfer_detector.py`) — the remaining ingestion-adjacent module.
-   Pairs opposite-direction rows across the user's accounts within ±1 day + ±₹1 (e.g. a card-bill
-   payment: a Debit in the bank ledger ↔ a Credit "payment received" in the CC statement). The web
-   version is DB-backed; the pure on-device subset is a batch matcher over two already-parsed lists
-   (like `cross_source_duplicates`), with a deterministic scoring tuple. **Scope decision needed** (as
-   with dedup): the DB/`transfer_group_id` persistence stays platform-side. `dedup.rs` (fingerprint +
-   `normalize_narration`) is the reuse base.
-2. **Categorization** — the next major engine layer: **T1** (history/merchant memory) + **T2** (rules).
+1. **Categorization** — the next major engine layer: **T1** (history/merchant memory) + **T2** (rules).
    Deterministic, offline, free (per `docs/kaname-ios-plan.md` §3.4). T4/LLM stays out of the free core.
-3. **Encrypted persistence** (SQLCipher via `rusqlite`, key in the iOS Keychain) — the P2+ foundation
+2. **Encrypted persistence** (SQLCipher via `rusqlite`, key in the iOS Keychain) — the P2+ foundation
    the DB-backed layers (dedup L1/L2/L5+supersede, coverage aggregation, transfer groups) were carved
    away from. Once it lands, the platform-side fact aggregation can move into the core.
-4. **P3 — Core SwiftUI app.** Onboarding → import (PDFKit → readers) → transaction list → categorize →
+3. **P3 — Core SwiftUI app.** Onboarding → import (PDFKit → readers) → transaction list → categorize →
    dashboard (Swift Charts) → budgets → tags → search → export; the **coverage map** + **reconcile** /
    **balance-chain** verdicts are the first natural UI surfaces (apply the `make-interfaces-feel-better`
    skill; `gem-designer-mobile` custom agent available).
 
-**Web parity tests still un-ported** (in `finance-tracker-phase/backend/tests/`): `test_transfer_detector.py`
-(unit) + the transfer integration tests. The reconciliation / coverage / cross-source-dedup vectors are
-**done** (their pure logic was captured from live web-engine runs, not the DB-backed integration tests).
+**Web parity tests** (in `finance-tracker-phase/backend/tests/`): the reconciliation / coverage /
+cross-source-dedup / **transfer-detection** *pure* vectors are all **done** (captured from live web-engine
+runs of the pure helpers, not the DB-backed integration tests). The transfer detector's DB path —
+`transfer_group_id` persistence, category assignment, audit, optimistic-concurrency — stays platform-side
+and is intentionally un-ported.
 
-## 3. The per-slice workflow (proven 11× this session — follow it exactly)
+## 3. The per-slice workflow (proven on every engine slice — follow it exactly)
 Use the **Spec Kit** flow, one slice per PR:
 1. `speckit.specify` (sub-agent) → new numbered branch `NNN-slug` + `spec.md` + checklist. Commit spec.
 2. `speckit.plan` (sub-agent, pass the locked Rust design + ground truth in the prompt) → `plan.md` +
@@ -140,6 +136,12 @@ CI (`.github/workflows/ci.yml`) mirrors these: Rust on `ubuntu-latest`, iOS on `
 - `coverage.rs`: `compute_coverage(today, &statements, &transactions) -> Vec<MonthCoverage>` +
   `month_window(today, count)`. Rolling-24-month GAP/PARTIAL/COVERED + needsReview; `today` is a
   parameter (the core never reads the clock). Inputs are `StatementCoverage`/`TransactionCoverage` facts.
+- `transfer.rs`: `detect_transfers(&[TransferInput]) -> Vec<TransferPair>` — outflow-anchored greedy
+  cross-account pairing (±1 day/±₹1.00, both inclusive); ambiguity broken by `(date_diff, amount_diff,
+  -token_jaccard, id)`. Reports `is_credit_card_payment` (either leg a card) + a float `score` (floored
+  at 0, **not** capped at 1). Its `narration_similarity` is token-Jaccard on the raw description —
+  **distinct** from `dedup.rs`'s `normalize_narration` + Jaro-Winkler. `Direction::Debit` = outflow,
+  `Credit` = inflow. DB/`transfer_group_id` persistence stays platform-side.
 - `common.rs`: `parse_amount`, `parse_date`, `find_last4(text, anchor)`, `account_tail_last4(text, primary_re)`,
   `month_year_end`.
 - `polarity.rs`: `classify(desc, dr_cr_marker, amount_cell) -> Direction`.
@@ -152,10 +154,10 @@ CI (`.github/workflows/ci.yml`) mirrors these: Rust on `ubuntu-latest`, iOS on `
 ```
 core/crates/kaname-core/   Rust engine (kaname-core)
   src/statement/           the 10 readers + shared seams (line/ledger reader, balance_chain, reconcile, …)
-  src/{model,dedup,coverage,ffi,lib}.rs   domain types, dedup + cross-source matcher, coverage map, UniFFI boundary, crate root
-  tests/parity.rs          golden-fixture harness (readers + reconcile + dedup + coverage)
-ios/                       SwiftUI app (Tuist). Tests/*Tests.swift = per-bank + reconcile/dedup/coverage bridge tests
-fixtures/<bank>/<kind>/    synthetic golden vectors (NO real data — Constitution I); also fixtures/{dedup,coverage}/
+  src/{model,dedup,coverage,transfer,ffi,lib}.rs   domain types, dedup + cross-source matcher, coverage map, transfer matcher, UniFFI boundary, crate root
+  tests/parity.rs          golden-fixture harness (readers + reconcile + dedup + coverage + transfer)
+ios/                       SwiftUI app (Tuist). Tests/*Tests.swift = per-bank + reconcile/dedup/coverage/transfer bridge tests
+fixtures/<bank>/<kind>/    synthetic golden vectors (NO real data — Constitution I); also fixtures/{dedup,coverage,transfer}/
 specs/NNN-slug/            per-slice Spec Kit artifacts (spec/plan/tasks/…)
 .specify/memory/constitution.md   THE rules (privacy non-negotiable; wins over all)
 .github/scripts/select-ios-simulator.sh   CI simulator selector
