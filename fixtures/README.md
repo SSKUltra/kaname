@@ -14,6 +14,9 @@ Each fixture is a redacted/synthetic statement plus its expected engine output:
 - **Coverage** — statement date-range coverage (`test_statement_coverage`).
 - **Cross-source dedup** — the same txn seen across sources collapses to one
   (`test_statement_cross_source_dedup`, `test_bank_statement_cross_source_dedup`).
+- **Categorization** — the deterministic first-wins stack (CC rules → T1 source-category
+  map → T2 merchant map → T3 rules) assigns each transaction a `Decision`
+  (`categorisation/*` web helpers + the ingestion pipeline ordering).
 - **Privacy egress** — asserts **zero network** in free/core paths
   (`test_statement_privacy_egress`) → enforced as a constitution gate.
 
