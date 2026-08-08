@@ -5,7 +5,7 @@
 
 Kaname keeps your financial life in one place **on your device**. Import your bank and
 credit-card statements, and Kaname parses, categorizes, de-duplicates and reconciles them
-— with **no data ever leaving your phone** for the free, core experience.
+— with **your financial data never leaving your phone** for the free, on-device experience.
 
 This repository is the **open-source iOS client** (Apache-2.0). Premium/cloud features
 (one-click Account Aggregator sync, broker/mutual-fund import, cross-device sync, AI
@@ -14,9 +14,12 @@ assist) are **server-gated** and live in a separate closed backend — an open-c
 ## Why local-first?
 - **Privacy by design.** Your statements and transactions are processed on-device and
   stored encrypted (SQLCipher; key in the iOS Keychain / Secure Enclave).
-- **You own your data.** No account required to use the core app.
-- **Free = DIY, Paid = convenience.** Free users self-serve (PDF uploads, bring-your-own
-  AI). Paid users get one-click aggregation and recurring auto-updates.
+- **You own your data.** Your financial data stays on-device; your account holds only your
+  identity, plan (free/Pro) and minimal usage — never your finances.
+- **Free = on-device, Pro = server-powered.** Everything that runs on your device is free
+  (import, parsing, categorization, dedup, reconcile, analytics, export). Pro adds the
+  features that need a server — AI assist, one-click Account Aggregator onboarding, and
+  cross-device sync.
 
 ## Repository layout
 ```

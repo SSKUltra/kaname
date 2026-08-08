@@ -22,9 +22,11 @@ Mirror the web repo's `FinTrack India Constitution`, adapted for on-device mobil
 
 1. **Data Privacy & Sovereignty (NON-NEGOTIABLE)** — free features run **100% on device, no network**. Data encrypted at rest. Enforced by an automated **privacy-egress test** (port of `test_statement_privacy_egress.py`) asserting zero outbound network in free paths.
 2. **Local Verification Gate (iOS)** — before any PR: Rust `cargo test`, a **simulator build + run**, and **snapshot/XCUITest** must pass (the iOS analog of the web repo's Playwright gate).
-3. **No secrets in the OSS client** — all secrets server-side; AI via BYO-key or a server proxy.
+3. **No secrets in the OSS client** — all secrets server-side; **AI is Pro and server-proxied** (no BYOK).
 4. **Design & accessibility as a gate** — latest HIG, full Dynamic Type + VoiceOver.
 5. **Permissive licensing** — Apache-2.0 only; never GPL/AGPL in the client.
+6. **Account required** — using the app requires an account (identity + entitlement + minimal first-party usage; never financial data). Financial data still stays on-device on every free path.
+7. **Free/Paid boundary** — on-device-capable features are **free**; server-requiring features (AI, AA onboarding, sync) are **Pro**.
 
 ---
 
@@ -38,7 +40,7 @@ Mirror the web repo's `FinTrack India Constitution`, adapted for on-device mobil
 | Purchase paths | **Web (Razorpay) primary** + StoreKit 2 IAP | Web checkout avoids Apple's cut; IAP (15% Small Business) for in-app convenience. |
 | Entitlement model | **Account-based, cross-platform**, validated server-side | Buy on web/desktop/iOS → works everywhere. Server checks App Store Server API receipts + Razorpay subscription state. |
 | Free-rider risk | **Low on iOS** | Sideloading needs Xcode + $99/yr account + weekly re-sign; Apple rejects clones (Guideline 4.3). |
-| Trust dividend | OSS **proves** the privacy claim | "Read the code — verify your data never leaves the device." |
+| Trust dividend | OSS **proves** the privacy claim | "Read the code — verify your **financial** data never leaves the device on free features." |
 
 ---
 
@@ -62,7 +64,7 @@ The Python readers already operate on **text lines + word x-positions** (`read_l
 - **Platform layer extracts text** — iOS **PDFKit** produces lines + word positions.
 - **Rust owns parsing logic** — receives the extracted text via the reader seam.
 - This avoids reimplementing a PDF engine in Rust. (Android later: PdfBox/pdfium; desktop: pdfium.)
-- AI-fallback parsing (`ai_fallback.py`) stays **optional / BYO-key**, out of the free deterministic core.
+- AI-fallback parsing for unrecognized layouts is a **Pro, server-proxied** feature (no BYOK), out of the free deterministic core; the **free** on-device fallback is a manual column-mapper.
 
 ### 3.3 `ios/` (SwiftUI app)
 Owns everything platform-native and calls `kaname-core` through the generated Swift bindings:
@@ -71,7 +73,7 @@ Owns everything platform-native and calls `kaname-core` through the generated Sw
 
 ### 3.4 Categorization tiers (free/paid line preserved)
 - **T1 + T2** → Rust core, offline, **free**.
-- **T4 (LLM)** → optional: BYO-key on-device call (**free**) or server-proxied managed AI (**paid**) — not part of the free deterministic core.
+- **T4 (LLM)** → **Pro**: server-proxied managed AI (no BYOK) — not part of the free deterministic core.
 
 ---
 
@@ -88,7 +90,7 @@ Owns everything platform-native and calls `kaname-core` through the generated Sw
 | Search / filter / month views | Rust queries + SwiftUI |
 | Manual entry, edit, bulk recategorize | Rust core + SwiftUI |
 | Export (CSV/PDF) | Rust export + Swift share sheet |
-| Optional on-device AI | BYO-key (free) |
+| AI assist (parsing/categorize) | **Pro** — server-proxied, opt-in (no BYOK) |
 | **Premium/cloud (later, server-gated)** | AA one-click, broker/CAS auto-sync, managed AI, cross-device E2E sync, split hosting, encrypted backup |
 
 ---
@@ -189,9 +191,10 @@ Approach: **fixtures-driven, incremental by bank** — port the top banks first,
 
 | Risk | Mitigation |
 |---|---|
-| PDF layout variance across banks | Native extraction + golden fixtures + optional BYO-key AI fallback |
+| PDF layout variance across banks | Native extraction + golden fixtures; **free** on-device manual mapper; **Pro** AI fallback |
 | Rust / UniFFI ramp-up | Start with a thin core + one parser to validate the toolchain end-to-end (P1) |
-| App Review (finance + on-device) | Clear privacy story, no account required for free tier, StoreKit compliance, no private APIs |
+| App Review (finance + on-device) | Clear privacy story (financial data on-device); StoreKit compliance; no private APIs |
+| App Review 5.1.1(v) — mandatory account | Account gates Pro/sync/entitlement (account-based features); offer Sign in with Apple; consider a local/guest mode if Apple pushes back on login for the on-device free tier |
 | Parser port effort | Fixtures-driven, incremental by bank; parity tests catch regressions |
 | Cross-platform later (Android) | The Rust core is designed platform-agnostic from day one (UniFFI) |
 

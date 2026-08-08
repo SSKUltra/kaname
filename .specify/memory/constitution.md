@@ -1,29 +1,36 @@
 <!--
 SYNC IMPACT REPORT
-Version: (none) → 1.0.0
-Rationale: Initial ratification for the Kaname open-source iOS client. Adapts the
-FinTrack India Constitution (web, v1.5.0) to a privacy-first, local-first mobile
-client with a shared Rust core. Principle I is strengthened from "privacy" to
-"free/core features are 100% on-device with zero network I/O". The Local Verification
-Gate is retargeted from Playwright (web) to an iOS simulator + snapshot/XCUITest gate.
+Version: 1.0.0 → 2.0.0
+Rationale: MAJOR amendment redefining Principle I (a NON-NEGOTIABLE principle) and the
+free/paid model. (1) An account is now REQUIRED to use the app (identity + entitlement +
+minimal first-party usage), replacing "no account required". (2) The non-negotiable
+privacy boundary is re-scoped from "not even anonymous pings anywhere" to "the core
+engine is always network-free AND financial data stays on-device on every free path";
+minimal first-party, account-scoped, non-financial usage signals are now permitted (still
+no third-party analytics/ad/crash SDKs, no data sale). (3) AI is Pro-only and
+server-proxied (no BYOK). (4) New Principle VI (Free/Paid Boundary): on-device-capable
+features are free, server-requiring features (AI, AA, sync) are Pro.
 
 Principles:
-  I.   Data Privacy & Sovereignty (NON-NEGOTIABLE) — strengthened: on-device, no-network
-  II.  Local-First Shared Engine — new (Rust core, deterministic, parity)
-  III. Open-Core & Permissive Licensing — new (Apache-2.0 client, server-gated premium)
-  IV.  Native Experience & Accessibility — new (latest HIG, SwiftUI, a11y)
-  V.   Test-First & Parity — new (golden fixtures, cargo/Swift Testing)
+  I.   Data Privacy & Sovereignty (NON-NEGOTIABLE) — REDEFINED: engine always offline +
+       financial data on-device on free paths; account required; networked features Pro/opt-in
+  II.  Local-First Shared Engine — unchanged
+  III. Open-Core & Permissive Licensing — unchanged
+  IV.  Native Experience & Accessibility — unchanged
+  V.   Test-First & Parity — unchanged
+  VI.  Free/Paid Boundary — new (on-device = free; server = Pro; AI is Pro, no BYOK)
 
-Added sections: Development Workflow & Quality Gates (incl. iOS Local Verification Gate),
-  Security & Privacy Constraints, Governance.
+Added sections: Principle VI; a first-party-usage clause under Security & Privacy Constraints.
 
 Templates requiring updates:
-  ✅ .specify/templates/plan-template.md — Constitution Check references generic gates
+  ✅ .specify/templates/plan-template.md — Constitution Check still valid
   ✅ .specify/templates/spec-template.md — no change needed
   ✅ .specify/templates/tasks-template.md — no change needed
-  ⚠ Ensure feature plans cite the iOS Local Verification Gate (not Playwright).
+  ⚠ Feature plans touching AI, account, sync or AA MUST cite Principle I (networked =
+    Pro/opt-in) and Principle VI.
+  ⚠ Docs updated alongside: README.md, docs/kaname-ios-plan.md, docs/adr/0001–0003.
 
-Deferred TODOs: none.
+Deferred TODOs: define Pro tier pricing/packaging; confirm AA gating vs AA pricing.
 -->
 
 # Kaname Constitution
@@ -38,24 +45,30 @@ document, this document wins.
 
 ### I. Data Privacy & Sovereignty (NON-NEGOTIABLE)
 
-The user's financial data belongs to the user and stays on the user's device.
+The user's **financial data** belongs to the user and stays on the user's device. What is
+non-negotiable is the *financial-data* boundary and the purity of the engine — not the
+absence of an account.
 
-- **Free/core features run 100% on-device with ZERO network I/O.** Statement import,
-  parsing, categorization, dedup, reconciliation, analytics and storage MUST complete
-  without contacting any server. There is no telemetry, analytics, ad SDK, or crash
-  reporter in free/core paths — not even "anonymous" pings.
+- **The core engine is always on-device.** `kaname-core` performs ZERO network I/O.
+  Statement parsing, categorization, dedup, reconciliation, analytics and storage run
+  fully on-device. Enforced by an automated **privacy-egress test** (see Principle V);
+  this never regresses.
+- **Financial data stays local on every free path.** No free feature transmits the
+  user's statements or transactions off the device. Financial data leaves the device
+  ONLY through a Pro networked feature the user has explicitly enabled (below).
 - **Encrypted at rest.** Local data is stored in an encrypted store (SQLCipher); the key
   lives in the iOS Keychain / Secure Enclave and is never exported.
-- **No account required** to use the core app. Any optional account (for premium or
-  social features) stores only account identity — never the user's finance data —
-  unless the user explicitly opts into an encrypted cloud feature.
-- **Premium/cloud features are opt-in and minimized.** One-click Account Aggregator
-  sync, broker/mutual-fund import, cross-device sync and AI assist are the ONLY paths
-  that may use the network, MUST be explicitly enabled by the user, MUST minimize data
-  sent, and MUST be validated server-side (never client-trusted).
+- **An account is required** to use the app. The account holds ONLY identity, entitlement
+  (free/Pro) and minimal, first-party, account-scoped feature-usage signals — NEVER the
+  user's financial data. No third-party analytics, ad, fingerprinting or crash-reporting
+  SDKs; data is never sold; usage signals are disclosed in the privacy policy.
+- **Networked features are Pro, opt-in, and minimized.** AI parsing/assist, one-click
+  Account Aggregator onboarding, and cross-device sync are the ONLY paths that may use
+  the network. Each MUST be explicitly enabled per use, MUST minimize and redact data
+  sent (e.g. card numbers masked before AI parsing), and MUST be validated server-side
+  (never client-trusted).
 - **Compliance.** Aligns with India's DPDP Act 2023 and RBI Account Aggregator consent
   norms. Consent is explicit, purpose-limited, and revocable.
-- This principle is enforced by an automated **privacy-egress test** (see Principle V).
 
 ### II. Local-First Shared Engine
 
@@ -104,12 +117,30 @@ Behaviour is proven by tests before it ships, and matches the proven web engine.
 - **Test-first for the engine.** New parsing/reconciliation logic starts with a failing
   fixture/test. Core is tested with `cargo test`; the app with **Swift Testing**
   (`import Testing`) plus snapshot/XCUITest for UI.
-- A **privacy-egress test** asserts zero network access in free/core paths and MUST pass.
+- A **privacy-egress test** asserts zero network access in the core engine (and every
+  free finance path) and MUST pass.
+
+### VI. Free/Paid Boundary
+
+The line between free and paid follows capability, not artificial gating.
+
+- **Free = anything that runs fully on-device.** Statement import, parsing, categorization,
+  dedup, reconciliation, the manual column-mapper for unrecognized statements, analytics,
+  search and export are free.
+- **Pro (paid) = anything that requires a server.** AI parsing/assist, one-click Account
+  Aggregator onboarding, and cross-device sync are Pro — the networked features of
+  Principle I, gated by the closed entitlement server.
+- **AI is Pro and server-proxied.** There is no bring-your-own-key (BYOK) path in the
+  client; managed AI is metered and validated server-side.
 
 ## Security & Privacy Constraints
 
 - No third-party SDK may be added to a free/core path if it performs any network I/O,
   fingerprinting, or data collection.
+- First-party, account-scoped feature-usage signals (free/Pro entitlement, coarse feature
+  counters) are permitted for product and billing decisions; they carry NO financial data,
+  use no third-party SDK, and are disclosed in the privacy policy. The core engine stays
+  network-free regardless.
 - Fixtures and test data MUST be synthetic or fully redacted — never real account data.
 - Secrets are never committed. `.env*` files are git-ignored (except `.env.example`).
 - Dependencies are reviewed before adding; prefer the standard library and small,
@@ -153,4 +184,4 @@ Replaces the web app's Playwright gate. A change is not "done" until:
   violates a principle MUST be justified in the plan's Complexity Tracking, or the
   approach MUST be simplified.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-04 | **Last Amended**: 2026-07-04
+**Version**: 2.0.0 | **Ratified**: 2026-07-04 | **Last Amended**: 2026-08-08
