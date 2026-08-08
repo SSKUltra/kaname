@@ -103,6 +103,22 @@ impl From<rusqlite::Error> for StoreError {
     }
 }
 
+impl StoreError {
+    /// Wrap a failure that occurred while opening/keying the database.
+    fn open_failed(err: rusqlite::Error) -> Self {
+        StoreError::OpenFailed {
+            message: err.to_string(),
+        }
+    }
+
+    /// Wrap a failure that occurred while applying a schema migration.
+    fn migration(err: rusqlite::Error) -> Self {
+        StoreError::Migration {
+            message: err.to_string(),
+        }
+    }
+}
+
 /// A new account to persist. The store mints the id; timestamps are caller-supplied
 /// ISO-8601 strings (the core reads no wall-clock).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -190,16 +206,12 @@ impl Store {
     pub fn open(path: String, key: String) -> Result<Arc<Self>, StoreError> {
         validate_key(&key)?;
 
-        let conn = Connection::open(&path).map_err(|e| StoreError::OpenFailed {
-            message: e.to_string(),
-        })?;
+        let conn = Connection::open(&path).map_err(StoreError::open_failed)?;
 
         // Set the raw 256-bit key (SQLCipher `PRAGMA key = "x'<hex>'"`). This does not yet
         // touch a page, so it cannot fail on a wrong key here.
         conn.pragma_update(None, "key", format!("x'{key}'"))
-            .map_err(|e| StoreError::OpenFailed {
-                message: e.to_string(),
-            })?;
+            .map_err(StoreError::open_failed)?;
 
         // Touch the schema to force decryption. On an existing DB a wrong key yields
         // SQLITE_NOTADB — map that (and only that) to WrongKey; a fresh empty file simply
@@ -211,9 +223,7 @@ impl Store {
                 rusqlite::Error::SqliteFailure(e, _) if e.code == ErrorCode::NotADatabase => {
                     StoreError::WrongKey
                 }
-                _ => StoreError::OpenFailed {
-                    message: err.to_string(),
-                },
+                _ => StoreError::open_failed(err),
             });
         }
 
@@ -366,19 +376,13 @@ impl Store {
 
         while version < SCHEMA_VERSION {
             let next = version + 1;
-            let tx = conn.transaction().map_err(|e| StoreError::Migration {
-                message: e.to_string(),
-            })?;
+            let tx = conn.transaction().map_err(StoreError::migration)?;
             apply_migration(&tx, next)?;
             // user_version participates in the transaction (header page) and is rolled
             // back with it on failure.
             tx.pragma_update(None, "user_version", next)
-                .map_err(|e| StoreError::Migration {
-                    message: e.to_string(),
-                })?;
-            tx.commit().map_err(|e| StoreError::Migration {
-                message: e.to_string(),
-            })?;
+                .map_err(StoreError::migration)?;
+            tx.commit().map_err(StoreError::migration)?;
             version = next;
         }
         Ok(())
@@ -389,10 +393,7 @@ impl Store {
 fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), StoreError> {
     match version {
         1 => {
-            tx.execute_batch(SCHEMA_V1)
-                .map_err(|e| StoreError::Migration {
-                    message: e.to_string(),
-                })?;
+            tx.execute_batch(SCHEMA_V1).map_err(StoreError::migration)?;
             seed_categories(tx)?;
             Ok(())
         }
