@@ -142,4 +142,32 @@ struct CategorizationTests {
         )
         #expect(decision == nil)
     }
+
+    @Test("The batch seam categorizes many transactions against shared facts over the bridge")
+    func batchSeamCategorizesManyTransactions() throws {
+        let merchants = [
+            MerchantRule(
+                priority: 10,
+                matchType: .literal,
+                pattern: "swiggy",
+                category: .builtin(code: "FOOD_AND_DINING")
+            )
+        ]
+        let txns = [
+            Self.txn(isCreditCard: true, "PAYMENT RECEIVED, THANK YOU", "5000.00", .credit),
+            Self.txn("UPI-SWIGGY-123456", "250.00", .debit),
+            Self.txn("UNKNOWN VENDOR XYZ", "123.00", .debit),
+        ]
+        let decisions = categorizeBatch(
+            txns: txns,
+            catalog: Self.catalog,
+            merchants: merchants,
+            rules: [],
+            sourceMap: []
+        )
+        #expect(decisions.count == 3)
+        #expect(decisions[0]?.stage == .ccRule)
+        #expect(decisions[1]?.stage == .t2MerchantMap)
+        #expect(decisions[2] == nil)
+    }
 }

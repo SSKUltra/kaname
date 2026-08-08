@@ -3,9 +3,9 @@
 //! merchant map → T3 rules). The LLM stage (T4) is a Pro/server concern (ADR-0003) and
 //! is intentionally absent here.
 //!
-//! [`categorize`] assigns each transaction exactly one [`Category`] — named by a stable
-//! [`CategoryRef`] — and reports which [`Stage`] fired, or returns `None` when nothing
-//! matches (*uncategorized*) rather than guessing. It is pure, deterministic and
+//! The `categorize` entry point assigns each transaction exactly one [`Category`] — named
+//! by a stable [`CategoryRef`] — and reports which [`Stage`] fired, or returns `None` when
+//! nothing matches (*uncategorized*) rather than guessing. It is pure, deterministic and
 //! read-only: it reads only the passed-in facts (the catalog, merchant map, rules and
 //! source-category map) and never touches storage, the clock, the network or a locale.
 //! The encrypted store (P2+) loads those facts and persists the result; the engine owns
@@ -213,8 +213,7 @@ const BUILTIN_CATEGORIES: &[(&str, &str, Classification)] = &[
 /// The 23 built-in default categories (name + [`Classification`] only) as a catalog the
 /// caller can seed from and extend with the user's own categories. Ported verbatim from
 /// the web engine's `DEFAULT_CATEGORIES`; display metadata (colour / emoji / description)
-/// stays platform-side.
-#[uniffi::export]
+/// stays platform-side. Surfaced over UniFFI by [`crate::default_categories`].
 pub fn default_categories() -> Vec<Category> {
     BUILTIN_CATEGORIES
         .iter()
@@ -228,23 +227,34 @@ pub fn default_categories() -> Vec<Category> {
         .collect()
 }
 
-/// Resolve a built-in category `name` to its stable [`CategoryRef::Builtin`], or `None`
-/// when the name is not one of the 23 defaults.
-fn builtin_ref_for_name(name: &str) -> Option<CategoryRef> {
-    BUILTIN_CATEGORIES
-        .iter()
-        .find(|&&(_, n, _)| n.eq_ignore_ascii_case(name))
-        .map(|&(code, _, _)| CategoryRef::Builtin {
-            code: code.to_string(),
-        })
+/// The two built-in categories the India-specific credit-card rules can assign. Modelling
+/// the outcome as a type (rather than a display-name string re-resolved later) keeps the
+/// name↔code mapping in one place and makes the resolution total.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CcCategory {
+    /// A credit-card bill payment (either CC rule).
+    BillPayment,
+    /// A credit-card cashback / refund inflow.
+    CashbackRefund,
 }
 
-// --- Stage 0: India-specific credit-card narration rules (ported verbatim) ------------ //
+impl CcCategory {
+    /// The stable built-in code (the `CategoryRef::Builtin` identity).
+    fn code(self) -> &'static str {
+        match self {
+            CcCategory::BillPayment => "CREDIT_CARD_BILL_PAYMENT",
+            CcCategory::CashbackRefund => "CASHBACKS_AND_REFUNDS",
+        }
+    }
 
-/// System category assigned to a credit-card bill payment (both CC rules).
-const CC_BILL_PAYMENT: &str = "Credit Card Bill Payment";
-/// System category assigned to a credit-card cashback / refund inflow.
-const CC_CASHBACK_REFUND: &str = "Cashbacks & Refunds";
+    /// The display name, matched against a caller catalog entry (a re-slugged default).
+    fn name(self) -> &'static str {
+        match self {
+            CcCategory::BillPayment => "Credit Card Bill Payment",
+            CcCategory::CashbackRefund => "Cashbacks & Refunds",
+        }
+    }
+}
 
 /// A reward/cashback card line commonly leads with a percentage, e.g. `10% Swiggy Cashback`.
 static LEADING_PERCENT: LazyLock<Regex> =
@@ -287,8 +297,8 @@ const BILL_PAYMENT_KEYWORDS: &[&str] = &[
 /// Classify a credit-card **inflow** narration — the verbatim port of the web
 /// `cc_credit_rule.classify_cc_credit`. Cashback / refund language (including a leading
 /// percentage) wins over bill-payment language, so a "Cashback … thank you" line is a
-/// refund, not a payment. Returns the system category name, or `None` to defer to the tiers.
-fn classify_cc_credit(narration: &str) -> Option<&'static str> {
+/// refund, not a payment. `None` defers to the tiers.
+fn classify_cc_credit(narration: &str) -> Option<CcCategory> {
     let haystack = narration.to_lowercase();
     if haystack.trim().is_empty() {
         return None;
@@ -298,10 +308,10 @@ fn classify_cc_credit(narration: &str) -> Option<&'static str> {
             .iter()
             .any(|k| haystack.contains(k))
     {
-        return Some(CC_CASHBACK_REFUND);
+        return Some(CcCategory::CashbackRefund);
     }
     if BILL_PAYMENT_KEYWORDS.iter().any(|k| haystack.contains(k)) {
-        return Some(CC_BILL_PAYMENT);
+        return Some(CcCategory::BillPayment);
     }
     None
 }
@@ -321,7 +331,7 @@ static CC_DEBIT_EXCLUSION: LazyLock<Regex> =
 /// Classify a bank-side (non-card) **outflow** narration — the verbatim port of the web
 /// `cc_debit_rule.classify_cc_debit`. Fires only when a payment-intent token co-occurs
 /// with a card token and the line is not a card fee or an EMI (the exclusion wins).
-fn classify_cc_debit(narration: &str) -> Option<&'static str> {
+fn classify_cc_debit(narration: &str) -> Option<CcCategory> {
     if narration.trim().is_empty() {
         return None;
     }
@@ -329,31 +339,27 @@ fn classify_cc_debit(narration: &str) -> Option<&'static str> {
         return None;
     }
     if PAYMENT_INTENT.is_match(narration) && CARD_TOKEN.is_match(narration) {
-        return Some(CC_BILL_PAYMENT);
+        return Some(CcCategory::BillPayment);
     }
     None
 }
 
-/// Resolve a CC-rule's system category `name` to a built-in [`CategoryRef`]. The two CC
-/// target names are always among the 23 defaults, so this always yields a
-/// [`CategoryRef::Builtin`]: it honours a caller catalog entry that is *itself* a built-in
-/// of that name (a re-slugged default), never a user's custom category that merely shares
-/// the name, and otherwise falls back to the ported code.
-fn cc_category_ref(catalog: &[Category], name: &str) -> CategoryRef {
+/// Resolve a CC-rule outcome to a built-in [`CategoryRef`]. It honours a caller catalog
+/// entry that is *itself* a built-in of that name (a re-slugged default), never a user's
+/// custom category that merely shares the name; otherwise it falls back to the stable
+/// code. Always a [`CategoryRef::Builtin`] — the two CC categories are ported defaults.
+fn cc_category_ref(catalog: &[Category], cc: CcCategory) -> CategoryRef {
     catalog
         .iter()
         .find(|c| {
-            c.name.eq_ignore_ascii_case(name)
+            c.name.eq_ignore_ascii_case(cc.name())
                 && matches!(c.category_ref, CategoryRef::Builtin { .. })
         })
         .map(|c| c.category_ref.clone())
-        .or_else(|| builtin_ref_for_name(name))
         .unwrap_or_else(|| CategoryRef::Builtin {
-            code: name.to_string(),
+            code: cc.code().to_string(),
         })
 }
-
-// --- Prepared facts: regexes compiled once, then reused across every transaction ------ //
 
 /// A compiled T2 merchant matcher — the regex is compiled once by [`prepare_merchants`],
 /// so the per-transaction hot path never re-compiles. `Invalid` marks a pattern that would
@@ -366,7 +372,6 @@ enum MerchantMatcher {
 
 /// A T2 merchant-map entry with its matcher already compiled. Built by [`prepare_merchants`].
 pub(crate) struct PreparedMerchant {
-    priority: i64,
     matcher: MerchantMatcher,
     category: CategoryRef,
 }
@@ -383,43 +388,51 @@ enum RuleMatcher {
 /// A T3 rule with its matcher already compiled. Built by [`prepare_rules`].
 pub(crate) struct PreparedRule {
     id: Option<String>,
-    priority: i64,
-    is_system: bool,
     matcher: RuleMatcher,
     category: CategoryRef,
 }
 
-/// Compile the merchant map once (the "precompiled regex" the design requires), so the
-/// same prepared facts can be reused across every transaction in a batch. Literal patterns
-/// are lower-cased to match against the (already lower-cased) normalized narration.
+/// Compile the merchant map once — the "precompiled regex" the design requires — so the
+/// same prepared facts can be reused across every transaction in a batch. Entries are
+/// returned in evaluation order (ascending `priority`, the caller's input order breaking
+/// ties via the stable sort). Patterns are lower-cased before compiling, exactly as the web
+/// `merchant_identity._match_global_merchant` does (`alias_pattern.lower()`), so matching
+/// against the already-lower-cased normalized narration reproduces the web byte-for-byte.
 pub(crate) fn prepare_merchants(merchants: &[MerchantRule]) -> Vec<PreparedMerchant> {
-    merchants
+    let mut prepared: Vec<(i64, PreparedMerchant)> = merchants
         .iter()
-        .map(|m| PreparedMerchant {
-            priority: m.priority,
-            category: m.category.clone(),
-            matcher: match m.match_type {
-                MerchantMatch::Literal => MerchantMatcher::Literal(m.pattern.to_lowercase()),
-                MerchantMatch::Regex => match Regex::new(&m.pattern) {
+        .map(|m| {
+            let lowered = m.pattern.to_lowercase();
+            let matcher = match m.match_type {
+                MerchantMatch::Literal => MerchantMatcher::Literal(lowered),
+                MerchantMatch::Regex => match Regex::new(&lowered) {
                     Ok(re) => MerchantMatcher::Regex(re),
                     Err(_) => MerchantMatcher::Invalid,
                 },
-            },
+            };
+            (
+                m.priority,
+                PreparedMerchant {
+                    matcher,
+                    category: m.category.clone(),
+                },
+            )
         })
-        .collect()
+        .collect();
+    prepared.sort_by_key(|(priority, _)| *priority);
+    prepared.into_iter().map(|(_, m)| m).collect()
 }
 
-/// Compile the T3 rules once: keyword text is lower-cased, regexes are built
-/// case-insensitively, and each `"lo,hi"` amount range is parsed to a [`Decimal`] pair.
+/// Compile the T3 rules once, returned in evaluation order — ascending `priority`, then
+/// user rules before system rules (`false < true`) at equal priority, the caller's input
+/// order breaking any remaining tie via the stable sort. Keyword text is lower-cased,
+/// regexes are built case-insensitively, and each `"lo,hi"` amount range is parsed to a
+/// [`Decimal`] pair.
 pub(crate) fn prepare_rules(rules: &[Rule]) -> Vec<PreparedRule> {
-    rules
+    let mut prepared: Vec<(i64, bool, PreparedRule)> = rules
         .iter()
-        .map(|r| PreparedRule {
-            id: r.id.clone(),
-            priority: r.priority,
-            is_system: r.is_system,
-            category: r.category.clone(),
-            matcher: match r.match_type {
+        .map(|r| {
+            let matcher = match r.match_type {
                 RuleMatch::Keyword => RuleMatcher::Keyword(r.value.to_lowercase()),
                 RuleMatch::Regex => RegexBuilder::new(&r.value)
                     .case_insensitive(true)
@@ -430,9 +443,20 @@ pub(crate) fn prepare_rules(rules: &[Rule]) -> Vec<PreparedRule> {
                     Some((lo, hi)) => RuleMatcher::AmountRange(lo, hi),
                     None => RuleMatcher::Invalid,
                 },
-            },
+            };
+            (
+                r.priority,
+                r.is_system,
+                PreparedRule {
+                    id: r.id.clone(),
+                    matcher,
+                    category: r.category.clone(),
+                },
+            )
         })
-        .collect()
+        .collect();
+    prepared.sort_by_key(|(priority, is_system, _)| (*priority, *is_system));
+    prepared.into_iter().map(|(_, _, r)| r).collect()
 }
 
 /// Parse a `"lo,hi"` amount range to a [`Decimal`] pair, or `None` on any parse failure —
@@ -445,21 +469,19 @@ fn parse_amount_range(spec: &str) -> Option<(Decimal, Decimal)> {
     ))
 }
 
-// --- The first-wins orchestrator ------------------------------------------------------ //
-
 /// Categorize one transaction with the deterministic first-wins stack — the pure engine
-/// hot path over already-[`prepare_merchants`]d / [`prepare_rules`]d facts (compiled once,
-/// reused per transaction). Returns the [`Decision`] of the first stage to fire
-/// (**CC rules → T1 → T2 → T3**), or `None` when nothing matches. Callers cross the UniFFI
-/// boundary via [`crate::categorize`], which prepares the facts then delegates here.
+/// hot path over already-[`prepare_merchants`]d / [`prepare_rules`]d facts (compiled and
+/// priority-ordered once, then reused per transaction). Returns the [`Decision`] of the
+/// first stage to fire (**CC rules → T1 → T2 → T3**), or `None` when nothing matches.
+/// Callers cross the UniFFI boundary via the exported `categorize` / `categorize_batch`
+/// (in `ffi.rs`), which prepare the facts then delegate here.
 ///
 /// - **Stage 0 (CC rules):** for a credit-card inflow, `classify_cc_credit`; for a
 ///   non-card outflow, `classify_cc_debit`. A hit resolves to its built-in category.
 /// - **T1:** exact `(bank_code, source_category)` lookup in `source_map`.
-/// - **T2:** the merchant map, scanned by ascending `priority` against
-///   [`normalize_narration`] — literal substring or precompiled regex; first match wins.
-/// - **T3:** the rules, scanned by ascending `priority` (user before system at equal
-///   priority) — keyword / regex on the raw narration, or an amount range.
+/// - **T2:** the merchant map, scanned against the reused [`normalize_narration`] —
+///   literal substring or precompiled regex; first match wins.
+/// - **T3:** the rules — keyword / regex on the raw narration, or an amount range.
 pub(crate) fn categorize(
     txn: &CategoryTxn,
     catalog: &[Category],
@@ -467,24 +489,22 @@ pub(crate) fn categorize(
     rules: &[PreparedRule],
     source_map: &[SourceCategoryMapping],
 ) -> Option<Decision> {
-    // Stage 0 — India-specific credit-card narration rules. The two gates are mutually
-    // exclusive: a card inflow, or a bank-side (non-card) outflow.
-    let cc_name = if txn.is_credit_card && txn.direction == Direction::Credit {
+    // The two CC gates are mutually exclusive: a card inflow, or a bank-side (non-card) outflow.
+    let cc = if txn.is_credit_card && txn.direction == Direction::Credit {
         classify_cc_credit(&txn.description)
     } else if !txn.is_credit_card && txn.direction == Direction::Debit {
         classify_cc_debit(&txn.description)
     } else {
         None
     };
-    if let Some(name) = cc_name {
+    if let Some(cc) = cc {
         return Some(Decision {
-            category_ref: cc_category_ref(catalog, name),
+            category_ref: cc_category_ref(catalog, cc),
             stage: Stage::CcRule,
             matched_rule_id: None,
         });
     }
 
-    // T1 — the issuer's source-category map (exact lookup, only when a hint is present).
     if let Some(source_category) = txn.source_category.as_deref() {
         if let Some(mapping) = source_map
             .iter()
@@ -498,13 +518,8 @@ pub(crate) fn categorize(
         }
     }
 
-    // T2 — the merchant map ("memory"), scanned against the same normalized narration as
-    // de-dup, by ascending priority (input order breaks ties).
     let normalized = normalize_narration(&txn.description);
-    for &i in &priority_order(merchants.len(), |a, b| {
-        merchants[a].priority.cmp(&merchants[b].priority)
-    }) {
-        let merchant = &merchants[i];
+    for merchant in merchants {
         let matched = match &merchant.matcher {
             MerchantMatcher::Literal(pattern) => normalized.contains(pattern.as_str()),
             MerchantMatcher::Regex(re) => re.is_match(&normalized),
@@ -519,15 +534,7 @@ pub(crate) fn categorize(
         }
     }
 
-    // T3 — the rules, by ascending priority; user rules before system rules at equal
-    // priority (`false < true`), input order breaks any remaining tie.
-    for &i in &priority_order(rules.len(), |a, b| {
-        rules[a]
-            .priority
-            .cmp(&rules[b].priority)
-            .then(rules[a].is_system.cmp(&rules[b].is_system))
-    }) {
-        let rule = &rules[i];
+    for rule in rules {
         if rule_matches(&rule.matcher, txn) {
             return Some(Decision {
                 category_ref: rule.category.clone(),
@@ -538,14 +545,6 @@ pub(crate) fn categorize(
     }
 
     None
-}
-
-/// Indices `0..len` ordered by `cmp`, with the original index as a stable final tie-break —
-/// so evaluation order is deterministic regardless of the caller's input order.
-fn priority_order(len: usize, cmp: impl Fn(usize, usize) -> std::cmp::Ordering) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..len).collect();
-    order.sort_by(|&a, &b| cmp(a, b).then(a.cmp(&b)));
-    order
 }
 
 /// Whether a compiled T3 `matcher` matches `txn` — keyword (case-insensitive substring) or
@@ -854,6 +853,33 @@ mod tests {
         .unwrap();
         assert_eq!(d.stage, Stage::T2MerchantMap);
         assert_eq!(d.category_ref, builtin("FOOD_AND_DINING"));
+    }
+
+    #[test]
+    fn t2_regex_pattern_is_lowercased_like_the_web() {
+        // The web `merchant_identity` lowercases the alias pattern before `re.search`, so an
+        // UPPERCASE regex must still match the (lowercased) normalized narration.
+        let catalog = default_categories();
+        let merchants = vec![MerchantRule {
+            priority: 10,
+            match_type: MerchantMatch::Regex,
+            pattern: "AMAZON|AMZN".to_string(),
+            category: builtin("SHOPPING"),
+        }];
+        let d = run(
+            &txn(
+                false,
+                Direction::Debit,
+                "POS AMZN RETAIL BANGALORE 9876543210",
+            ),
+            &catalog,
+            &merchants,
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(d.stage, Stage::T2MerchantMap);
+        assert_eq!(d.category_ref, builtin("SHOPPING"));
     }
 
     #[test]

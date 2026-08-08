@@ -102,6 +102,10 @@ pub fn detect_transfers(rows: Vec<TransferInput>) -> Vec<TransferPair> {
 /// merchant map, rules, source-category map); returns the [`Decision`] of the first stage
 /// to fire, or `None` when nothing matches (*uncategorized*). Pure and deterministic: no
 /// storage, clock, locale or network. Direction comes from the statement's own Dr/Cr.
+///
+/// For a whole statement/import, prefer [`categorize_batch`], which compiles the merchant /
+/// rule regexes **once** and reuses them across every transaction (perf-validated for
+/// realistic Indian power-user history); this single-transaction entry recompiles per call.
 #[uniffi::export]
 pub fn categorize(
     txn: CategoryTxn,
@@ -113,6 +117,34 @@ pub fn categorize(
     let merchants = crate::categorize::prepare_merchants(&merchants);
     let rules = crate::categorize::prepare_rules(&rules);
     crate::categorize::categorize(&txn, &catalog, &merchants, &rules, &source_map)
+}
+
+/// Categorize a batch of transactions against one shared set of facts — the seam the import
+/// pipeline uses. The merchant / rule regexes are compiled and priority-ordered **once**,
+/// then reused across every transaction (the precompiled hot path ADR-0005 perf-validated at
+/// ~360 ms / 100k txns). Returns one `Decision?` per input transaction, in input order.
+/// Pure and deterministic.
+#[uniffi::export]
+pub fn categorize_batch(
+    txns: Vec<CategoryTxn>,
+    catalog: Vec<Category>,
+    merchants: Vec<MerchantRule>,
+    rules: Vec<Rule>,
+    source_map: Vec<SourceCategoryMapping>,
+) -> Vec<Option<Decision>> {
+    let merchants = crate::categorize::prepare_merchants(&merchants);
+    let rules = crate::categorize::prepare_rules(&rules);
+    txns.iter()
+        .map(|txn| crate::categorize::categorize(txn, &catalog, &merchants, &rules, &source_map))
+        .collect()
+}
+
+/// The 23 built-in default categories (name + `Classification` only) as a catalog the caller
+/// can seed from and extend with the user's own categories. Ported from the web engine's
+/// `DEFAULT_CATEGORIES`; display metadata stays platform-side.
+#[uniffi::export]
+pub fn default_categories() -> Vec<Category> {
+    crate::categorize::default_categories()
 }
 
 /// Parse an ICICI credit-card statement from already-extracted text (lines + full

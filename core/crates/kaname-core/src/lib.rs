@@ -28,8 +28,8 @@ pub mod statement;
 pub mod transfer;
 
 pub use categorize::{
-    default_categories, Category, CategoryRef, CategoryTxn, Classification, Decision,
-    MerchantMatch, MerchantRule, Rule, RuleMatch, SourceCategoryMapping, Stage,
+    Category, CategoryRef, CategoryTxn, Classification, Decision, MerchantMatch, MerchantRule,
+    Rule, RuleMatch, SourceCategoryMapping, Stage,
 };
 pub use coverage::{
     month_window, CoverageState, MonthCoverage, StatementCoverage, TransactionCoverage,
@@ -38,12 +38,13 @@ pub use dedup::{
     dedup_fingerprint, normalize_description, normalize_narration, CrossSourceMatch, DedupLayer,
 };
 pub use ffi::{
-    au_bank_claims, categorize, check_balance_chain, compute_coverage, cross_source_duplicates,
-    detect_transfers, federal_bank_claims, federal_claims, hdfc_bank_claims, hdfc_claims,
-    icici_bank_claims, icici_claims, iob_claims, read_au_bank_statement,
-    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
-    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_iob_statement,
-    read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims, yes_claims,
+    au_bank_claims, categorize, categorize_batch, check_balance_chain, compute_coverage,
+    cross_source_duplicates, default_categories, detect_transfers, federal_bank_claims,
+    federal_claims, hdfc_bank_claims, hdfc_claims, icici_bank_claims, icici_claims, iob_claims,
+    read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
+    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
+    read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
+    yes_claims,
 };
 pub use model::{Direction, Transaction};
 pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};

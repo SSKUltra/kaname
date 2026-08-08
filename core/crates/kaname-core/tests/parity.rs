@@ -10,8 +10,8 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    categorize, check_balance_chain, compute_coverage, cross_source_duplicates, default_categories,
-    detect_transfers, federal_claims, hdfc_claims, icici_claims, iob_claims,
+    categorize, categorize_batch, check_balance_chain, compute_coverage, cross_source_duplicates,
+    default_categories, detect_transfers, federal_claims, hdfc_claims, icici_claims, iob_claims,
     read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
     read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
     read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
@@ -693,8 +693,6 @@ fn transfer_detection_matches_expected() {
     );
 }
 
-// --- Deterministic categorization stack (CC rules -> T1 -> T2 -> T3) ------------------ //
-
 #[derive(Deserialize)]
 struct RefDto {
     #[serde(default)]
@@ -828,25 +826,32 @@ fn to_category_txn(dto: &TxnDto) -> CategoryTxn {
     }
 }
 
-#[test]
-fn categorization_stack_matches_expected() {
+fn load_categorization_fixture() -> CategorizationFixture {
     let path = format!(
         "{}/../../../fixtures/categorization/basic.json",
         env!("CARGO_MANIFEST_DIR")
     );
     let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
-    let fx: CategorizationFixture =
-        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+    serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"))
+}
 
-    // The catalog is the 23 ported defaults plus the fixture's user categories.
+/// Build the engine facts from the fixture: the catalog is the 23 ported defaults plus the
+/// fixture's user categories; the source-map / merchants / rules map their DTOs across.
+fn build_facts(
+    fx: &CategorizationFixture,
+) -> (
+    Vec<Category>,
+    Vec<SourceCategoryMapping>,
+    Vec<MerchantRule>,
+    Vec<Rule>,
+) {
     let mut catalog: Vec<Category> = default_categories();
     catalog.extend(fx.user_categories.iter().map(|u| Category {
         category_ref: CategoryRef::Custom { id: u.id.clone() },
         name: u.name.clone(),
         classification: u.classification.as_deref().map(classification_from),
     }));
-
-    let source_map: Vec<SourceCategoryMapping> = fx
+    let source_map = fx
         .source_map
         .iter()
         .map(|s| SourceCategoryMapping {
@@ -855,7 +860,7 @@ fn categorization_stack_matches_expected() {
             category: s.category.to_ref(),
         })
         .collect();
-    let merchants: Vec<MerchantRule> = fx
+    let merchants = fx
         .merchants
         .iter()
         .map(|m| MerchantRule {
@@ -865,7 +870,7 @@ fn categorization_stack_matches_expected() {
             category: m.category.to_ref(),
         })
         .collect();
-    let rules: Vec<Rule> = fx
+    let rules = fx
         .rules
         .iter()
         .map(|r| Rule {
@@ -877,6 +882,21 @@ fn categorization_stack_matches_expected() {
             category: r.category.to_ref(),
         })
         .collect();
+    (catalog, source_map, merchants, rules)
+}
+
+fn expected_decision(case: &CategorizationCase) -> Option<Decision> {
+    case.expected.as_ref().map(|d| Decision {
+        category_ref: d.category.to_ref(),
+        stage: stage_from(&d.stage),
+        matched_rule_id: d.matched_rule_id.clone(),
+    })
+}
+
+#[test]
+fn categorization_stack_matches_expected() {
+    let fx = load_categorization_fixture();
+    let (catalog, source_map, merchants, rules) = build_facts(&fx);
 
     for case in &fx.cases {
         let got = categorize(
@@ -886,13 +906,9 @@ fn categorization_stack_matches_expected() {
             rules.clone(),
             source_map.clone(),
         );
-        let want = case.expected.as_ref().map(|d| Decision {
-            category_ref: d.category.to_ref(),
-            stage: stage_from(&d.stage),
-            matched_rule_id: d.matched_rule_id.clone(),
-        });
         assert_eq!(
-            got, want,
+            got,
+            expected_decision(case),
             "case {}: categorize must match golden",
             case.name
         );
@@ -900,14 +916,24 @@ fn categorization_stack_matches_expected() {
 }
 
 #[test]
-fn categorization_is_deterministic() {
-    let path = format!(
-        "{}/../../../fixtures/categorization/basic.json",
-        env!("CARGO_MANIFEST_DIR")
+fn categorization_batch_matches_per_case() {
+    // The precompiled batch seam (facts compiled once, reused per txn) must produce exactly
+    // the same Decision for each transaction as the golden per-case expectations.
+    let fx = load_categorization_fixture();
+    let (catalog, source_map, merchants, rules) = build_facts(&fx);
+    let txns: Vec<CategoryTxn> = fx.cases.iter().map(|c| to_category_txn(&c.txn)).collect();
+
+    let got = categorize_batch(txns, catalog, merchants, rules, source_map);
+    let want: Vec<Option<Decision>> = fx.cases.iter().map(expected_decision).collect();
+    assert_eq!(
+        got, want,
+        "categorize_batch must equal the golden per-case decisions"
     );
-    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
-    let fx: CategorizationFixture =
-        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+}
+
+#[test]
+fn categorization_is_deterministic() {
+    let fx = load_categorization_fixture();
     let catalog = default_categories();
     let first = fx.cases.first().expect("at least one case");
     let txn = to_category_txn(&first.txn);
