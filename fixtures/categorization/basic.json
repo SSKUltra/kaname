@@ -1,0 +1,70 @@
+{
+  "_comment": "Synthetic deterministic-categorization golden vector (no real data). One shared set of facts (a catalog = the 23 ported defaults + one user category, a T1 source-category map, a T2 merchant map, and T3 rules) plus a list of cases; each case is one transaction categorized by the first-wins stack CC rules -> T1 -> T2 -> T3, with the expected Decision (category_ref + stage + matched_rule_id) or null for uncategorized. Ground truth for the CC rules, the T3 matcher and normalise_narration was captured from a live run of the web engine's pure helpers (app/services/categorisation/cc_credit_rule.py, cc_debit_rule.py, tier3_rules._matches, app/services/ingestion/normaliser.normalise_narration); the tier ordering/precedence follows the web ingestion pipeline. amount is a string (re-parsed to Decimal - never float); direction Debit|Credit is the statement's own Dr/Cr; category_ref is {builtin: CODE} for one of the 23 defaults or {custom: id} for the user category. Cases: cc-credit-billpay/cc-credit-cashback (a credit-card inflow -> CC rule, cashback preempting the swiggy T2 literal); cc-debit-billpay (bank-side CC payment -> CC rule); t1-source (issuer hint honoured first); t2-literal/t2-regex (merchant memory on the normalised narration); t3-keyword-user/t3-regex-system/t3-amount-range (rules by priority, echoing matched_rule_id); uncategorized (no stage matches).",
+  "user_categories": [
+    { "id": "user-school-fees", "name": "School Fees", "classification": "SPEND" }
+  ],
+  "source_map": [
+    { "bank_code": "ICICI", "source_category": "Food & Beverage", "category": { "builtin": "FOOD_AND_DINING" } }
+  ],
+  "merchants": [
+    { "priority": 10, "match_type": "Literal", "pattern": "swiggy", "category": { "builtin": "FOOD_AND_DINING" } },
+    { "priority": 20, "match_type": "Regex", "pattern": "amazon|amzn", "category": { "builtin": "SHOPPING" } }
+  ],
+  "rules": [
+    { "id": "r-user-kw", "priority": 100, "is_system": false, "match_type": "Keyword", "value": "ryan intl", "category": { "custom": "user-school-fees" } },
+    { "id": "r-sys-regex", "priority": 1000, "is_system": true, "match_type": "Regex", "value": "\\bnetflix\\b", "category": { "builtin": "ENTERTAINMENT" } },
+    { "id": "r-amt", "priority": 1100, "is_system": true, "match_type": "AmountRange", "value": "40000,60000", "category": { "builtin": "RENT_EMI" } }
+  ],
+  "cases": [
+    {
+      "name": "cc-credit-billpay",
+      "txn": { "bank_code": "ICICI", "is_credit_card": true, "source_category": null, "description": "ONLINE TRF - PYMT RECD - THANK YOU", "amount": "5000.00", "direction": "Credit" },
+      "expected": { "category": { "builtin": "CREDIT_CARD_BILL_PAYMENT" }, "stage": "CcRule", "matched_rule_id": null }
+    },
+    {
+      "name": "cc-credit-cashback",
+      "txn": { "bank_code": "ICICI", "is_credit_card": true, "source_category": null, "description": "10% Swiggy Cashback", "amount": "200.00", "direction": "Credit" },
+      "expected": { "category": { "builtin": "CASHBACKS_AND_REFUNDS" }, "stage": "CcRule", "matched_rule_id": null }
+    },
+    {
+      "name": "cc-debit-billpay",
+      "txn": { "bank_code": "HDFC", "is_credit_card": false, "source_category": null, "description": "ICICI CREDIT CARD PAYMENT", "amount": "15000.00", "direction": "Debit" },
+      "expected": { "category": { "builtin": "CREDIT_CARD_BILL_PAYMENT" }, "stage": "CcRule", "matched_rule_id": null }
+    },
+    {
+      "name": "t1-source",
+      "txn": { "bank_code": "ICICI", "is_credit_card": false, "source_category": "Food & Beverage", "description": "SOME RESTAURANT", "amount": "800.00", "direction": "Debit" },
+      "expected": { "category": { "builtin": "FOOD_AND_DINING" }, "stage": "T1SourceCategory", "matched_rule_id": null }
+    },
+    {
+      "name": "t2-literal",
+      "txn": { "bank_code": "ICICI", "is_credit_card": false, "source_category": null, "description": "UPI-SWIGGY-123456", "amount": "250.00", "direction": "Debit" },
+      "expected": { "category": { "builtin": "FOOD_AND_DINING" }, "stage": "T2MerchantMap", "matched_rule_id": null }
+    },
+    {
+      "name": "t2-regex",
+      "txn": { "bank_code": "ICICI", "is_credit_card": false, "source_category": null, "description": "POS AMZN RETAIL BANGALORE 9876543210", "amount": "1500.00", "direction": "Debit" },
+      "expected": { "category": { "builtin": "SHOPPING" }, "stage": "T2MerchantMap", "matched_rule_id": null }
+    },
+    {
+      "name": "t3-keyword-user",
+      "txn": { "bank_code": "ICICI", "is_credit_card": false, "source_category": null, "description": "RYAN INTL SCHOOL FEES BANGALORE", "amount": "5000.00", "direction": "Debit" },
+      "expected": { "category": { "custom": "user-school-fees" }, "stage": "T3Rule", "matched_rule_id": "r-user-kw" }
+    },
+    {
+      "name": "t3-regex-system",
+      "txn": { "bank_code": "ICICI", "is_credit_card": false, "source_category": null, "description": "NETFLIX SUBSCRIPTION", "amount": "649.00", "direction": "Debit" },
+      "expected": { "category": { "builtin": "ENTERTAINMENT" }, "stage": "T3Rule", "matched_rule_id": "r-sys-regex" }
+    },
+    {
+      "name": "t3-amount-range",
+      "txn": { "bank_code": "ICICI", "is_credit_card": false, "source_category": null, "description": "MONTHLY HOUSE RENT TRANSFER", "amount": "50000.00", "direction": "Debit" },
+      "expected": { "category": { "builtin": "RENT_EMI" }, "stage": "T3Rule", "matched_rule_id": "r-amt" }
+    },
+    {
+      "name": "uncategorized",
+      "txn": { "bank_code": "ICICI", "is_credit_card": false, "source_category": null, "description": "UNKNOWN VENDOR XYZ", "amount": "123.00", "direction": "Debit" },
+      "expected": null
+    }
+  ]
+}

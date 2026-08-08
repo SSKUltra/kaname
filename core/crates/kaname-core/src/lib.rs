@@ -19,6 +19,7 @@
 //! `KanameCoreFFI.xcframework` and generated `KanameCore.swift` are produced by
 //! `make core-xcframework`.
 
+pub mod categorize;
 pub mod coverage;
 pub mod dedup;
 mod ffi;
@@ -26,6 +27,10 @@ pub mod model;
 pub mod statement;
 pub mod transfer;
 
+pub use categorize::{
+    default_categories, Category, CategoryRef, CategoryTxn, Classification, Decision,
+    MerchantMatch, MerchantRule, Rule, RuleMatch, SourceCategoryMapping, Stage,
+};
 pub use coverage::{
     month_window, CoverageState, MonthCoverage, StatementCoverage, TransactionCoverage,
 };
@@ -33,7 +38,7 @@ pub use dedup::{
     dedup_fingerprint, normalize_description, normalize_narration, CrossSourceMatch, DedupLayer,
 };
 pub use ffi::{
-    au_bank_claims, check_balance_chain, compute_coverage, cross_source_duplicates,
+    au_bank_claims, categorize, check_balance_chain, compute_coverage, cross_source_duplicates,
     detect_transfers, federal_bank_claims, federal_claims, hdfc_bank_claims, hdfc_claims,
     icici_bank_claims, icici_claims, iob_claims, read_au_bank_statement,
     read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,

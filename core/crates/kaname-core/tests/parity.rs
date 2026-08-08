@@ -10,14 +10,15 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    check_balance_chain, compute_coverage, cross_source_duplicates, detect_transfers,
-    federal_claims, hdfc_claims, icici_claims, iob_claims, read_au_bank_statement,
-    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
-    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_iob_statement,
-    read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims, yes_claims,
-    ChainStatus, CoverageState, CrossSourceMatch, DedupLayer, Direction, MonthCoverage,
-    ParsedStatement, ReconcileStatus, StatementCoverage, Transaction, TransactionCoverage,
-    TransferInput, TransferPair,
+    categorize, check_balance_chain, compute_coverage, cross_source_duplicates, default_categories,
+    detect_transfers, federal_claims, hdfc_claims, icici_claims, iob_claims,
+    read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
+    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
+    read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
+    yes_claims, Category, CategoryRef, CategoryTxn, ChainStatus, Classification, CoverageState,
+    CrossSourceMatch, Decision, DedupLayer, Direction, MerchantMatch, MerchantRule, MonthCoverage,
+    ParsedStatement, ReconcileStatus, Rule, RuleMatch, SourceCategoryMapping, Stage,
+    StatementCoverage, Transaction, TransactionCoverage, TransferInput, TransferPair,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -689,5 +690,231 @@ fn transfer_detection_matches_expected() {
     assert_eq!(
         got, want,
         "transfer detection must equal the golden expected_pairs"
+    );
+}
+
+// --- Deterministic categorization stack (CC rules -> T1 -> T2 -> T3) ------------------ //
+
+#[derive(Deserialize)]
+struct RefDto {
+    #[serde(default)]
+    builtin: Option<String>,
+    #[serde(default)]
+    custom: Option<String>,
+}
+
+impl RefDto {
+    fn to_ref(&self) -> CategoryRef {
+        match (&self.builtin, &self.custom) {
+            (Some(code), None) => CategoryRef::Builtin { code: code.clone() },
+            (None, Some(id)) => CategoryRef::Custom { id: id.clone() },
+            _ => panic!("category ref must be exactly one of {{builtin}} | {{custom}}"),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct UserCategoryDto {
+    id: String,
+    name: String,
+    classification: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SourceMapDto {
+    bank_code: String,
+    source_category: String,
+    category: RefDto,
+}
+
+#[derive(Deserialize)]
+struct MerchantDto {
+    priority: i64,
+    match_type: String,
+    pattern: String,
+    category: RefDto,
+}
+
+#[derive(Deserialize)]
+struct RuleDto {
+    id: Option<String>,
+    priority: i64,
+    is_system: bool,
+    match_type: String,
+    value: String,
+    category: RefDto,
+}
+
+#[derive(Deserialize)]
+struct TxnDto {
+    bank_code: String,
+    is_credit_card: bool,
+    source_category: Option<String>,
+    description: String,
+    amount: String,
+    direction: Direction,
+}
+
+#[derive(Deserialize)]
+struct DecisionDto {
+    category: RefDto,
+    stage: String,
+    matched_rule_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CategorizationCase {
+    name: String,
+    txn: TxnDto,
+    expected: Option<DecisionDto>,
+}
+
+#[derive(Deserialize)]
+struct CategorizationFixture {
+    user_categories: Vec<UserCategoryDto>,
+    source_map: Vec<SourceMapDto>,
+    merchants: Vec<MerchantDto>,
+    rules: Vec<RuleDto>,
+    cases: Vec<CategorizationCase>,
+}
+
+fn classification_from(label: &str) -> Classification {
+    match label {
+        "SPEND" => Classification::Spend,
+        "INCOME" => Classification::Income,
+        "INVESTMENT" => Classification::Investment,
+        "TRANSFER" => Classification::Transfer,
+        "CC_PAYMENT" => Classification::CcPayment,
+        "REFUND" => Classification::Refund,
+        other => panic!("unknown classification {other}"),
+    }
+}
+
+fn merchant_match_from(label: &str) -> MerchantMatch {
+    match label {
+        "Literal" => MerchantMatch::Literal,
+        "Regex" => MerchantMatch::Regex,
+        other => panic!("unknown merchant match_type {other}"),
+    }
+}
+
+fn rule_match_from(label: &str) -> RuleMatch {
+    match label {
+        "Keyword" => RuleMatch::Keyword,
+        "Regex" => RuleMatch::Regex,
+        "AmountRange" => RuleMatch::AmountRange,
+        other => panic!("unknown rule match_type {other}"),
+    }
+}
+
+fn stage_from(label: &str) -> Stage {
+    match label {
+        "CcRule" => Stage::CcRule,
+        "T1SourceCategory" => Stage::T1SourceCategory,
+        "T2MerchantMap" => Stage::T2MerchantMap,
+        "T3Rule" => Stage::T3Rule,
+        other => panic!("unknown stage {other}"),
+    }
+}
+
+fn to_category_txn(dto: &TxnDto) -> CategoryTxn {
+    CategoryTxn {
+        bank_code: dto.bank_code.clone(),
+        is_credit_card: dto.is_credit_card,
+        source_category: dto.source_category.clone(),
+        description: dto.description.clone(),
+        amount: Decimal::from_str(&dto.amount).unwrap(),
+        direction: dto.direction,
+    }
+}
+
+#[test]
+fn categorization_stack_matches_expected() {
+    let path = format!(
+        "{}/../../../fixtures/categorization/basic.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    let fx: CategorizationFixture =
+        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+
+    // The catalog is the 23 ported defaults plus the fixture's user categories.
+    let mut catalog: Vec<Category> = default_categories();
+    catalog.extend(fx.user_categories.iter().map(|u| Category {
+        category_ref: CategoryRef::Custom { id: u.id.clone() },
+        name: u.name.clone(),
+        classification: u.classification.as_deref().map(classification_from),
+    }));
+
+    let source_map: Vec<SourceCategoryMapping> = fx
+        .source_map
+        .iter()
+        .map(|s| SourceCategoryMapping {
+            bank_code: s.bank_code.clone(),
+            source_category: s.source_category.clone(),
+            category: s.category.to_ref(),
+        })
+        .collect();
+    let merchants: Vec<MerchantRule> = fx
+        .merchants
+        .iter()
+        .map(|m| MerchantRule {
+            priority: m.priority,
+            match_type: merchant_match_from(&m.match_type),
+            pattern: m.pattern.clone(),
+            category: m.category.to_ref(),
+        })
+        .collect();
+    let rules: Vec<Rule> = fx
+        .rules
+        .iter()
+        .map(|r| Rule {
+            id: r.id.clone(),
+            priority: r.priority,
+            is_system: r.is_system,
+            match_type: rule_match_from(&r.match_type),
+            value: r.value.clone(),
+            category: r.category.to_ref(),
+        })
+        .collect();
+
+    for case in &fx.cases {
+        let got = categorize(
+            to_category_txn(&case.txn),
+            catalog.clone(),
+            merchants.clone(),
+            rules.clone(),
+            source_map.clone(),
+        );
+        let want = case.expected.as_ref().map(|d| Decision {
+            category_ref: d.category.to_ref(),
+            stage: stage_from(&d.stage),
+            matched_rule_id: d.matched_rule_id.clone(),
+        });
+        assert_eq!(
+            got, want,
+            "case {}: categorize must match golden",
+            case.name
+        );
+    }
+}
+
+#[test]
+fn categorization_is_deterministic() {
+    let path = format!(
+        "{}/../../../fixtures/categorization/basic.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    let fx: CategorizationFixture =
+        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+    let catalog = default_categories();
+    let first = fx.cases.first().expect("at least one case");
+    let txn = to_category_txn(&first.txn);
+    let a = categorize(txn.clone(), catalog.clone(), vec![], vec![], vec![]);
+    let b = categorize(txn, catalog, vec![], vec![], vec![]);
+    assert_eq!(
+        a, b,
+        "categorize must be deterministic for identical inputs"
     );
 }

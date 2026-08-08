@@ -6,6 +6,9 @@
 //! (constitution: money is never a float). The functions here are pure and
 //! deterministic: no clock, no locale, no network, no global state.
 
+use crate::categorize::{
+    Category, CategoryTxn, Decision, MerchantRule, Rule, SourceCategoryMapping,
+};
 use crate::coverage::{MonthCoverage, StatementCoverage, TransactionCoverage};
 use crate::dedup::CrossSourceMatch;
 use crate::model::Transaction;
@@ -91,6 +94,25 @@ pub fn compute_coverage(
 #[uniffi::export]
 pub fn detect_transfers(rows: Vec<TransferInput>) -> Vec<TransferPair> {
     crate::transfer::detect_transfers(&rows)
+}
+
+/// Categorize one transaction with the deterministic first-wins stack (CC rules → T1
+/// source-category map → T2 merchant map → T3 rules) — the categorization counterpart to
+/// the de-dup / reconciliation / transfer checks. Reads only the passed-in facts (catalog,
+/// merchant map, rules, source-category map); returns the [`Decision`] of the first stage
+/// to fire, or `None` when nothing matches (*uncategorized*). Pure and deterministic: no
+/// storage, clock, locale or network. Direction comes from the statement's own Dr/Cr.
+#[uniffi::export]
+pub fn categorize(
+    txn: CategoryTxn,
+    catalog: Vec<Category>,
+    merchants: Vec<MerchantRule>,
+    rules: Vec<Rule>,
+    source_map: Vec<SourceCategoryMapping>,
+) -> Option<Decision> {
+    let merchants = crate::categorize::prepare_merchants(&merchants);
+    let rules = crate::categorize::prepare_rules(&rules);
+    crate::categorize::categorize(&txn, &catalog, &merchants, &rules, &source_map)
 }
 
 /// Parse an ICICI credit-card statement from already-extracted text (lines + full
