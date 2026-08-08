@@ -17,6 +17,15 @@ chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 csv = "1"
 uniffi = "0.32"
+# Typed, non-panicking error enums (StoreError) — the repo's endorsed error crate
+# (see .github/instructions/rust.instructions.md). Proc-macro only; zero runtime/network.
+thiserror = "2"
+# Encrypted store: SQLCipher-backed SQLite. `bundled-sqlcipher` (NOT
+# `bundled-sqlcipher-vendored-openssl`) compiles SQLCipher from source and, on Apple,
+# auto-selects the CommonCrypto backend (SQLCIPHER_CRYPTO_CC + Security.framework); on
+# Linux/CI we force LibTomCrypt (see crates/kaname-core/build.rs). This keeps `openssl-sys`
+# out of the graph so the privacy-egress audit stays green (Constitution I).
+rusqlite = { version = "0.37", features = ["bundled-sqlcipher"] }
 
 # Optimise release builds of the static/dynamic libs shipped into the iOS app.
 [profile.release]

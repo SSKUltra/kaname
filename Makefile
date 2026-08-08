@@ -1,5 +1,13 @@
 .PHONY: bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test lint
 
+# SQLCipher crypto backend is chosen per-OS with NO OpenSSL (Constitution I): Apple
+# auto-selects CommonCrypto; on Linux we force LibTomCrypt by injecting the compile flag
+# into the bundled SQLCipher (consumed in crates/kaname-core/build.rs). `export` makes it
+# visible to every `cargo` invoked by a recipe. CI sets the same flag on its Linux job.
+ifeq ($(shell uname -s),Linux)
+export LIBSQLITE3_FLAGS := -DSQLCIPHER_CRYPTO_LIBTOMCRYPT
+endif
+
 # Install the toolchain (idempotent).
 bootstrap:
 	@rustup show >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

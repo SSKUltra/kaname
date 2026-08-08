@@ -32,6 +32,11 @@ let project = Project(
             sources: ["Generated/**"],
             dependencies: [
                 .xcframework(path: "Frameworks/KanameCoreFFI.xcframework"),
+                // The Rust core's SQLCipher is built with the CommonCrypto backend on
+                // Apple (SQLCIPHER_CRYPTO_CC), so the final link needs Security +
+                // CoreFoundation. No OpenSSL is linked (Constitution I).
+                .sdk(name: "Security", type: .framework),
+                .sdk(name: "CoreFoundation", type: .framework),
             ]
         ),
         .target(

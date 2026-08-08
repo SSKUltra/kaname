@@ -1,0 +1,577 @@
+//! The encrypted on-device store (Constitution III, "Encrypted at rest") — the engine's
+//! first **stateful** FFI surface.
+//!
+//! [`Store`] owns a single **SQLCipher-encrypted SQLite** database (via `rusqlite`). The
+//! platform supplies the file path and a 256-bit key (generated + held in the iOS
+//! Keychain / Secure Enclave); the core sets the key, runs forward-only schema
+//! [`migrate`](Store::open)ations, and reads/writes rows. The core **never persists or
+//! logs the key**, performs **zero network I/O**, and reads no wall-clock for logic —
+//! timestamps are explicit inputs (Constitution I/II).
+//!
+//! Money crosses the FFI as an exact base-10 [`Decimal`] string and dates as ISO-8601
+//! [`NaiveDate`] (the custom types in [`crate::ffi`]); they are stored as TEXT, never as
+//! floats. Every fallible operation returns a typed [`StoreError`] — the crate's first
+//! error enum — so the platform can react gracefully instead of catching a panic. In
+//! particular, opening an existing database with the wrong key **fails closed** with
+//! [`StoreError::WrongKey`].
+//!
+//! This bootstrap slice ships schema **v1** (`accounts`, `categories` seeded from the 23
+//! [`crate::default_categories`], `transactions`) and a transaction/account round-trip.
+//! Wiring the engines (categorize/dedup/coverage/transfer) to the store is a later slice.
+
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
+
+use chrono::NaiveDate;
+use rusqlite::{params, Connection, ErrorCode};
+use rust_decimal::Decimal;
+
+use crate::categorize::{default_categories, Category, CategoryRef, Classification};
+use crate::model::Direction;
+
+/// The schema version this build of the core knows how to run. The migration runner
+/// applies every version up to and including this one; re-opening an up-to-date database
+/// is a no-op.
+const SCHEMA_VERSION: i64 = 1;
+
+/// Forward-only schema **v1**: the minimal real foundation the engines will later read
+/// from and write to. Money is TEXT (base-10 `Decimal`), dates/timestamps are ISO-8601
+/// TEXT, direction is `'Debit'`/`'Credit'`, classification is a stable upper-snake code —
+/// never floats or enum ordinals (rename-proof + precision-safe, Constitution IV).
+const SCHEMA_V1: &str = r#"
+CREATE TABLE accounts (
+    id             TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    bank_code      TEXT NOT NULL,
+    is_credit_card INTEGER NOT NULL CHECK (is_credit_card IN (0, 1)),
+    currency       TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE categories (
+    id             TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    classification TEXT NOT NULL,
+    is_builtin     INTEGER NOT NULL DEFAULT 1 CHECK (is_builtin IN (0, 1))
+) STRICT;
+
+CREATE TABLE transactions (
+    id              TEXT PRIMARY KEY,
+    account_id      TEXT NOT NULL REFERENCES accounts(id),
+    date            TEXT NOT NULL,
+    description_raw TEXT NOT NULL,
+    amount          TEXT NOT NULL,
+    direction       TEXT NOT NULL CHECK (direction IN ('Debit', 'Credit')),
+    currency        TEXT NOT NULL,
+    category_id     TEXT REFERENCES categories(id),
+    categorised_by  TEXT,
+    is_deleted      INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+) STRICT;
+
+CREATE INDEX idx_transactions_account ON transactions(account_id);
+"#;
+
+/// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
+/// it surfaces in Swift as a throwing `Error`). No variant carries the key or row data.
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum StoreError {
+    /// The database file could not be opened (bad path, I/O, permissions).
+    #[error("failed to open the database: {message}")]
+    OpenFailed { message: String },
+    /// The supplied key is not a 64-character (256-bit) lowercase/uppercase hex string.
+    #[error("the key must be 64 hexadecimal characters (a 256-bit key)")]
+    InvalidKey,
+    /// The key did not decrypt an existing database — it fails closed (no readable DB).
+    #[error("wrong encryption key: the database could not be decrypted")]
+    WrongKey,
+    /// A schema migration failed to apply.
+    #[error("schema migration failed: {message}")]
+    Migration { message: String },
+    /// Any other SQL/storage failure.
+    #[error("storage error: {message}")]
+    Sql { message: String },
+}
+
+impl From<rusqlite::Error> for StoreError {
+    fn from(err: rusqlite::Error) -> Self {
+        StoreError::Sql {
+            message: err.to_string(),
+        }
+    }
+}
+
+/// A new account to persist. The store mints the id; timestamps are caller-supplied
+/// ISO-8601 strings (the core reads no wall-clock).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NewAccount {
+    pub name: String,
+    pub bank_code: String,
+    pub is_credit_card: bool,
+    pub currency: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// An account as stored, including its store-minted `id`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct StoredAccount {
+    pub id: String,
+    pub name: String,
+    pub bank_code: String,
+    pub is_credit_card: bool,
+    pub currency: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A new transaction to persist against an existing account. The store mints the id;
+/// `date` is the transaction's calendar date, `amount` its exact magnitude (direction
+/// carries polarity), and timestamps are caller-supplied ISO-8601 strings.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NewTransaction {
+    pub account_id: String,
+    pub date: NaiveDate,
+    pub description_raw: String,
+    pub amount: Decimal,
+    pub direction: Direction,
+    pub currency: String,
+    pub category_id: Option<String>,
+    pub categorised_by: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A transaction as stored, including its store-minted `id` and `is_deleted` flag.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct StoredTransaction {
+    pub id: String,
+    pub account_id: String,
+    pub date: NaiveDate,
+    pub description_raw: String,
+    pub amount: Decimal,
+    pub direction: Direction,
+    pub currency: String,
+    pub category_id: Option<String>,
+    pub categorised_by: Option<String>,
+    pub is_deleted: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// The encrypted on-device store — a stateful UniFFI object owning one SQLCipher database.
+///
+/// Shared as an `Arc<Store>`; the `Connection` is guarded by a `Mutex` so the object is
+/// `Send + Sync` across the bridge. All SQL lives here; the platform only supplies the key
+/// and path and calls methods.
+#[derive(uniffi::Object)]
+pub struct Store {
+    conn: Mutex<Connection>,
+}
+
+impl std::fmt::Debug for Store {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Never surface the connection (or, by extension, anything key-derived).
+        f.debug_struct("Store").finish_non_exhaustive()
+    }
+}
+
+#[uniffi::export]
+impl Store {
+    /// Open (creating if absent) the SQLCipher-encrypted database at `path`, keyed with
+    /// `key` (a 64-character hex string = 256 bits), and bring it to the current schema
+    /// version. The key is set on the connection and **never persisted or logged**.
+    ///
+    /// Fails closed: a malformed key is [`StoreError::InvalidKey`]; a wrong key for an
+    /// existing database is [`StoreError::WrongKey`] (never a panic or a readable DB).
+    #[uniffi::constructor]
+    pub fn open(path: String, key: String) -> Result<Arc<Self>, StoreError> {
+        validate_key(&key)?;
+
+        let conn = Connection::open(&path).map_err(|e| StoreError::OpenFailed {
+            message: e.to_string(),
+        })?;
+
+        // Set the raw 256-bit key (SQLCipher `PRAGMA key = "x'<hex>'"`). This does not yet
+        // touch a page, so it cannot fail on a wrong key here.
+        conn.pragma_update(None, "key", format!("x'{key}'"))
+            .map_err(|e| StoreError::OpenFailed {
+                message: e.to_string(),
+            })?;
+
+        // Touch the schema to force decryption. On an existing DB a wrong key yields
+        // SQLITE_NOTADB — map that (and only that) to WrongKey; a fresh empty file simply
+        // becomes a new encrypted DB and reads 0 rows.
+        if let Err(err) = conn.query_row("SELECT count(*) FROM sqlite_master", [], |row| {
+            row.get::<_, i64>(0)
+        }) {
+            return Err(match &err {
+                rusqlite::Error::SqliteFailure(e, _) if e.code == ErrorCode::NotADatabase => {
+                    StoreError::WrongKey
+                }
+                _ => StoreError::OpenFailed {
+                    message: err.to_string(),
+                },
+            });
+        }
+
+        // Enforce foreign keys (off by default in SQLite) so transactions must reference a
+        // real account/category.
+        conn.pragma_update(None, "foreign_keys", true)?;
+
+        let store = Self {
+            conn: Mutex::new(conn),
+        };
+        store.migrate()?;
+        Ok(Arc::new(store))
+    }
+
+    /// Persist a new account and return its store-minted id.
+    pub fn insert_account(&self, account: NewAccount) -> Result<String, StoreError> {
+        let conn = self.lock();
+        let id = mint_id(&conn)?;
+        conn.execute(
+            "INSERT INTO accounts \
+             (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                id,
+                account.name,
+                account.bank_code,
+                account.is_credit_card as i64,
+                account.currency,
+                account.created_at,
+                account.updated_at,
+            ],
+        )?;
+        Ok(id)
+    }
+
+    /// All accounts, oldest first (insertion order).
+    pub fn list_accounts(&self) -> Result<Vec<StoredAccount>, StoreError> {
+        let conn = self.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, bank_code, is_credit_card, currency, created_at, updated_at \
+             FROM accounts ORDER BY rowid",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(StoredAccount {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    bank_code: row.get(2)?,
+                    is_credit_card: row.get::<_, i64>(3)? != 0,
+                    currency: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Persist a new transaction against an existing account and return its minted id.
+    pub fn insert_transaction(&self, txn: NewTransaction) -> Result<String, StoreError> {
+        let conn = self.lock();
+        let id = mint_id(&conn)?;
+        conn.execute(
+            "INSERT INTO transactions \
+             (id, account_id, date, description_raw, amount, direction, currency, \
+              category_id, categorised_by, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                id,
+                txn.account_id,
+                date_to_sql(txn.date),
+                txn.description_raw,
+                txn.amount.to_string(),
+                direction_to_sql(txn.direction),
+                txn.currency,
+                txn.category_id,
+                txn.categorised_by,
+                txn.created_at,
+                txn.updated_at,
+            ],
+        )?;
+        Ok(id)
+    }
+
+    /// All (non-deleted and deleted) transactions for `account_id`, oldest first.
+    pub fn list_transactions(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<StoredTransaction>, StoreError> {
+        let conn = self.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, date, description_raw, amount, direction, currency, \
+                    category_id, categorised_by, is_deleted, created_at, updated_at \
+             FROM transactions WHERE account_id = ?1 ORDER BY rowid",
+        )?;
+        let rows = stmt
+            .query_map(params![account_id], map_transaction)?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// The seeded category catalog (the 23 [`crate::default_categories`] in a fresh DB),
+    /// as [`Category`] values ready to feed the categorization stack.
+    pub fn list_categories(&self) -> Result<Vec<Category>, StoreError> {
+        let conn = self.lock();
+        let mut stmt =
+            conn.prepare("SELECT id, name, classification FROM categories ORDER BY rowid")?;
+        let rows = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let classification: String = row.get(2)?;
+                Ok((id, name, classification))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        rows.into_iter()
+            .map(|(id, name, classification)| {
+                Ok(Category {
+                    category_ref: CategoryRef::Builtin { code: id },
+                    name,
+                    classification: Some(classification_from_sql(&classification)?),
+                })
+            })
+            .collect()
+    }
+}
+
+impl Store {
+    /// Lock the connection. The mutex is only poisoned if a prior holder panicked while
+    /// holding it; recover the guard rather than propagating the panic across the FFI.
+    fn lock(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.conn.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// The database's current schema version (`PRAGMA user_version`). Not part of the FFI
+    /// surface; useful for diagnostics and migration tests.
+    pub fn schema_version(&self) -> Result<i64, StoreError> {
+        let conn = self.lock();
+        Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
+    }
+
+    /// Apply every pending forward-only migration inside a transaction, bumping
+    /// `PRAGMA user_version`. Idempotent: an up-to-date database is a no-op.
+    fn migrate(&self) -> Result<(), StoreError> {
+        let mut conn = self.lock();
+        let mut version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+
+        while version < SCHEMA_VERSION {
+            let next = version + 1;
+            let tx = conn.transaction().map_err(|e| StoreError::Migration {
+                message: e.to_string(),
+            })?;
+            apply_migration(&tx, next)?;
+            // user_version participates in the transaction (header page) and is rolled
+            // back with it on failure.
+            tx.pragma_update(None, "user_version", next)
+                .map_err(|e| StoreError::Migration {
+                    message: e.to_string(),
+                })?;
+            tx.commit().map_err(|e| StoreError::Migration {
+                message: e.to_string(),
+            })?;
+            version = next;
+        }
+        Ok(())
+    }
+}
+
+/// Apply the single migration that lifts the schema to `version`.
+fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), StoreError> {
+    match version {
+        1 => {
+            tx.execute_batch(SCHEMA_V1)
+                .map_err(|e| StoreError::Migration {
+                    message: e.to_string(),
+                })?;
+            seed_categories(tx)?;
+            Ok(())
+        }
+        other => Err(StoreError::Migration {
+            message: format!("no migration defined for schema version {other}"),
+        }),
+    }
+}
+
+/// Seed the `categories` table from the ported [`default_categories`] (the 23 builtins:
+/// stable code as id + display name + classification).
+fn seed_categories(tx: &rusqlite::Transaction<'_>) -> Result<(), StoreError> {
+    let mut stmt = tx.prepare(
+        "INSERT INTO categories (id, name, classification, is_builtin) VALUES (?1, ?2, ?3, 1)",
+    )?;
+    for category in default_categories() {
+        let CategoryRef::Builtin { code } = &category.category_ref else {
+            continue;
+        };
+        let classification = category
+            .classification
+            .map(classification_to_sql)
+            .ok_or_else(|| StoreError::Migration {
+                message: format!("builtin category {code} has no classification"),
+            })?;
+        stmt.execute(params![code, category.name, classification])?;
+    }
+    Ok(())
+}
+
+/// Mint a fresh 128-bit opaque id (lowercase hex) using SQLite's own PRNG, so the core
+/// needs no random-number dependency of its own.
+fn mint_id(conn: &Connection) -> Result<String, StoreError> {
+    let id = conn.query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0))?;
+    Ok(id)
+}
+
+/// Map one `transactions` row to a [`StoredTransaction`]. The inner `Result` carries a
+/// parse failure (a corrupt amount/date/direction) as a [`StoreError`] without panicking.
+type RowResult = Result<StoredTransaction, StoreError>;
+
+fn map_transaction(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
+    let amount: String = row.get(4)?;
+    let date: String = row.get(2)?;
+    let direction: String = row.get(5)?;
+    Ok((|| {
+        Ok(StoredTransaction {
+            id: row.get(0)?,
+            account_id: row.get(1)?,
+            date: date_from_sql(&date)?,
+            description_raw: row.get(3)?,
+            amount: amount_from_sql(&amount)?,
+            direction: direction_from_sql(&direction)?,
+            currency: row.get(6)?,
+            category_id: row.get(7)?,
+            categorised_by: row.get(8)?,
+            is_deleted: row.get::<_, i64>(9)? != 0,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
+        })
+    })())
+}
+
+/// Validate a 256-bit hex key: exactly 64 ASCII hex digits.
+fn validate_key(key: &str) -> Result<(), StoreError> {
+    if key.len() == 64 && key.bytes().all(|b| b.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidKey)
+    }
+}
+
+fn direction_to_sql(direction: Direction) -> &'static str {
+    match direction {
+        Direction::Debit => "Debit",
+        Direction::Credit => "Credit",
+    }
+}
+
+fn direction_from_sql(value: &str) -> Result<Direction, StoreError> {
+    match value {
+        "Debit" => Ok(Direction::Debit),
+        "Credit" => Ok(Direction::Credit),
+        other => Err(StoreError::Sql {
+            message: format!("unknown direction {other:?}"),
+        }),
+    }
+}
+
+fn classification_to_sql(classification: Classification) -> &'static str {
+    match classification {
+        Classification::Spend => "SPEND",
+        Classification::Income => "INCOME",
+        Classification::Investment => "INVESTMENT",
+        Classification::Transfer => "TRANSFER",
+        Classification::CcPayment => "CC_PAYMENT",
+        Classification::Refund => "REFUND",
+    }
+}
+
+fn classification_from_sql(value: &str) -> Result<Classification, StoreError> {
+    match value {
+        "SPEND" => Ok(Classification::Spend),
+        "INCOME" => Ok(Classification::Income),
+        "INVESTMENT" => Ok(Classification::Investment),
+        "TRANSFER" => Ok(Classification::Transfer),
+        "CC_PAYMENT" => Ok(Classification::CcPayment),
+        "REFUND" => Ok(Classification::Refund),
+        other => Err(StoreError::Sql {
+            message: format!("unknown classification {other:?}"),
+        }),
+    }
+}
+
+fn date_to_sql(date: NaiveDate) -> String {
+    date.format("%Y-%m-%d").to_string()
+}
+
+fn date_from_sql(value: &str) -> Result<NaiveDate, StoreError> {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|e| StoreError::Sql {
+        message: format!("invalid stored date {value:?}: {e}"),
+    })
+}
+
+fn amount_from_sql(value: &str) -> Result<Decimal, StoreError> {
+    Decimal::from_str(value).map_err(|e| StoreError::Sql {
+        message: format!("invalid stored amount {value:?}: {e}"),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_key_accepts_64_hex_and_rejects_the_rest() {
+        assert!(validate_key(&"a".repeat(64)).is_ok());
+        assert!(validate_key(&"A1B2".repeat(16)).is_ok()); // mixed case, 64 chars
+        assert!(matches!(validate_key(""), Err(StoreError::InvalidKey)));
+        assert!(matches!(
+            validate_key(&"a".repeat(63)),
+            Err(StoreError::InvalidKey)
+        ));
+        assert!(matches!(
+            validate_key(&"a".repeat(65)),
+            Err(StoreError::InvalidKey)
+        ));
+        assert!(matches!(
+            validate_key(&"g".repeat(64)),
+            Err(StoreError::InvalidKey)
+        ));
+    }
+
+    #[test]
+    fn direction_round_trips_through_sql_text() {
+        for direction in [Direction::Debit, Direction::Credit] {
+            assert_eq!(
+                direction_from_sql(direction_to_sql(direction)).unwrap(),
+                direction
+            );
+        }
+        assert!(direction_from_sql("Sideways").is_err());
+    }
+
+    #[test]
+    fn classification_round_trips_through_sql_text() {
+        for classification in [
+            Classification::Spend,
+            Classification::Income,
+            Classification::Investment,
+            Classification::Transfer,
+            Classification::CcPayment,
+            Classification::Refund,
+        ] {
+            assert_eq!(
+                classification_from_sql(classification_to_sql(classification)).unwrap(),
+                classification
+            );
+        }
+        assert!(classification_from_sql("MYSTERY").is_err());
+    }
+}

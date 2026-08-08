@@ -20,6 +20,8 @@ chrono.workspace = true
 regex.workspace = true
 csv.workspace = true
 uniffi.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 rust_decimal_macros.workspace = true
