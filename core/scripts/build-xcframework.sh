@@ -29,6 +29,12 @@ LIB="libkaname_core.a"
 DEVICE_TARGET="aarch64-apple-ios"
 SIM_TARGETS=("aarch64-apple-ios-sim" "x86_64-apple-ios")
 
+# Pin the iOS min-version for BOTH the `cc` compile of SQLCipher's C amalgamation and the
+# rustc link to the app's deployment target. SQLCipher's sqlite3.o references
+# `___chkstk_darwin` (a stack-probe builtin); without a consistent, modern deployment
+# target rustc would default to an ancient iOS that cannot resolve it, failing the link.
+export IPHONEOS_DEPLOYMENT_TARGET="18.0"
+
 cd "$CORE_DIR"
 
 echo "==> [1/5] Building kaname-core static libs (release) for iOS targets"

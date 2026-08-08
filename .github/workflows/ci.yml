@@ -13,11 +13,18 @@ jobs:
   core:
     name: Rust core (kaname-core)
     runs-on: ubuntu-latest
+    # SQLCipher on Linux uses the LibTomCrypt backend (no OpenSSL — Constitution I). The
+    # flag is injected into the bundled SQLCipher compile (crates/kaname-core/build.rs);
+    # `libtomcrypt-dev` supplies <tomcrypt.h> + the lib the core links against.
+    env:
+      LIBSQLITE3_FLAGS: -DSQLCIPHER_CRYPTO_LIBTOMCRYPT
     defaults:
       run:
         working-directory: core
     steps:
       - uses: actions/checkout@v4
+      - name: Install LibTomCrypt (SQLCipher crypto backend, no OpenSSL)
+        run: sudo apt-get update && sudo apt-get install -y libtomcrypt-dev
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

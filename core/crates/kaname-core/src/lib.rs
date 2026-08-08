@@ -25,6 +25,7 @@ pub mod dedup;
 mod ffi;
 pub mod model;
 pub mod statement;
+pub mod store;
 pub mod transfer;
 
 pub use categorize::{
@@ -50,6 +51,7 @@ pub use model::{Direction, Transaction};
 pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};
 pub use statement::reconcile::{ReconcileResult, ReconcileStatus};
 pub use statement::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
+pub use store::{NewAccount, NewTransaction, Store, StoreError, StoredAccount, StoredTransaction};
 pub use transfer::{TransferInput, TransferPair};
 
 uniffi::setup_scaffolding!();
