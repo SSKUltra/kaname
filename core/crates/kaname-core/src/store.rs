@@ -30,13 +30,14 @@ use crate::categorize::{
     default_categories, Category, CategoryRef, CategoryTxn, Classification, MerchantMatch,
     MerchantRule, Rule, RuleMatch, SourceCategoryMapping, Stage,
 };
-use crate::model::Direction;
+use crate::dedup::{CrossSourceMatch, DedupLayer};
+use crate::model::{Direction, Transaction};
 use crate::transfer::TransferInput;
 
 /// The schema version this build of the core knows how to run. The migration runner
 /// applies every version up to and including this one; re-opening an up-to-date database
 /// is a no-op.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 /// Forward-only schema **v1**: the minimal real foundation the engines will later read
 /// from and write to. Money is TEXT (base-10 `Decimal`), dates/timestamps are ISO-8601
@@ -119,6 +120,18 @@ const SCHEMA_V3: &str = r#"
 ALTER TABLE transactions ADD COLUMN is_transfer INTEGER NOT NULL DEFAULT 0
     CHECK (is_transfer IN (0, 1));
 ALTER TABLE transactions ADD COLUMN transfer_group_id TEXT;
+"#;
+
+/// Forward-only schema **v4**: cross-source duplicate identity. `superseded_by` links a
+/// duplicate row to the earlier row it duplicates (the survivor), and `dedup_layer` records
+/// which matcher layer caught it (`Canonical`/`Fuzzy`). The loser is **linked, not deleted** —
+/// `is_deleted` is untouched — so the link stays reversible and the presentation layer decides
+/// what to hide. Constant/NULL `ADD COLUMN` defaults, so the migration runs on a populated
+/// table (as v2's and v3's did).
+const SCHEMA_V4: &str = r#"
+ALTER TABLE transactions ADD COLUMN superseded_by TEXT REFERENCES transactions(id);
+ALTER TABLE transactions ADD COLUMN dedup_layer TEXT
+    CHECK (dedup_layer IS NULL OR dedup_layer IN ('Canonical', 'Fuzzy'));
 "#;
 
 /// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
@@ -224,6 +237,8 @@ pub struct StoredTransaction {
     pub is_deleted: bool,
     pub is_transfer: bool,
     pub transfer_group_id: Option<String>,
+    pub superseded_by: Option<String>,
+    pub dedup_layer: Option<DedupLayer>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -250,6 +265,15 @@ pub struct CategorizeSummary {
 pub struct TransferSummary {
     pub pairs_linked: u32,
     pub credit_card_payments: u32,
+}
+
+/// The outcome of [`Store::find_duplicates`]: how many rows were linked as cross-source
+/// duplicates, split by the matcher layer that caught each one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, uniffi::Record)]
+pub struct DedupSummary {
+    pub duplicates_linked: u32,
+    pub canonical: u32,
+    pub fuzzy: u32,
 }
 
 /// The encrypted on-device store — a stateful UniFFI object owning one SQLCipher database.
@@ -393,7 +417,7 @@ impl Store {
         let mut stmt = conn.prepare(
             "SELECT id, account_id, date, description_raw, amount, direction, currency, \
                     category_id, categorised_by, is_deleted, created_at, updated_at, \
-                    source_category, is_transfer, transfer_group_id \
+                    source_category, is_transfer, transfer_group_id, superseded_by, dedup_layer \
              FROM transactions WHERE account_id = ?1 ORDER BY rowid",
         )?;
         let rows = stmt
@@ -598,6 +622,83 @@ impl Store {
         tx.commit()?;
         Ok(summary)
     }
+
+    /// Link cross-source duplicate transactions across **all** accounts.
+    ///
+    /// The same spend often lands in the store twice — once from a bank ledger and once from
+    /// the card statement it settled on. Candidate rows (non-deleted, not already superseded)
+    /// are grouped by account and walked **oldest account first** (by the account's
+    /// `created_at`, tie-broken on `id`): each account's rows are the matcher's `incoming`,
+    /// compared against the accumulated rows of every earlier-created account (`existing`).
+    /// The survivor is therefore always the row from the account that was imported first, which
+    /// keeps the outcome stable across re-runs. Rows on the **same** account are never compared
+    /// — a genuine repeat within one statement is not a cross-source duplicate.
+    ///
+    /// Each duplicate is **linked, not deleted**: the loser gets `superseded_by` = the
+    /// survivor's id and `dedup_layer` = the layer that caught it. A survivor that is itself
+    /// consumed by a match is withdrawn from the pool, so multiplicity is respected globally
+    /// (two real repeats can only absorb two duplicates). Idempotent: already-linked rows are
+    /// excluded from the candidate load and the UPDATE is guarded by `superseded_by IS NULL`.
+    pub fn find_duplicates(&self) -> Result<DedupSummary, StoreError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+
+        let by_account = load_dedup_candidates(&tx)?;
+        let mut links: Vec<(String, String, DedupLayer)> = Vec::new();
+        let mut pool: Vec<(String, Transaction)> = Vec::new();
+
+        for incoming in by_account {
+            let existing_txns: Vec<Transaction> = pool.iter().map(|(_, t)| t.clone()).collect();
+            let incoming_txns: Vec<Transaction> = incoming.iter().map(|(_, t)| t.clone()).collect();
+            let matches = crate::dedup::cross_source_duplicates(&existing_txns, &incoming_txns);
+
+            let mut consumed = vec![false; pool.len()];
+            let mut superseded = vec![false; incoming.len()];
+            for CrossSourceMatch {
+                incoming_index,
+                existing_index,
+                layer,
+            } in matches
+            {
+                let (loser_id, _) = &incoming[incoming_index as usize];
+                let (winner_id, _) = &pool[existing_index as usize];
+                links.push((loser_id.clone(), winner_id.clone(), layer));
+                consumed[existing_index as usize] = true;
+                superseded[incoming_index as usize] = true;
+            }
+
+            let mut kept = 0;
+            pool.retain(|_| {
+                let keep = !consumed[kept];
+                kept += 1;
+                keep
+            });
+            pool.extend(
+                incoming
+                    .into_iter()
+                    .zip(superseded)
+                    .filter(|(_, dup)| !dup)
+                    .map(|(row, _)| row),
+            );
+        }
+        let mut summary = DedupSummary::default();
+        {
+            let mut update = tx.prepare(
+                "UPDATE transactions SET superseded_by = ?2, dedup_layer = ?3 \
+                 WHERE id = ?1 AND superseded_by IS NULL",
+            )?;
+            for (loser_id, winner_id, layer) in &links {
+                update.execute(params![loser_id, winner_id, dedup_layer_to_sql(*layer)])?;
+                summary.duplicates_linked += 1;
+                match layer {
+                    DedupLayer::Canonical => summary.canonical += 1,
+                    DedupLayer::Fuzzy => summary.fuzzy += 1,
+                }
+            }
+        }
+        tx.commit()?;
+        Ok(summary)
+    }
 }
 
 impl Store {
@@ -649,6 +750,10 @@ fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), S
         }
         3 => {
             tx.execute_batch(SCHEMA_V3).map_err(StoreError::migration)?;
+            Ok(())
+        }
+        4 => {
+            tx.execute_batch(SCHEMA_V4).map_err(StoreError::migration)?;
             Ok(())
         }
         other => Err(StoreError::Migration {
@@ -710,6 +815,11 @@ fn map_transaction(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
             source_category: row.get(12)?,
             is_transfer: row.get::<_, i64>(13)? != 0,
             transfer_group_id: row.get(14)?,
+            superseded_by: row.get(15)?,
+            dedup_layer: row
+                .get::<_, Option<String>>(16)?
+                .map(|l| dedup_layer_from_sql(&l))
+                .transpose()?,
         })
     })())
 }
@@ -795,6 +905,53 @@ fn load_transfer_inputs(conn: &Connection) -> Result<Vec<TransferInput>, StoreEr
             },
         )
         .collect()
+}
+
+/// Load the de-duplication candidates — every non-deleted row that is not already linked as a
+/// duplicate — as `(id, Transaction)` pairs **grouped by account, oldest account first**.
+///
+/// The grouping is what turns the pure matcher's two-list contract into a store-wide sweep:
+/// account order (`accounts.created_at`, tie-broken on `id` so it is total and deterministic)
+/// decides which side of a duplicate survives. Rows within an account keep insertion order.
+fn load_dedup_candidates(conn: &Connection) -> Result<Vec<Vec<(String, Transaction)>>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.account_id, t.id, t.date, t.description_raw, t.amount, t.direction \
+         FROM transactions t JOIN accounts a ON a.id = t.account_id \
+         WHERE t.is_deleted = 0 AND t.superseded_by IS NULL \
+         ORDER BY a.created_at, a.id, t.rowid",
+    )?;
+    let raw = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut grouped: Vec<Vec<(String, Transaction)>> = Vec::new();
+    let mut current_account: Option<String> = None;
+    for (account_id, id, date, description, amount, direction) in raw {
+        let txn = Transaction::new(
+            date_from_sql(&date)?,
+            description,
+            amount_from_sql(&amount)?,
+            direction_from_sql(&direction)?,
+        );
+        if current_account.as_deref() != Some(account_id.as_str()) {
+            grouped.push(Vec::new());
+            current_account = Some(account_id);
+        }
+        grouped
+            .last_mut()
+            .expect("a group was just pushed for this account")
+            .push((id, txn));
+    }
+    Ok(grouped)
 }
 
 /// The category catalog (built-ins + user categories), oldest first.
@@ -1009,6 +1166,24 @@ fn direction_from_sql(value: &str) -> Result<Direction, StoreError> {
     }
 }
 
+/// `DedupLayer` crosses SQL as its stable variant name, matching the v4 CHECK constraint.
+fn dedup_layer_to_sql(layer: DedupLayer) -> &'static str {
+    match layer {
+        DedupLayer::Canonical => "Canonical",
+        DedupLayer::Fuzzy => "Fuzzy",
+    }
+}
+
+fn dedup_layer_from_sql(value: &str) -> Result<DedupLayer, StoreError> {
+    match value {
+        "Canonical" => Ok(DedupLayer::Canonical),
+        "Fuzzy" => Ok(DedupLayer::Fuzzy),
+        other => Err(StoreError::Sql {
+            message: format!("unknown dedup layer {other:?}"),
+        }),
+    }
+}
+
 fn classification_to_sql(classification: Classification) -> &'static str {
     match classification {
         Classification::Spend => "SPEND",
@@ -1209,6 +1384,119 @@ mod tests {
             .query_row("SELECT count(*) FROM accounts", [], |row| row.get(0))
             .unwrap();
         assert_eq!(accounts, 1);
+    }
+
+    #[test]
+    fn migrating_v3_to_v4_preserves_existing_rows() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+
+        // Build a populated v3 database, as an older app version would have left it.
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=3 {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.pragma_update(None, "user_version", 3).unwrap();
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+                 VALUES ('a1', 'Savings', 'HDFC', 0, 'INR', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO transactions \
+                 (id, account_id, date, description_raw, amount, direction, currency, \
+                  is_deleted, created_at, updated_at) \
+                 VALUES ('t1', 'a1', '2026-07-04', 'desc', '1.00', 'Debit', 'INR', 0, 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        // Upgrade v3 → v4: the duplicate-link `ADD COLUMN`s run on a *populated* table.
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 4).expect("apply v4");
+            tx.pragma_update(None, "user_version", 4).unwrap();
+            tx.commit().unwrap();
+        }
+
+        // The pre-existing row survived and is nobody's duplicate.
+        let (superseded_by, layer): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT superseded_by, dedup_layer FROM transactions WHERE id = 't1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(superseded_by, None);
+        assert_eq!(layer, None);
+        let accounts: i64 = conn
+            .query_row("SELECT count(*) FROM accounts", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(accounts, 1);
+        // The CHECK constraint rejects a layer the core doesn't know.
+        assert!(conn
+            .execute(
+                "UPDATE transactions SET dedup_layer = 'Telepathic' WHERE id = 't1'",
+                [],
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn dedup_layer_round_trips_through_sql_text() {
+        for layer in [DedupLayer::Canonical, DedupLayer::Fuzzy] {
+            assert_eq!(
+                dedup_layer_from_sql(dedup_layer_to_sql(layer)).unwrap(),
+                layer
+            );
+        }
+        assert!(dedup_layer_from_sql("Psychic").is_err());
+    }
+
+    #[test]
+    fn load_dedup_candidates_groups_by_account_oldest_first_and_excludes_linked() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=SCHEMA_VERSION {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.pragma_update(None, "user_version", SCHEMA_VERSION)
+                .unwrap();
+            // `newer` is inserted first but created later, so ordering must follow
+            // `created_at`, not insertion order.
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+                 VALUES ('newer', 'Card', 'HDFC', 1, 'INR', '2026-02-01', 't'), \
+                        ('older', 'Savings', 'HDFC', 0, 'INR', '2026-01-01', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute_batch(
+                "INSERT INTO transactions \
+                   (id, account_id, date, description_raw, amount, direction, currency, \
+                    is_deleted, superseded_by, created_at, updated_at) VALUES \
+                   ('n1', 'newer', '2026-07-04', 'd', '1.00', 'Debit', 'INR', 0, NULL, 't', 't'), \
+                   ('o1', 'older', '2026-07-04', 'd', '1.00', 'Debit', 'INR', 0, NULL, 't', 't'), \
+                   ('o2', 'older', '2026-07-05', 'd', '2.00', 'Debit', 'INR', 1, NULL, 't', 't'), \
+                   ('o3', 'older', '2026-07-06', 'd', '3.00', 'Debit', 'INR', 0, 'o1', 't', 't');",
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        let grouped = load_dedup_candidates(&conn).expect("load");
+        let ids: Vec<Vec<&str>> = grouped
+            .iter()
+            .map(|g| g.iter().map(|(id, _)| id.as_str()).collect())
+            .collect();
+        // Older account first; the deleted (`o2`) and already-linked (`o3`) rows are excluded.
+        assert_eq!(ids, vec![vec!["o1"], vec!["n1"]]);
     }
 
     #[test]
