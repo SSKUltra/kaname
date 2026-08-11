@@ -52,6 +52,7 @@ struct StoreTests {
             amount: Self.decimal("1234.56"),
             direction: .debit,
             currency: "INR",
+            sourceCategory: nil,
             categoryId: "FOOD_AND_DINING",
             categorisedBy: "T2_MERCHANT_MAP",
             createdAt: "2026-08-08T10:00:00Z",
@@ -119,6 +120,54 @@ struct StoreTests {
         #expect(throws: StoreError.InvalidKey) {
             _ = try Store.open(path: db.path, key: "too-short")
         }
+    }
+
+    @Test("categorize_account persists the stack's results over the bridge")
+    func categorizeAccountPersistsResultsOverTheBridge() throws {
+        let db = Self.tempDatabase()
+        defer { try? FileManager.default.removeItem(at: db.dir) }
+
+        let store = try Store.open(path: db.path, key: Self.key)
+        let accountId = try store.insertAccount(account: Self.sampleAccount())
+
+        // A T2 merchant "memory": "swiggy" → Food & Dining (a built-in).
+        _ = try store.insertMerchantRule(
+            rule: MerchantRule(
+                priority: 10,
+                matchType: .literal,
+                pattern: "swiggy",
+                category: .builtin(code: "FOOD_AND_DINING")
+            )
+        )
+        _ = try store.insertTransaction(txn: Self.categoryTxn(accountId, "UPI-SWIGGY-123456"))
+        _ = try store.insertTransaction(txn: Self.categoryTxn(accountId, "UNKNOWN VENDOR XYZ"))
+
+        let summary = try store.categorizeAccount(accountId: accountId)
+        #expect(summary.categorized == 1)
+        #expect(summary.uncategorized == 1)
+
+        let stored = try store.listTransactions(accountId: accountId)
+        #expect(stored.count == 2)
+        #expect(stored[0].categoryId == "FOOD_AND_DINING")
+        #expect(stored[0].categorisedBy == "T2_MERCHANT_MAP")
+        #expect(stored[1].categoryId == nil)
+        #expect(stored[1].categorisedBy == nil)
+    }
+
+    private static func categoryTxn(_ accountId: String, _ description: String) -> NewTransaction {
+        NewTransaction(
+            accountId: accountId,
+            date: "2026-07-04",
+            descriptionRaw: description,
+            amount: decimal("250.00"),
+            direction: .debit,
+            currency: "INR",
+            sourceCategory: nil,
+            categoryId: nil,
+            categorisedBy: nil,
+            createdAt: "2026-08-08T00:00:00Z",
+            updatedAt: "2026-08-08T00:00:00Z"
+        )
     }
 
     /// Create the database and seed one account, releasing the `Store` on return so the
