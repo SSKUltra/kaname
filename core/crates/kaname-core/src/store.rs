@@ -23,16 +23,19 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use chrono::NaiveDate;
-use rusqlite::{params, Connection, ErrorCode};
+use rusqlite::{params, Connection, ErrorCode, OptionalExtension};
 use rust_decimal::Decimal;
 
-use crate::categorize::{default_categories, Category, CategoryRef, Classification};
+use crate::categorize::{
+    default_categories, Category, CategoryRef, CategoryTxn, Classification, MerchantMatch,
+    MerchantRule, Rule, RuleMatch, SourceCategoryMapping, Stage,
+};
 use crate::model::Direction;
 
 /// The schema version this build of the core knows how to run. The migration runner
 /// applies every version up to and including this one; re-opening an up-to-date database
 /// is a no-op.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 /// Forward-only schema **v1**: the minimal real foundation the engines will later read
 /// from and write to. Money is TEXT (base-10 `Decimal`), dates/timestamps are ISO-8601
@@ -72,6 +75,39 @@ CREATE TABLE transactions (
 ) STRICT;
 
 CREATE INDEX idx_transactions_account ON transactions(account_id);
+"#;
+
+/// Forward-only schema **v2**: the facts the categorization stack reads — the T1
+/// source-category map, the T2 merchant "memory", and the T3 rules — plus a per-transaction
+/// `source_category` column carrying the issuer's own hint that feeds T1. Every fact
+/// references a `categories` row (a built-in code or a user-category id) by foreign key, so a
+/// fact pointing at a missing category fails closed.
+const SCHEMA_V2: &str = r#"
+ALTER TABLE transactions ADD COLUMN source_category TEXT;
+
+CREATE TABLE merchant_map (
+    id          INTEGER PRIMARY KEY,
+    priority    INTEGER NOT NULL,
+    match_type  TEXT NOT NULL CHECK (match_type IN ('Literal', 'Regex')),
+    pattern     TEXT NOT NULL,
+    category_id TEXT NOT NULL REFERENCES categories(id)
+) STRICT;
+
+CREATE TABLE source_category_map (
+    id              INTEGER PRIMARY KEY,
+    bank_code       TEXT NOT NULL,
+    source_category TEXT NOT NULL,
+    category_id     TEXT NOT NULL REFERENCES categories(id)
+) STRICT;
+
+CREATE TABLE rules (
+    id          TEXT PRIMARY KEY,
+    priority    INTEGER NOT NULL,
+    is_system   INTEGER NOT NULL CHECK (is_system IN (0, 1)),
+    match_type  TEXT NOT NULL CHECK (match_type IN ('Keyword', 'Regex', 'AmountRange')),
+    value       TEXT NOT NULL,
+    category_id TEXT NOT NULL REFERENCES categories(id)
+) STRICT;
 "#;
 
 /// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
@@ -154,6 +190,7 @@ pub struct NewTransaction {
     pub amount: Decimal,
     pub direction: Direction,
     pub currency: String,
+    pub source_category: Option<String>,
     pub category_id: Option<String>,
     pub categorised_by: Option<String>,
     pub created_at: String,
@@ -170,11 +207,28 @@ pub struct StoredTransaction {
     pub amount: Decimal,
     pub direction: Direction,
     pub currency: String,
+    pub source_category: Option<String>,
     pub category_id: Option<String>,
     pub categorised_by: Option<String>,
     pub is_deleted: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// A user category to create — name + money-bucket only. Minimal on purpose: display
+/// metadata (colour / emoji / localized names) and full CRUD are a later slice.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NewCategory {
+    pub name: String,
+    pub classification: Classification,
+}
+
+/// The outcome of [`Store::categorize_account`]: how many rows the stack categorized versus
+/// left uncategorized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, uniffi::Record)]
+pub struct CategorizeSummary {
+    pub categorized: u32,
+    pub uncategorized: u32,
 }
 
 /// The encrypted on-device store — a stateful UniFFI object owning one SQLCipher database.
@@ -289,8 +343,8 @@ impl Store {
         conn.execute(
             "INSERT INTO transactions \
              (id, account_id, date, description_raw, amount, direction, currency, \
-              category_id, categorised_by, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+              source_category, category_id, categorised_by, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 id,
                 txn.account_id,
@@ -299,6 +353,7 @@ impl Store {
                 txn.amount.to_string(),
                 direction_to_sql(txn.direction),
                 txn.currency,
+                txn.source_category,
                 txn.category_id,
                 txn.categorised_by,
                 txn.created_at,
@@ -316,7 +371,8 @@ impl Store {
         let conn = self.lock();
         let mut stmt = conn.prepare(
             "SELECT id, account_id, date, description_raw, amount, direction, currency, \
-                    category_id, categorised_by, is_deleted, created_at, updated_at \
+                    category_id, categorised_by, is_deleted, created_at, updated_at, \
+                    source_category \
              FROM transactions WHERE account_id = ?1 ORDER BY rowid",
         )?;
         let rows = stmt
@@ -327,30 +383,163 @@ impl Store {
         Ok(rows)
     }
 
-    /// The seeded category catalog (the 23 [`crate::default_categories`] in a fresh DB),
-    /// as [`Category`] values ready to feed the categorization stack.
+    /// The category catalog — the 23 seeded [`crate::default_categories`] plus any user
+    /// categories created via [`Store::insert_category`] — ready to feed the categorization
+    /// stack. Built-ins surface as [`CategoryRef::Builtin`], user categories as
+    /// [`CategoryRef::Custom`].
     pub fn list_categories(&self) -> Result<Vec<Category>, StoreError> {
-        let conn = self.lock();
-        let mut stmt =
-            conn.prepare("SELECT id, name, classification FROM categories ORDER BY rowid")?;
-        let rows = stmt
-            .query_map([], |row| {
-                let id: String = row.get(0)?;
-                let name: String = row.get(1)?;
-                let classification: String = row.get(2)?;
-                Ok((id, name, classification))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        load_categories(&self.lock())
+    }
 
-        rows.into_iter()
-            .map(|(id, name, classification)| {
-                Ok(Category {
-                    category_ref: CategoryRef::Builtin { code: id },
-                    name,
-                    classification: Some(classification_from_sql(&classification)?),
-                })
-            })
-            .collect()
+    /// Create a user (non-built-in) category and return its store-minted id. A minimal
+    /// primitive for the categorization loop; full category CRUD + display metadata
+    /// (colour / emoji / localized names) is a later slice.
+    pub fn insert_category(&self, category: NewCategory) -> Result<String, StoreError> {
+        let conn = self.lock();
+        let id = mint_id(&conn)?;
+        conn.execute(
+            "INSERT INTO categories (id, name, classification, is_builtin) \
+             VALUES (?1, ?2, ?3, 0)",
+            params![
+                id,
+                category.name,
+                classification_to_sql(category.classification)
+            ],
+        )?;
+        Ok(id)
+    }
+
+    /// Persist a T2 merchant-map entry (the "memory") and return its row id. The referenced
+    /// category must already exist (built-in or user) or the insert fails closed (FK).
+    pub fn insert_merchant_rule(&self, rule: MerchantRule) -> Result<i64, StoreError> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO merchant_map (priority, match_type, pattern, category_id) \
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                rule.priority,
+                merchant_match_to_sql(rule.match_type),
+                rule.pattern,
+                category_ref_to_id(&rule.category),
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// All T2 merchant-map entries, priority order (lowest first).
+    pub fn list_merchant_rules(&self) -> Result<Vec<MerchantRule>, StoreError> {
+        load_merchant_rules(&self.lock())
+    }
+
+    /// Persist a T1 source-category-map entry (the issuer's own hint → a Kaname category)
+    /// and return its row id. The referenced category must already exist.
+    pub fn insert_source_category_mapping(
+        &self,
+        mapping: SourceCategoryMapping,
+    ) -> Result<i64, StoreError> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO source_category_map (bank_code, source_category, category_id) \
+             VALUES (?1, ?2, ?3)",
+            params![
+                mapping.bank_code,
+                mapping.source_category,
+                category_ref_to_id(&mapping.category),
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// All T1 source-category-map entries, insertion order.
+    pub fn list_source_category_mappings(&self) -> Result<Vec<SourceCategoryMapping>, StoreError> {
+        load_source_category_mappings(&self.lock())
+    }
+
+    /// Persist a T3 rule (keyword / regex / amount-range). Uses the rule's own id when
+    /// present, otherwise mints one; returns the id. The referenced category must exist.
+    pub fn insert_rule(&self, rule: Rule) -> Result<String, StoreError> {
+        let conn = self.lock();
+        let id = match rule.id {
+            Some(id) => id,
+            None => mint_id(&conn)?,
+        };
+        conn.execute(
+            "INSERT INTO rules (id, priority, is_system, match_type, value, category_id) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                id,
+                rule.priority,
+                rule.is_system as i64,
+                rule_match_to_sql(rule.match_type),
+                rule.value,
+                category_ref_to_id(&rule.category),
+            ],
+        )?;
+        Ok(id)
+    }
+
+    /// All T3 rules, priority order (lowest first).
+    pub fn list_rules(&self) -> Result<Vec<Rule>, StoreError> {
+        load_rules(&self.lock())
+    }
+
+    /// Categorize an account's non-deleted transactions with the deterministic first-wins
+    /// stack (CC rules → T1 source-category map → T2 merchant map → T3 rules) from the stored
+    /// catalog + facts, and persist each result (`category_id` + the `categorised_by` stage).
+    /// Recomputes every row, so it is idempotent; a row no stage matches is left
+    /// uncategorized (both columns `NULL`). Reuses the pure engine verbatim — no network, no
+    /// clock. Returns how many rows were categorized vs left uncategorized.
+    pub fn categorize_account(&self, account_id: String) -> Result<CategorizeSummary, StoreError> {
+        let mut conn = self.lock();
+
+        let account: Option<(String, bool)> = conn
+            .query_row(
+                "SELECT bank_code, is_credit_card FROM accounts WHERE id = ?1",
+                params![account_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0)),
+            )
+            .optional()?;
+        let Some((bank_code, is_credit_card)) = account else {
+            return Ok(CategorizeSummary::default());
+        };
+
+        let tx = conn.transaction()?;
+
+        let catalog = load_categories(&tx)?;
+        let merchants = crate::categorize::prepare_merchants(&load_merchant_rules(&tx)?);
+        let rules = crate::categorize::prepare_rules(&load_rules(&tx)?);
+        let source_map = load_source_category_mappings(&tx)?;
+        let pending = load_account_transactions(&tx, &account_id, &bank_code, is_credit_card)?;
+
+        let mut summary = CategorizeSummary::default();
+        {
+            let mut update = tx.prepare(
+                "UPDATE transactions SET category_id = ?2, categorised_by = ?3 WHERE id = ?1",
+            )?;
+            for (txn_id, txn) in &pending {
+                match crate::categorize::categorize(txn, &catalog, &merchants, &rules, &source_map)
+                {
+                    Some(decision) => {
+                        update.execute(params![
+                            txn_id,
+                            category_ref_to_id(&decision.category_ref),
+                            stage_to_sql(decision.stage),
+                        ])?;
+                        summary.categorized += 1;
+                    }
+                    None => {
+                        update.execute(params![
+                            txn_id,
+                            Option::<String>::None,
+                            Option::<String>::None,
+                        ])?;
+                        summary.uncategorized += 1;
+                    }
+                }
+            }
+        }
+        tx.commit()?;
+        Ok(summary)
     }
 }
 
@@ -395,6 +584,10 @@ fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), S
         1 => {
             tx.execute_batch(SCHEMA_V1).map_err(StoreError::migration)?;
             seed_categories(tx)?;
+            Ok(())
+        }
+        2 => {
+            tx.execute_batch(SCHEMA_V2).map_err(StoreError::migration)?;
             Ok(())
         }
         other => Err(StoreError::Migration {
@@ -453,8 +646,236 @@ fn map_transaction(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
             is_deleted: row.get::<_, i64>(9)? != 0,
             created_at: row.get(10)?,
             updated_at: row.get(11)?,
+            source_category: row.get(12)?,
         })
     })())
+}
+
+/// Load one account's non-deleted transactions as `(id, CategoryTxn)` pairs ready for the
+/// categorization stack. `bank_code`/`is_credit_card` come from the owning account; the rest
+/// from each row (the issuer's `source_category` hint feeds T1).
+fn load_account_transactions(
+    conn: &Connection,
+    account_id: &str,
+    bank_code: &str,
+    is_credit_card: bool,
+) -> Result<Vec<(String, CategoryTxn)>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, source_category, description_raw, amount, direction \
+         FROM transactions WHERE account_id = ?1 AND is_deleted = 0 ORDER BY rowid",
+    )?;
+    let raw = stmt
+        .query_map(params![account_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    raw.into_iter()
+        .map(|(id, source_category, description, amount, direction)| {
+            Ok((
+                id,
+                CategoryTxn {
+                    bank_code: bank_code.to_string(),
+                    is_credit_card,
+                    source_category,
+                    description,
+                    amount: amount_from_sql(&amount)?,
+                    direction: direction_from_sql(&direction)?,
+                },
+            ))
+        })
+        .collect()
+}
+
+/// The category catalog (built-ins + user categories), oldest first.
+fn load_categories(conn: &Connection) -> Result<Vec<Category>, StoreError> {
+    let mut stmt =
+        conn.prepare("SELECT id, name, classification, is_builtin FROM categories ORDER BY rowid")?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)? != 0,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(id, name, classification, is_builtin)| {
+            Ok(Category {
+                category_ref: category_ref_from_parts(id, is_builtin),
+                name,
+                classification: Some(classification_from_sql(&classification)?),
+            })
+        })
+        .collect()
+}
+
+/// The T2 merchant map, priority order (lowest first), with each entry's `CategoryRef`
+/// reconstructed from the joined category's `is_builtin` flag.
+fn load_merchant_rules(conn: &Connection) -> Result<Vec<MerchantRule>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT m.priority, m.match_type, m.pattern, m.category_id, c.is_builtin \
+         FROM merchant_map m JOIN categories c ON c.id = m.category_id \
+         ORDER BY m.priority, m.id",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)? != 0,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(priority, match_type, pattern, category_id, is_builtin)| {
+            Ok(MerchantRule {
+                priority,
+                match_type: merchant_match_from_sql(&match_type)?,
+                pattern,
+                category: category_ref_from_parts(category_id, is_builtin),
+            })
+        })
+        .collect()
+}
+
+/// The T1 source-category map, insertion order.
+fn load_source_category_mappings(
+    conn: &Connection,
+) -> Result<Vec<SourceCategoryMapping>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT s.bank_code, s.source_category, s.category_id, c.is_builtin \
+         FROM source_category_map s JOIN categories c ON c.id = s.category_id \
+         ORDER BY s.id",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)? != 0,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(|(bank_code, source_category, category_id, is_builtin)| {
+            Ok(SourceCategoryMapping {
+                bank_code,
+                source_category,
+                category: category_ref_from_parts(category_id, is_builtin),
+            })
+        })
+        .collect()
+}
+
+/// The T3 rules, priority order (lowest first). Each stored id surfaces as `Some(id)`.
+fn load_rules(conn: &Connection) -> Result<Vec<Rule>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT r.id, r.priority, r.is_system, r.match_type, r.value, r.category_id, \
+                c.is_builtin \
+         FROM rules r JOIN categories c ON c.id = r.category_id \
+         ORDER BY r.priority, r.id",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)? != 0,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, i64>(6)? != 0,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    rows.into_iter()
+        .map(
+            |(id, priority, is_system, match_type, value, category_id, is_builtin)| {
+                Ok(Rule {
+                    id: Some(id),
+                    priority,
+                    is_system,
+                    match_type: rule_match_from_sql(&match_type)?,
+                    value,
+                    category: category_ref_from_parts(category_id, is_builtin),
+                })
+            },
+        )
+        .collect()
+}
+
+/// Reconstruct a [`CategoryRef`] from a stored `category_id` + its `is_builtin` flag: a
+/// built-in id *is* its stable code, a user id is opaque.
+fn category_ref_from_parts(id: String, is_builtin: bool) -> CategoryRef {
+    if is_builtin {
+        CategoryRef::Builtin { code: id }
+    } else {
+        CategoryRef::Custom { id }
+    }
+}
+
+/// The `categories.id` a [`CategoryRef`] stores as (the built-in code, or the user id).
+fn category_ref_to_id(category: &CategoryRef) -> &str {
+    match category {
+        CategoryRef::Builtin { code } => code,
+        CategoryRef::Custom { id } => id,
+    }
+}
+
+fn merchant_match_to_sql(match_type: MerchantMatch) -> &'static str {
+    match match_type {
+        MerchantMatch::Literal => "Literal",
+        MerchantMatch::Regex => "Regex",
+    }
+}
+
+fn merchant_match_from_sql(value: &str) -> Result<MerchantMatch, StoreError> {
+    match value {
+        "Literal" => Ok(MerchantMatch::Literal),
+        "Regex" => Ok(MerchantMatch::Regex),
+        other => Err(StoreError::Sql {
+            message: format!("unknown merchant match type {other:?}"),
+        }),
+    }
+}
+
+fn rule_match_to_sql(match_type: RuleMatch) -> &'static str {
+    match match_type {
+        RuleMatch::Keyword => "Keyword",
+        RuleMatch::Regex => "Regex",
+        RuleMatch::AmountRange => "AmountRange",
+    }
+}
+
+fn rule_match_from_sql(value: &str) -> Result<RuleMatch, StoreError> {
+    match value {
+        "Keyword" => Ok(RuleMatch::Keyword),
+        "Regex" => Ok(RuleMatch::Regex),
+        "AmountRange" => Ok(RuleMatch::AmountRange),
+        other => Err(StoreError::Sql {
+            message: format!("unknown rule match type {other:?}"),
+        }),
+    }
+}
+
+fn stage_to_sql(stage: Stage) -> &'static str {
+    match stage {
+        Stage::CcRule => "CC_RULE",
+        Stage::T1SourceCategory => "T1_SOURCE_CATEGORY",
+        Stage::T2MerchantMap => "T2_MERCHANT_MAP",
+        Stage::T3Rule => "T3_RULE",
+    }
 }
 
 /// Validate a 256-bit hex key: exactly 64 ASCII hex digits.
