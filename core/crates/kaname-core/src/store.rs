@@ -996,4 +996,61 @@ mod tests {
         }
         assert!(classification_from_sql("MYSTERY").is_err());
     }
+
+    #[test]
+    fn migrating_v1_to_v2_preserves_existing_rows() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+
+        // Build a populated v1 database, as an older app version would have left it.
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 1).expect("apply v1");
+            tx.pragma_update(None, "user_version", 1).unwrap();
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+                 VALUES ('a1', 'Savings', 'HDFC', 0, 'INR', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO transactions \
+                 (id, account_id, date, description_raw, amount, direction, currency, \
+                  is_deleted, created_at, updated_at) \
+                 VALUES ('t1', 'a1', '2026-07-04', 'desc', '1.00', 'Debit', 'INR', 0, 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        // Upgrade v1 → v2: the `ALTER TABLE … ADD COLUMN` runs on a *populated* table.
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 2).expect("apply v2");
+            tx.pragma_update(None, "user_version", 2).unwrap();
+            tx.commit().unwrap();
+        }
+
+        // The pre-existing row survived; its new `source_category` is NULL.
+        let source_category: Option<String> = conn
+            .query_row(
+                "SELECT source_category FROM transactions WHERE id = 't1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source_category, None);
+        let accounts: i64 = conn
+            .query_row("SELECT count(*) FROM accounts", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(accounts, 1);
+        // The new fact tables exist and their FK to a seeded category resolves.
+        conn.execute(
+            "INSERT INTO merchant_map (priority, match_type, pattern, category_id) \
+             VALUES (1, 'Literal', 'x', 'GROCERIES')",
+            [],
+        )
+        .expect("merchant_map usable after upgrade");
+    }
 }

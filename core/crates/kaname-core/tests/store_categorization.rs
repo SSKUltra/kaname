@@ -1,8 +1,9 @@
 //! Behavioural tests for slice 02 — categorization write-back (engine→store wiring). Proves
 //! the store persists the categorization facts (T1 source-category map, T2 merchant map, T3
 //! rules), runs the proven pure stack over stored rows via `categorize_account`, and saves
-//! `category_id` + `categorised_by` — including custom categories, the uncategorized
-//! fall-through, idempotency, and the v1→v2 migration. All data is synthetic (Constitution I).
+//! `category_id` + `categorised_by` — including custom categories, T3 precedence, the
+//! uncategorized fall-through, idempotency, and schema v2. (The v1→v2 upgrade of an already
+//! populated database is a unit test in `store.rs`.) All data is synthetic (Constitution I).
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -230,6 +231,50 @@ fn categorize_account_fires_each_stage_and_leaves_no_match_uncategorized() {
         Some("CREDIT_CARD_BILL_PAYMENT")
     );
     assert_eq!(inflow.categorised_by.as_deref(), Some("CC_RULE"));
+}
+
+#[test]
+fn t3_rule_precedence_is_honoured_through_the_store() {
+    let db = TempDb::new("t3prec");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+    let bank = store.insert_account(account(false)).expect("bank");
+
+    // Two T3 rules match the same narration at equal priority; the user rule (is_system =
+    // false) must win over the system rule.
+    store
+        .insert_rule(Rule {
+            id: Some("sys".to_string()),
+            priority: 50,
+            is_system: true,
+            match_type: RuleMatch::Keyword,
+            value: "gym".to_string(),
+            category: builtin("HEALTH_AND_MEDICAL"),
+        })
+        .expect("system rule");
+    store
+        .insert_rule(Rule {
+            id: Some("usr".to_string()),
+            priority: 50,
+            is_system: false,
+            match_type: RuleMatch::Keyword,
+            value: "gym".to_string(),
+            category: builtin("ENTERTAINMENT"),
+        })
+        .expect("user rule");
+    store
+        .insert_transaction(txn(
+            &bank,
+            "CULT GYM MEMBERSHIP",
+            "1500.00",
+            Direction::Debit,
+            None,
+        ))
+        .expect("row");
+
+    store.categorize_account(bank.clone()).expect("categorize");
+    let row = read(&store, &bank, 0);
+    assert_eq!(row.category_id.as_deref(), Some("ENTERTAINMENT"));
+    assert_eq!(row.categorised_by.as_deref(), Some("T3_RULE"));
 }
 
 #[test]
