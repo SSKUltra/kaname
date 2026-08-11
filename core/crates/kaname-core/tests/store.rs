@@ -189,13 +189,13 @@ fn migration_is_idempotent_across_reopens() {
 
     let first_id = {
         let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
-        assert_eq!(store.schema_version().unwrap(), 2);
+        assert_eq!(store.schema_version().unwrap(), 3);
         store.insert_account(sample_account()).expect("insert")
     };
 
     // Re-open: migrations must be a no-op, the version unchanged, and the data intact.
     let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(store.schema_version().unwrap(), 3);
     let accounts = store.list_accounts().expect("list");
     assert_eq!(
         accounts.len(),
