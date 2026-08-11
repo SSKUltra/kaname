@@ -26,67 +26,44 @@ To pick up a task: scan `.scratch/<slug>/issues/` for the lowest-numbered open,
 unblocked, `ready-for-agent` ticket, read its `spec.md`, and implement.
 
 **Current feature dirs:**
-- `.scratch/categorization/` — deterministic categorization stack. **Shipped.**
-- `.scratch/persistence/` — encrypted on-device store. `spec.md` = design of record;
-  `issues/01-encrypted-store-bootstrap.md` (slice 01), `issues/02-categorization-write-back.md`
-  (slice 02) and `issues/03-transfer-persistence.md` (slice 03) all **shipped**
-  (`Status: resolved`). Later slices (dedup/coverage persistence, the deferred
-  transfer→category assignment, the key ceremony, …) will be new `issues/NN-*.md` here.
+- `.scratch/categorization/` — deterministic categorization stack.
+- `.scratch/persistence/` — encrypted on-device store. `spec.md` is the design of record;
+  each slice is an `issues/NN-*.md` whose `Status:` line is the single source of truth for
+  whether it shipped — don't restate that here. Upcoming slices are queued (§3).
 
 ---
 
-## 2. What's DONE
+## 2. What exists — read the source, don't cache it here
 
-| Layer | Status |
-|---|---|
-| **P0** bootstrap + gates | ✅ toolchain, CI, privacy-egress gate |
-| **P1** UniFFI Rust↔Swift bridge | ✅ `engine_version`, `normalize_transaction`, Decimal/NaiveDate custom types |
-| **P2 credit-card readers (6)** | ✅ ICICI, HDFC (2 layouts), SBI, Yes, Federal/Scapia, IOB |
-| **P2 bank-account ledger readers (4)** | ✅ ICICI, HDFC (2 layouts), Federal (2 templates), AU |
-| **Balance-chain integrity** | ✅ `balance_chain::check` → Reconciled/NeedsReview + suspects |
-| **CC reconciliation** | ✅ `reconcile::reconcile` (printed totals → opening/closing fallback → neutral) |
-| **Cross-source de-dup** | ✅ `dedup::cross_source_duplicates` (canonical + fuzzy, hand-rolled Jaro-Winkler) |
-| **Coverage map** | ✅ `coverage::compute_coverage` (rolling-24-month GAP/PARTIAL/COVERED; clock-free) |
-| **Transfer detection** | ✅ `transfer::detect_transfers` (outflow-anchored greedy pairing; ±1 day/±₹1) |
-| **Categorization stack** | ✅ `categorize` (CC rules → T1 source-map → T2 merchant-map → T3 rules; T4/LLM excluded); `default_categories()` = 23 builtins |
-| **Encrypted store bootstrap** | ✅ `store::Store` (uniffi::Object) — SQLCipher-encrypted SQLite, schema v1 (accounts / seeded categories / transactions), forward-only migrations, wrong-key fail-closed. **No OpenSSL** (CommonCrypto on Apple, LibTomCrypt on Linux/CI). PR #18 |
-| **Categorization write-back** | ✅ schema v2 — `merchant_map`/`source_category_map`/`rules` facts + `transactions.source_category`; `store.categorize_account` runs the pure stack over stored rows and persists `category_id`/`categorised_by`. PR #20 |
-| **Transfer persistence** | ✅ schema v3 — `transactions.is_transfer` + shared `transfer_group_id`; `store.detect_transfers` (first **cross-account** op) tags both legs of each pair, idempotent (guarded UPDATE). **Tag-only** — category assignment + categorize/transfer precedence deferred. PR #22 |
-| **Golden-parity harness** | ✅ `tests/parity.rs` (per-bank + reconcile/dedup/coverage/transfer) |
-| **Privacy-egress gate** | ✅ `make core-privacy-audit` (CI-enforced; denylists networking + `openssl`/`openssl-sys`) |
+A hand-maintained status table drifts every slice, so this section points at the sources of
+truth instead of copying them:
 
-Tests (current): ≈167 Rust (unit + parity + store) + 45 Swift across 17 suites; 0 network
-deps. `main` at the transfer-persistence merge: `b846902`.
+- **The engine + store API that's built** → §7 "Key reusable seams" (names the functions,
+  points at the code); the P0–P6 phase map → `docs/kaname-ios-plan.md`.
+- **Which slices shipped** → the `Status: resolved` line in each `.scratch/*/issues/NN-*.md`
+  and the merged PRs (`gh pr list --state merged`).
+- **Test counts / current `main`** → `make core-test` && `make ios-test`; `git rev-parse main`.
+- **Source layout** → §8 repo map, or `ls core/crates/kaname-core/src/`.
 
-**Engine source** (`core/crates/kaname-core/src/`): the 10 readers + shared seams under
-`statement/`; `dedup.rs`, `coverage.rs`, `transfer.rs`, `categorize.rs`, `store.rs`;
-`ffi.rs` (UniFFI boundary + Decimal/NaiveDate custom types); `model.rs`; `lib.rs`.
+Orientation in one line: the deterministic engine (10 readers + balance-chain, reconcile,
+dedup, coverage, transfer, categorize), the UniFFI bridge, and the SQLCipher encrypted store
+are all in — the engines are being wired to the store slice by slice (§3).
 
 ---
 
-## 3. What's NEXT (candidate slices — user checkpoints at slice boundaries)
+## 3. What's next (queued as tickets)
 
-The deterministic engine + the encrypted-store foundation are in. Remaining candidates,
-roughly in dependency order (each becomes a `.scratch/<slug>/issues/NN-*.md`):
+No ranked list here — it drifts every slice. **The tickets are the queue:** scan
+`.scratch/persistence/issues/` for the lowest-numbered open, unblocked ticket (§1 rule). Each
+upcoming slice is `Status: needs-triage` and opens with **one design decision** to settle with
+the user at the slice boundary (the pattern every slice here has followed); settling it flips
+the ticket to `ready-for-agent`, then implement it.
 
-1. **Engine→store wiring: dedup + coverage persistence** — the remaining half of the store's
-   stated next step (`persistence/spec.md` "Out of Scope": *"feeding
-   categorize/dedup/coverage/transfer from persisted rows and saving their results"*).
-   Categorization write-back (slice 02) and **transfer persistence (slice 03)** are **done**;
-   what's left is **dedup** (persist statements/transactions as the facts it compares + save
-   supersede state) and **coverage** (needs a **new `statements` table** + transaction
-   provenance — `from_full_statement`/`statement_id` — that `compute_coverage` reads).
-2. **Deferred from slice 03: transfer→category assignment** — assign Self Transfer /
-   Credit Card Bill Payment to tagged transfers and settle the **categorize-vs-transfer
-   precedence** (which engine wins; don't clobber a transfer tag on `categorize_account`
-   re-run). Small, but its own slice by the tag-only decision.
-3. **iOS Keychain / Secure Enclave key ceremony** — generate + hold the 256-bit key
-   on-device, mark the DB `NSFileProtectionComplete`. The store's FFI contract is fixed;
-   this is the platform half. (Deferred by `persistence/issues/01`.)
-4. **P3 — Core SwiftUI app** — onboarding → import (PDFKit → readers) → transaction list →
-   categorize → dashboard. The coverage map + reconcile/balance-chain verdicts are the
-   first natural UI surfaces (apply the `make-interfaces-feel-better` skill;
-   `gem-designer-mobile` agent available).
+The near-term arc (detail lives in the tickets, not here): finish the **engine→store wiring**
+(dedup, coverage), do the **deferred transfer→category** piece from slice 03, then the
+**platform Keychain/Secure-Enclave key ceremony**. After the store is fully wired, **P3 — the
+Core SwiftUI app** (onboarding → import → list → categorize → dashboard) begins as its own
+feature dir via `speckit.specify`.
 
 ---
 
@@ -191,7 +168,7 @@ core/crates/kaname-core/   Rust engine (kaname-core)
   src/statement/           the 10 readers + shared seams
   src/{model,dedup,coverage,transfer,categorize,store,ffi,lib}.rs
   build.rs                 non-Apple SQLCipher/LibTomCrypt linking (no OpenSSL)
-  tests/{parity,store,store_categorization}.rs  golden harness + store behavioural tests
+  tests/                   parity golden harness + store behavioural tests (store*.rs)
 ios/                       SwiftUI app (Tuist). Tests/*Tests.swift = per-bank + engine + store bridge tests
 fixtures/<bank>/<kind>/    synthetic golden vectors (NO real data — Constitution I)
 .scratch/<slug>/           THE task tracker: spec.md + issues/NN-*.md   ← pick up work here
