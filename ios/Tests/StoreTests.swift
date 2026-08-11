@@ -182,6 +182,37 @@ struct StoreTests {
         #expect(inflow.transferGroupId == group)
     }
 
+    @Test("find_duplicates links a cross-source duplicate over the bridge")
+    func findDuplicatesLinksACrossSourceDuplicateOverTheBridge() throws {
+        let db = Self.tempDatabase()
+        defer { try? FileManager.default.removeItem(at: db.dir) }
+
+        let store = try Store.open(path: db.path, key: Self.key)
+        // The bank account is created first, so its row is the survivor.
+        let bankId = try store.insertAccount(account: Self.dedupBankAccount())
+        let cardId = try store.insertAccount(account: Self.dedupCardAccount())
+
+        // The same spend seen twice: once on the bank ledger, once on the card statement.
+        _ = try store.insertTransaction(
+            txn: Self.dedupLeg(bankId, "POS SWIGGY BANGALORE RRN1234"))
+        _ = try store.insertTransaction(
+            txn: Self.dedupLeg(cardId, "SWIGGY BANGALORE 1234567890123"))
+
+        let summary = try store.findDuplicates()
+        #expect(summary.duplicatesLinked == 1)
+        #expect(summary.canonical == 1)
+        #expect(summary.fuzzy == 0)
+
+        let survivor = try #require(try store.listTransactions(accountId: bankId).first)
+        let duplicate = try #require(try store.listTransactions(accountId: cardId).first)
+        #expect(survivor.supersededBy == nil)
+        #expect(survivor.dedupLayer == nil)
+        #expect(duplicate.supersededBy == survivor.id)
+        #expect(duplicate.dedupLayer == .canonical)
+        // Linked, never deleted — the link is reversible and the UI decides what to hide.
+        #expect(duplicate.isDeleted == false)
+    }
+
     private static func cardAccount() -> NewAccount {
         NewAccount(
             name: "HDFC Card",
@@ -230,6 +261,47 @@ struct StoreTests {
         )
     }
 
+    /// A bank account created before the card account — account `createdAt` order is what
+    /// decides which side of a duplicate survives.
+    private static func dedupBankAccount() -> NewAccount {
+        NewAccount(
+            name: "HDFC Savings",
+            bankCode: "HDFC",
+            isCreditCard: false,
+            currency: "INR",
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z"
+        )
+    }
+
+    private static func dedupCardAccount() -> NewAccount {
+        NewAccount(
+            name: "HDFC Card",
+            bankCode: "HDFC",
+            isCreditCard: true,
+            currency: "INR",
+            createdAt: "2026-02-01T00:00:00Z",
+            updatedAt: "2026-02-01T00:00:00Z"
+        )
+    }
+
+    private static func dedupLeg(_ accountId: String, _ description: String) -> NewTransaction {
+        NewTransaction(
+            accountId: accountId,
+            date: "2026-07-04",
+            descriptionRaw: description,
+            amount: decimal("450.00"),
+            direction: .debit,
+            currency: "INR",
+            sourceCategory: nil,
+            categoryId: nil,
+            categorisedBy: nil,
+            createdAt: "2026-08-08T00:00:00Z",
+            updatedAt: "2026-08-08T00:00:00Z"
+        )
+    }
+
+    /// Create the database and seed one account, releasing the `Store` on return so the
     /// Create the database and seed one account, releasing the `Store` on return so the
     /// file is no longer held open when the caller re-opens it.
     private static func seed(path: String) throws {
