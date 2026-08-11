@@ -52,8 +52,8 @@ pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};
 pub use statement::reconcile::{ReconcileResult, ReconcileStatus};
 pub use statement::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
 pub use store::{
-    CategorizeSummary, NewAccount, NewCategory, NewTransaction, Store, StoreError, StoredAccount,
-    StoredTransaction, TransferSummary,
+    CategorizeSummary, DedupSummary, NewAccount, NewCategory, NewTransaction, Store, StoreError,
+    StoredAccount, StoredTransaction, TransferSummary,
 };
 pub use transfer::{TransferInput, TransferPair};
 
