@@ -31,11 +31,12 @@ use crate::categorize::{
     MerchantRule, Rule, RuleMatch, SourceCategoryMapping, Stage,
 };
 use crate::model::Direction;
+use crate::transfer::TransferInput;
 
 /// The schema version this build of the core knows how to run. The migration runner
 /// applies every version up to and including this one; re-opening an up-to-date database
 /// is a no-op.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 /// Forward-only schema **v1**: the minimal real foundation the engines will later read
 /// from and write to. Money is TEXT (base-10 `Decimal`), dates/timestamps are ISO-8601
@@ -108,6 +109,16 @@ CREATE TABLE rules (
     value       TEXT NOT NULL,
     category_id TEXT NOT NULL REFERENCES categories(id)
 ) STRICT;
+"#;
+
+/// Forward-only schema **v3**: transfer identity. `is_transfer` flags a leg the transfer
+/// detector paired; both legs of one self-transfer share a minted `transfer_group_id`. Constant
+/// `ADD COLUMN` defaults so the migration runs on a populated table (as v2's did). Category
+/// assignment for transfers is a later slice — this slice writes only the identity.
+const SCHEMA_V3: &str = r#"
+ALTER TABLE transactions ADD COLUMN is_transfer INTEGER NOT NULL DEFAULT 0
+    CHECK (is_transfer IN (0, 1));
+ALTER TABLE transactions ADD COLUMN transfer_group_id TEXT;
 "#;
 
 /// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
@@ -211,6 +222,8 @@ pub struct StoredTransaction {
     pub category_id: Option<String>,
     pub categorised_by: Option<String>,
     pub is_deleted: bool,
+    pub is_transfer: bool,
+    pub transfer_group_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -229,6 +242,14 @@ pub struct NewCategory {
 pub struct CategorizeSummary {
     pub categorized: u32,
     pub uncategorized: u32,
+}
+
+/// The outcome of [`Store::detect_transfers`]: how many self-transfer pairs were linked, and
+/// how many of those had a credit-card leg (a bill payment vs a bank-to-bank self transfer).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, uniffi::Record)]
+pub struct TransferSummary {
+    pub pairs_linked: u32,
+    pub credit_card_payments: u32,
 }
 
 /// The encrypted on-device store — a stateful UniFFI object owning one SQLCipher database.
@@ -372,7 +393,7 @@ impl Store {
         let mut stmt = conn.prepare(
             "SELECT id, account_id, date, description_raw, amount, direction, currency, \
                     category_id, categorised_by, is_deleted, created_at, updated_at, \
-                    source_category \
+                    source_category, is_transfer, transfer_group_id \
              FROM transactions WHERE account_id = ?1 ORDER BY rowid",
         )?;
         let rows = stmt
@@ -541,6 +562,42 @@ impl Store {
         tx.commit()?;
         Ok(summary)
     }
+
+    /// Detect self-transfers across **all** accounts and tag both legs of each pair.
+    ///
+    /// Loads every non-deleted, not-yet-linked transaction (`transfer_group_id IS NULL`)
+    /// joined to its owning account for `is_credit_card`, runs the pure
+    /// [`crate::transfer::detect_transfers`] matcher, and for each returned pair mints one
+    /// `transfer_group_id` and sets `is_transfer = 1` on both legs. Idempotent: already-linked
+    /// rows are excluded from the candidate load and the UPDATE is guarded by
+    /// `transfer_group_id IS NULL`, so re-running links nothing new. Writes only the transfer
+    /// identity — category assignment is a later slice.
+    pub fn detect_transfers(&self) -> Result<TransferSummary, StoreError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+
+        let inputs = load_transfer_inputs(&tx)?;
+        let pairs = crate::transfer::detect_transfers(&inputs);
+
+        let mut summary = TransferSummary::default();
+        {
+            let mut update = tx.prepare(
+                "UPDATE transactions SET is_transfer = 1, transfer_group_id = ?2 \
+                 WHERE id = ?1 AND transfer_group_id IS NULL",
+            )?;
+            for pair in &pairs {
+                let group_id = mint_id(&tx)?;
+                update.execute(params![pair.outflow_id, group_id])?;
+                update.execute(params![pair.inflow_id, group_id])?;
+                summary.pairs_linked += 1;
+                if pair.is_credit_card_payment {
+                    summary.credit_card_payments += 1;
+                }
+            }
+        }
+        tx.commit()?;
+        Ok(summary)
+    }
 }
 
 impl Store {
@@ -588,6 +645,10 @@ fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), S
         }
         2 => {
             tx.execute_batch(SCHEMA_V2).map_err(StoreError::migration)?;
+            Ok(())
+        }
+        3 => {
+            tx.execute_batch(SCHEMA_V3).map_err(StoreError::migration)?;
             Ok(())
         }
         other => Err(StoreError::Migration {
@@ -647,6 +708,8 @@ fn map_transaction(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
             created_at: row.get(10)?,
             updated_at: row.get(11)?,
             source_category: row.get(12)?,
+            is_transfer: row.get::<_, i64>(13)? != 0,
+            transfer_group_id: row.get(14)?,
         })
     })())
 }
@@ -689,6 +752,48 @@ fn load_account_transactions(
                 },
             ))
         })
+        .collect()
+}
+
+/// Load every non-deleted, not-yet-linked transaction across **all** accounts as
+/// [`TransferInput`]s for the transfer matcher, joined to each row's owning account for
+/// `is_credit_card`. Already-linked rows (`transfer_group_id` set) are excluded so re-running
+/// detection is idempotent. Oldest first (deterministic input order).
+fn load_transfer_inputs(conn: &Connection) -> Result<Vec<TransferInput>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.account_id, a.is_credit_card, t.date, t.amount, t.direction, \
+                t.description_raw \
+         FROM transactions t JOIN accounts a ON a.id = t.account_id \
+         WHERE t.is_deleted = 0 AND t.transfer_group_id IS NULL \
+         ORDER BY t.rowid",
+    )?;
+    let raw = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)? != 0,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    raw.into_iter()
+        .map(
+            |(id, account_id, is_credit_card, date, amount, direction, description)| {
+                Ok(TransferInput {
+                    id,
+                    account_id,
+                    is_credit_card,
+                    date: date_from_sql(&date)?,
+                    amount: amount_from_sql(&amount)?,
+                    direction: direction_from_sql(&direction)?,
+                    description,
+                })
+            },
+        )
         .collect()
 }
 
@@ -1052,5 +1157,99 @@ mod tests {
             [],
         )
         .expect("merchant_map usable after upgrade");
+    }
+
+    #[test]
+    fn migrating_v2_to_v3_preserves_existing_rows() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+
+        // Build a populated v2 database (v1 schema + v2 facts), as an older app would leave it.
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 1).expect("apply v1");
+            apply_migration(&tx, 2).expect("apply v2");
+            tx.pragma_update(None, "user_version", 2).unwrap();
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+                 VALUES ('a1', 'Savings', 'HDFC', 0, 'INR', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO transactions \
+                 (id, account_id, date, description_raw, amount, direction, currency, \
+                  is_deleted, created_at, updated_at) \
+                 VALUES ('t1', 'a1', '2026-07-04', 'desc', '1.00', 'Debit', 'INR', 0, 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        // Upgrade v2 → v3: the transfer-identity `ADD COLUMN`s run on a *populated* table.
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 3).expect("apply v3");
+            tx.pragma_update(None, "user_version", 3).unwrap();
+            tx.commit().unwrap();
+        }
+
+        // The pre-existing row survived; it defaults to a non-transfer with no group.
+        let (is_transfer, group): (i64, Option<String>) = conn
+            .query_row(
+                "SELECT is_transfer, transfer_group_id FROM transactions WHERE id = 't1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(is_transfer, 0);
+        assert_eq!(group, None);
+        let accounts: i64 = conn
+            .query_row("SELECT count(*) FROM accounts", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(accounts, 1);
+    }
+
+    #[test]
+    fn load_transfer_inputs_excludes_deleted_and_linked_and_joins_card_flag() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=SCHEMA_VERSION {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.pragma_update(None, "user_version", SCHEMA_VERSION)
+                .unwrap();
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+                 VALUES ('bank', 'Savings', 'HDFC', 0, 'INR', 't', 't'), \
+                        ('card', 'Card', 'HDFC', 1, 'INR', 't', 't')",
+                [],
+            )
+            .unwrap();
+            // A live bank row (fed), a deleted row (excluded), an already-linked row (excluded),
+            // and a live card row (fed, is_credit_card = 1 via the account join).
+            tx.execute_batch(
+                "INSERT INTO transactions \
+                   (id, account_id, date, description_raw, amount, direction, currency, \
+                    is_deleted, transfer_group_id, created_at, updated_at) VALUES \
+                   ('live', 'bank', '2026-07-04', 'd', '1.00', 'Debit',  'INR', 0, NULL, 't', 't'), \
+                   ('del',  'bank', '2026-07-04', 'd', '1.00', 'Debit',  'INR', 1, NULL, 't', 't'), \
+                   ('done', 'bank', '2026-07-04', 'd', '1.00', 'Debit',  'INR', 0, 'g1', 't', 't'), \
+                   ('cardc','card', '2026-07-04', 'd', '1.00', 'Credit', 'INR', 0, NULL, 't', 't');",
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        let inputs = load_transfer_inputs(&conn).expect("load");
+        let ids: Vec<&str> = inputs.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(ids, vec!["live", "cardc"]);
+        let card = inputs.iter().find(|i| i.id == "cardc").unwrap();
+        assert!(card.is_credit_card);
+        let bank = inputs.iter().find(|i| i.id == "live").unwrap();
+        assert!(!bank.is_credit_card);
     }
 }

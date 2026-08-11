@@ -53,7 +53,7 @@ pub use statement::reconcile::{ReconcileResult, ReconcileStatus};
 pub use statement::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
 pub use store::{
     CategorizeSummary, NewAccount, NewCategory, NewTransaction, Store, StoreError, StoredAccount,
-    StoredTransaction,
+    StoredTransaction, TransferSummary,
 };
 pub use transfer::{TransferInput, TransferPair};
 
