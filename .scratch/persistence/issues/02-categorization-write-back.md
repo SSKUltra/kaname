@@ -15,7 +15,7 @@ Constitution I/II.
 **Blocked by:** #01 encrypted-store bootstrap — **done** (schema v1: accounts / categories /
 transactions; `Store::open`, migrations, typed `StoreError`).
 
-**Status:** ready-for-agent
+**Status:** resolved (shipped — PR #20: schema v2 facts + `categorize_account` write-back)
 
 ## Why this slice
 

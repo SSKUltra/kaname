@@ -28,8 +28,10 @@ unblocked, `ready-for-agent` ticket, read its `spec.md`, and implement.
 **Current feature dirs:**
 - `.scratch/categorization/` — deterministic categorization stack. **Shipped.**
 - `.scratch/persistence/` — encrypted on-device store. `spec.md` = design of record;
-  `issues/01-encrypted-store-bootstrap.md` = **shipped** (slice 01). Later slices (engine
-  wiring, key ceremony, …) will be new `issues/NN-*.md` here.
+  `issues/01-encrypted-store-bootstrap.md` (slice 01) and
+  `issues/02-categorization-write-back.md` (slice 02) both **shipped** (`Status: resolved`).
+  Later slices (dedup/coverage/transfer persistence, the key ceremony, …) will be new
+  `issues/NN-*.md` here.
 
 ---
 
@@ -48,11 +50,12 @@ unblocked, `ready-for-agent` ticket, read its `spec.md`, and implement.
 | **Transfer detection** | ✅ `transfer::detect_transfers` (outflow-anchored greedy pairing; ±1 day/±₹1) |
 | **Categorization stack** | ✅ `categorize` (CC rules → T1 source-map → T2 merchant-map → T3 rules; T4/LLM excluded); `default_categories()` = 23 builtins |
 | **Encrypted store bootstrap** | ✅ `store::Store` (uniffi::Object) — SQLCipher-encrypted SQLite, schema v1 (accounts / seeded categories / transactions), forward-only migrations, wrong-key fail-closed. **No OpenSSL** (CommonCrypto on Apple, LibTomCrypt on Linux/CI). PR #18 |
+| **Categorization write-back** | ✅ schema v2 — `merchant_map`/`source_category_map`/`rules` facts + `transactions.source_category`; `store.categorize_account` runs the pure stack over stored rows and persists `category_id`/`categorised_by`. PR #20 |
 | **Golden-parity harness** | ✅ `tests/parity.rs` (per-bank + reconcile/dedup/coverage/transfer) |
 | **Privacy-egress gate** | ✅ `make core-privacy-audit` (CI-enforced; denylists networking + `openssl`/`openssl-sys`) |
 
-Tests (current): ≈151 Rust (unit + parity + store) + 43 Swift across 17 suites; 0 network
-deps. `main` at the encrypted-store bootstrap: `bd9b010`.
+Tests (current): ≈158 Rust (unit + parity + store) + 44 Swift across 17 suites; 0 network
+deps. `main` at the categorization write-back: `1066f5b`.
 
 **Engine source** (`core/crates/kaname-core/src/`): the 10 readers + shared seams under
 `statement/`; `dedup.rs`, `coverage.rs`, `transfer.rs`, `categorize.rs`, `store.rs`;
@@ -65,14 +68,12 @@ deps. `main` at the encrypted-store bootstrap: `bd9b010`.
 The deterministic engine + the encrypted-store foundation are in. Remaining candidates,
 roughly in dependency order (each becomes a `.scratch/<slug>/issues/NN-*.md`):
 
-1. **Engine→store wiring** — the store's stated next step (`persistence/spec.md` "Out of
-   Scope": *"feeding categorize/dedup/coverage/transfer from persisted rows and saving
-   their results"*). Sensible sub-slices:
-   - *Categorization write-back*: run `categorize_batch` over persisted rows; save
-     `category_id`/`categorised_by`; add the `merchant_map` + `source_category_map` tables
-     that feed T1/T2.
-   - *Dedup / coverage / transfer persistence*: persist statements/transactions as the
-     facts these engines compare; save transfer groups (`transfer_group_id`), supersede state.
+1. **Engine→store wiring: dedup / coverage / transfer persistence** — the remaining half of
+   the store's stated next step (`persistence/spec.md` "Out of Scope": *"feeding
+   categorize/dedup/coverage/transfer from persisted rows and saving their results"*).
+   Categorization write-back is **done** (slice 02); persist statements/transactions as the
+   facts dedup/coverage/transfer compare, and save their results (transfer groups /
+   `transfer_group_id`, de-dup supersede state).
 2. **iOS Keychain / Secure Enclave key ceremony** — generate + hold the 256-bit key
    on-device, mark the DB `NSFileProtectionComplete`. The store's FFI contract is fixed;
    this is the platform half. (Deferred by `persistence/issues/01`.)
@@ -164,9 +165,12 @@ changes don't need linting/building/testing.
 - `categorize.rs` — `categorize` / `categorize_batch` (first-wins stack), `default_categories()`
   (23 builtins: code + name + `Classification`), `prepare_merchants`/`prepare_rules`.
 - `store.rs` — `Store::open(path, key)` (SQLCipher, forward-only `PRAGMA user_version`
-  migrations, `StoreError` typed errors, wrong-key fail-closed), `insert_account`/
-  `insert_transaction`/`list_*`/`list_categories`. **Timestamps are explicit inputs** (the
-  core reads no wall-clock); the platform owns the Keychain key + file path + NSFileProtection.
+  migrations to **schema v2**, `StoreError` typed errors, wrong-key fail-closed);
+  `insert_account`/`insert_transaction`/`list_*`; the categorization facts
+  (`insert_merchant_rule`/`insert_source_category_mapping`/`insert_rule`/`insert_category`
+  + their `list_*`); and `categorize_account` (runs the pure stack over stored rows and
+  persists `category_id`/`categorised_by`). **Timestamps are explicit inputs** (the core
+  reads no wall-clock); the platform owns the Keychain key + file path + NSFileProtection.
 - `common.rs` / `polarity.rs` — `parse_amount`/`parse_date`/`find_last4`/…; `classify`.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
 
@@ -179,7 +183,7 @@ core/crates/kaname-core/   Rust engine (kaname-core)
   src/statement/           the 10 readers + shared seams
   src/{model,dedup,coverage,transfer,categorize,store,ffi,lib}.rs
   build.rs                 non-Apple SQLCipher/LibTomCrypt linking (no OpenSSL)
-  tests/{parity,store}.rs  golden-fixture harness + store behavioural tests
+  tests/{parity,store,store_categorization}.rs  golden harness + store behavioural tests
 ios/                       SwiftUI app (Tuist). Tests/*Tests.swift = per-bank + engine + store bridge tests
 fixtures/<bank>/<kind>/    synthetic golden vectors (NO real data — Constitution I)
 .scratch/<slug>/           THE task tracker: spec.md + issues/NN-*.md   ← pick up work here

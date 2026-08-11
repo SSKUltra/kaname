@@ -11,7 +11,7 @@ iOS, LibTomCrypt on Linux/CI — so the privacy-egress gate stays strict. Design
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved (shipped — PR #18: schema v1 + `Store`, migrations, typed `StoreError`, wrong-key fail-closed)
 
 Interface shape (to be confirmed by the build spike):
 
