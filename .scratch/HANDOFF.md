@@ -28,10 +28,10 @@ unblocked, `ready-for-agent` ticket, read its `spec.md`, and implement.
 **Current feature dirs:**
 - `.scratch/categorization/` — deterministic categorization stack. **Shipped.**
 - `.scratch/persistence/` — encrypted on-device store. `spec.md` = design of record;
-  `issues/01-encrypted-store-bootstrap.md` (slice 01) and
-  `issues/02-categorization-write-back.md` (slice 02) both **shipped** (`Status: resolved`).
-  Later slices (dedup/coverage/transfer persistence, the key ceremony, …) will be new
-  `issues/NN-*.md` here.
+  `issues/01-encrypted-store-bootstrap.md` (slice 01), `issues/02-categorization-write-back.md`
+  (slice 02) and `issues/03-transfer-persistence.md` (slice 03) all **shipped**
+  (`Status: resolved`). Later slices (dedup/coverage persistence, the deferred
+  transfer→category assignment, the key ceremony, …) will be new `issues/NN-*.md` here.
 
 ---
 
@@ -51,11 +51,12 @@ unblocked, `ready-for-agent` ticket, read its `spec.md`, and implement.
 | **Categorization stack** | ✅ `categorize` (CC rules → T1 source-map → T2 merchant-map → T3 rules; T4/LLM excluded); `default_categories()` = 23 builtins |
 | **Encrypted store bootstrap** | ✅ `store::Store` (uniffi::Object) — SQLCipher-encrypted SQLite, schema v1 (accounts / seeded categories / transactions), forward-only migrations, wrong-key fail-closed. **No OpenSSL** (CommonCrypto on Apple, LibTomCrypt on Linux/CI). PR #18 |
 | **Categorization write-back** | ✅ schema v2 — `merchant_map`/`source_category_map`/`rules` facts + `transactions.source_category`; `store.categorize_account` runs the pure stack over stored rows and persists `category_id`/`categorised_by`. PR #20 |
+| **Transfer persistence** | ✅ schema v3 — `transactions.is_transfer` + shared `transfer_group_id`; `store.detect_transfers` (first **cross-account** op) tags both legs of each pair, idempotent (guarded UPDATE). **Tag-only** — category assignment + categorize/transfer precedence deferred. PR #22 |
 | **Golden-parity harness** | ✅ `tests/parity.rs` (per-bank + reconcile/dedup/coverage/transfer) |
 | **Privacy-egress gate** | ✅ `make core-privacy-audit` (CI-enforced; denylists networking + `openssl`/`openssl-sys`) |
 
-Tests (current): ≈158 Rust (unit + parity + store) + 44 Swift across 17 suites; 0 network
-deps. `main` at the categorization write-back: `1066f5b`.
+Tests (current): ≈167 Rust (unit + parity + store) + 45 Swift across 17 suites; 0 network
+deps. `main` at the transfer-persistence merge: `b846902`.
 
 **Engine source** (`core/crates/kaname-core/src/`): the 10 readers + shared seams under
 `statement/`; `dedup.rs`, `coverage.rs`, `transfer.rs`, `categorize.rs`, `store.rs`;
@@ -68,16 +69,21 @@ deps. `main` at the categorization write-back: `1066f5b`.
 The deterministic engine + the encrypted-store foundation are in. Remaining candidates,
 roughly in dependency order (each becomes a `.scratch/<slug>/issues/NN-*.md`):
 
-1. **Engine→store wiring: dedup / coverage / transfer persistence** — the remaining half of
-   the store's stated next step (`persistence/spec.md` "Out of Scope": *"feeding
+1. **Engine→store wiring: dedup + coverage persistence** — the remaining half of the store's
+   stated next step (`persistence/spec.md` "Out of Scope": *"feeding
    categorize/dedup/coverage/transfer from persisted rows and saving their results"*).
-   Categorization write-back is **done** (slice 02); persist statements/transactions as the
-   facts dedup/coverage/transfer compare, and save their results (transfer groups /
-   `transfer_group_id`, de-dup supersede state).
-2. **iOS Keychain / Secure Enclave key ceremony** — generate + hold the 256-bit key
+   Categorization write-back (slice 02) and **transfer persistence (slice 03)** are **done**;
+   what's left is **dedup** (persist statements/transactions as the facts it compares + save
+   supersede state) and **coverage** (needs a **new `statements` table** + transaction
+   provenance — `from_full_statement`/`statement_id` — that `compute_coverage` reads).
+2. **Deferred from slice 03: transfer→category assignment** — assign Self Transfer /
+   Credit Card Bill Payment to tagged transfers and settle the **categorize-vs-transfer
+   precedence** (which engine wins; don't clobber a transfer tag on `categorize_account`
+   re-run). Small, but its own slice by the tag-only decision.
+3. **iOS Keychain / Secure Enclave key ceremony** — generate + hold the 256-bit key
    on-device, mark the DB `NSFileProtectionComplete`. The store's FFI contract is fixed;
    this is the platform half. (Deferred by `persistence/issues/01`.)
-3. **P3 — Core SwiftUI app** — onboarding → import (PDFKit → readers) → transaction list →
+4. **P3 — Core SwiftUI app** — onboarding → import (PDFKit → readers) → transaction list →
    categorize → dashboard. The coverage map + reconcile/balance-chain verdicts are the
    first natural UI surfaces (apply the `make-interfaces-feel-better` skill;
    `gem-designer-mobile` agent available).
@@ -165,12 +171,14 @@ changes don't need linting/building/testing.
 - `categorize.rs` — `categorize` / `categorize_batch` (first-wins stack), `default_categories()`
   (23 builtins: code + name + `Classification`), `prepare_merchants`/`prepare_rules`.
 - `store.rs` — `Store::open(path, key)` (SQLCipher, forward-only `PRAGMA user_version`
-  migrations to **schema v2**, `StoreError` typed errors, wrong-key fail-closed);
+  migrations to **schema v3**, `StoreError` typed errors, wrong-key fail-closed);
   `insert_account`/`insert_transaction`/`list_*`; the categorization facts
   (`insert_merchant_rule`/`insert_source_category_mapping`/`insert_rule`/`insert_category`
-  + their `list_*`); and `categorize_account` (runs the pure stack over stored rows and
-  persists `category_id`/`categorised_by`). **Timestamps are explicit inputs** (the core
-  reads no wall-clock); the platform owns the Keychain key + file path + NSFileProtection.
+  + their `list_*`); `categorize_account` (runs the pure stack over stored rows and
+  persists `category_id`/`categorised_by`); and `detect_transfers` (cross-account — runs the
+  pure matcher over stored rows and tags both legs `is_transfer`/`transfer_group_id`).
+  **Timestamps are explicit inputs** (the core reads no wall-clock); the platform owns the
+  Keychain key + file path + NSFileProtection.
 - `common.rs` / `polarity.rs` — `parse_amount`/`parse_date`/`find_last4`/…; `classify`.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
 
