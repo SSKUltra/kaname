@@ -655,53 +655,8 @@ impl Store {
     /// keyword match — so re-running this can never clobber a transfer's category.
     pub fn categorize_account(&self, account_id: String) -> Result<CategorizeSummary, StoreError> {
         let mut conn = self.lock();
-
-        let account: Option<(String, bool)> = conn
-            .query_row(
-                "SELECT bank_code, is_credit_card FROM accounts WHERE id = ?1",
-                params![account_id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0)),
-            )
-            .optional()?;
-        let Some((bank_code, is_credit_card)) = account else {
-            return Ok(CategorizeSummary::default());
-        };
-
         let tx = conn.transaction()?;
-
-        let catalog = load_categories(&tx)?;
-        let merchants = crate::categorize::prepare_merchants(&load_merchant_rules(&tx)?);
-        let rules = crate::categorize::prepare_rules(&load_rules(&tx)?);
-        let source_map = load_source_category_mappings(&tx)?;
-        let pending = load_account_transactions(&tx, &account_id, &bank_code, is_credit_card)?;
-
-        let mut summary = CategorizeSummary::default();
-        {
-            let mut update = tx.prepare(
-                "UPDATE transactions SET category_id = ?2, categorised_by = ?3 WHERE id = ?1",
-            )?;
-            for (txn_id, txn) in &pending {
-                match crate::categorize::categorize(txn, &catalog, &merchants, &rules, &source_map)
-                {
-                    Some(decision) => {
-                        update.execute(params![
-                            txn_id,
-                            category_ref_to_id(&decision.category_ref),
-                            stage_to_sql(decision.stage),
-                        ])?;
-                        summary.categorized += 1;
-                    }
-                    None => {
-                        update.execute(params![
-                            txn_id,
-                            Option::<String>::None,
-                            Option::<String>::None,
-                        ])?;
-                        summary.uncategorized += 1;
-                    }
-                }
-            }
-        }
+        let summary = categorize_account_in(&tx, &account_id)?;
         tx.commit()?;
         Ok(summary)
     }
@@ -785,60 +740,7 @@ impl Store {
     pub fn find_duplicates(&self) -> Result<DedupSummary, StoreError> {
         let mut conn = self.lock();
         let tx = conn.transaction()?;
-
-        let by_account = load_dedup_candidates(&tx)?;
-        let mut links: Vec<(String, String, DedupLayer)> = Vec::new();
-        let mut pool: Vec<(String, Transaction)> = Vec::new();
-
-        for incoming in by_account {
-            let existing_txns: Vec<Transaction> = pool.iter().map(|(_, t)| t.clone()).collect();
-            let incoming_txns: Vec<Transaction> = incoming.iter().map(|(_, t)| t.clone()).collect();
-            let matches = crate::dedup::cross_source_duplicates(&existing_txns, &incoming_txns);
-
-            let mut consumed = vec![false; pool.len()];
-            let mut superseded = vec![false; incoming.len()];
-            for CrossSourceMatch {
-                incoming_index,
-                existing_index,
-                layer,
-            } in matches
-            {
-                let (loser_id, _) = &incoming[incoming_index as usize];
-                let (winner_id, _) = &pool[existing_index as usize];
-                links.push((loser_id.clone(), winner_id.clone(), layer));
-                consumed[existing_index as usize] = true;
-                superseded[incoming_index as usize] = true;
-            }
-
-            let mut kept = 0;
-            pool.retain(|_| {
-                let keep = !consumed[kept];
-                kept += 1;
-                keep
-            });
-            pool.extend(
-                incoming
-                    .into_iter()
-                    .zip(superseded)
-                    .filter(|(_, dup)| !dup)
-                    .map(|(row, _)| row),
-            );
-        }
-        let mut summary = DedupSummary::default();
-        {
-            let mut update = tx.prepare(
-                "UPDATE transactions SET superseded_by = ?2, dedup_layer = ?3 \
-                 WHERE id = ?1 AND superseded_by IS NULL",
-            )?;
-            for (loser_id, winner_id, layer) in &links {
-                update.execute(params![loser_id, winner_id, dedup_layer_to_sql(*layer)])?;
-                summary.duplicates_linked += 1;
-                match layer {
-                    DedupLayer::Canonical => summary.canonical += 1,
-                    DedupLayer::Fuzzy => summary.fuzzy += 1,
-                }
-            }
-        }
+        let summary = find_duplicates_in(&tx)?;
         tx.commit()?;
         Ok(summary)
     }
@@ -901,6 +803,118 @@ impl Store {
         }
         Ok(())
     }
+}
+
+/// Categorize account rows inside an already-open SQLite transaction.
+#[doc(hidden)]
+pub fn categorize_account_in(
+    tx: &rusqlite::Transaction<'_>,
+    account_id: &str,
+) -> Result<CategorizeSummary, StoreError> {
+    let account: Option<(String, bool)> = tx
+        .query_row(
+            "SELECT bank_code, is_credit_card FROM accounts WHERE id = ?1",
+            params![account_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0)),
+        )
+        .optional()?;
+    let Some((bank_code, is_credit_card)) = account else {
+        return Ok(CategorizeSummary::default());
+    };
+
+    let catalog = load_categories(tx)?;
+    let merchants = crate::categorize::prepare_merchants(&load_merchant_rules(tx)?);
+    let rules = crate::categorize::prepare_rules(&load_rules(tx)?);
+    let source_map = load_source_category_mappings(tx)?;
+    let pending = load_account_transactions(tx, account_id, &bank_code, is_credit_card)?;
+
+    let mut summary = CategorizeSummary::default();
+    {
+        let mut update = tx.prepare(
+            "UPDATE transactions SET category_id = ?2, categorised_by = ?3 WHERE id = ?1",
+        )?;
+        for (txn_id, txn) in &pending {
+            match crate::categorize::categorize(txn, &catalog, &merchants, &rules, &source_map) {
+                Some(decision) => {
+                    update.execute(params![
+                        txn_id,
+                        category_ref_to_id(&decision.category_ref),
+                        stage_to_sql(decision.stage),
+                    ])?;
+                    summary.categorized += 1;
+                }
+                None => {
+                    update.execute(params![
+                        txn_id,
+                        Option::<String>::None,
+                        Option::<String>::None,
+                    ])?;
+                    summary.uncategorized += 1;
+                }
+            }
+        }
+    }
+    Ok(summary)
+}
+
+/// Link duplicate rows inside an already-open SQLite transaction.
+#[doc(hidden)]
+pub fn find_duplicates_in(tx: &rusqlite::Transaction<'_>) -> Result<DedupSummary, StoreError> {
+    let by_account = load_dedup_candidates(tx)?;
+    let mut links: Vec<(String, String, DedupLayer)> = Vec::new();
+    let mut pool: Vec<(String, Transaction)> = Vec::new();
+
+    for incoming in by_account {
+        let existing_txns: Vec<Transaction> = pool.iter().map(|(_, t)| t.clone()).collect();
+        let incoming_txns: Vec<Transaction> = incoming.iter().map(|(_, t)| t.clone()).collect();
+        let matches = crate::dedup::cross_source_duplicates(&existing_txns, &incoming_txns);
+
+        let mut consumed = vec![false; pool.len()];
+        let mut superseded = vec![false; incoming.len()];
+        for CrossSourceMatch {
+            incoming_index,
+            existing_index,
+            layer,
+        } in matches
+        {
+            let (loser_id, _) = &incoming[incoming_index as usize];
+            let (winner_id, _) = &pool[existing_index as usize];
+            links.push((loser_id.clone(), winner_id.clone(), layer));
+            consumed[existing_index as usize] = true;
+            superseded[incoming_index as usize] = true;
+        }
+
+        let mut kept = 0;
+        pool.retain(|_| {
+            let keep = !consumed[kept];
+            kept += 1;
+            keep
+        });
+        pool.extend(
+            incoming
+                .into_iter()
+                .zip(superseded)
+                .filter(|(_, dup)| !dup)
+                .map(|(row, _)| row),
+        );
+    }
+
+    let mut summary = DedupSummary::default();
+    {
+        let mut update = tx.prepare(
+            "UPDATE transactions SET superseded_by = ?2, dedup_layer = ?3 \
+             WHERE id = ?1 AND superseded_by IS NULL",
+        )?;
+        for (loser_id, winner_id, layer) in &links {
+            update.execute(params![loser_id, winner_id, dedup_layer_to_sql(*layer)])?;
+            summary.duplicates_linked += 1;
+            match layer {
+                DedupLayer::Canonical => summary.canonical += 1,
+                DedupLayer::Fuzzy => summary.fuzzy += 1,
+            }
+        }
+    }
+    Ok(summary)
 }
 
 /// Apply the single migration that lifts the schema to `version`.
