@@ -251,6 +251,57 @@ pub enum StatementSource {
     Alert,
 }
 
+/// The account an atomic statement import should attach to.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum ImportAccountTarget {
+    Existing {
+        id: String,
+    },
+    New {
+        name: String,
+        bank_code: String,
+        is_credit_card: bool,
+        last4: Option<String>,
+        currency: String,
+    },
+}
+
+/// One parsed transaction row for [`Store::import_statement`].
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NewImportTransaction {
+    pub date: NaiveDate,
+    pub description_raw: String,
+    pub amount: Decimal,
+    pub direction: Direction,
+    pub currency: String,
+    pub source_category: Option<String>,
+}
+
+/// The complete input for one atomic statement import.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ImportRequest {
+    pub account: ImportAccountTarget,
+    pub bank_code: String,
+    pub period_start: Option<NaiveDate>,
+    pub period_end: NaiveDate,
+    pub needs_review: bool,
+    pub source: StatementSource,
+    pub transactions: Vec<NewImportTransaction>,
+    pub now: String,
+}
+
+/// The summary returned after an atomic statement import commits.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportOutcome {
+    pub account_id: String,
+    pub account_created: bool,
+    pub statement_id: Option<String>,
+    pub transactions_inserted: u32,
+    pub duplicates_linked: u32,
+    pub categorized: u32,
+    pub uncategorized: u32,
+}
+
 /// A new statement to persist against an existing account — one import run. The store mints the
 /// id. `period_start` is optional (not every reader recovers it); `period_end` attributes the
 /// statement to its calendar month, and `needs_review` records that the run was incomplete or
@@ -527,6 +578,123 @@ impl Store {
             ],
         )?;
         Ok(id)
+    }
+
+    /// Persist one statement import atomically: account, statement row, transactions,
+    /// categorization, and cross-source duplicate links all commit or roll back together.
+    pub fn import_statement(&self, request: ImportRequest) -> Result<ImportOutcome, StoreError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+
+        let (account_id, account_created) = match request.account {
+            ImportAccountTarget::Existing { id } => {
+                let exists = tx
+                    .query_row("SELECT 1 FROM accounts WHERE id = ?1", params![id], |_| {
+                        Ok(())
+                    })
+                    .optional()?
+                    .is_some();
+                if !exists {
+                    return Err(StoreError::Sql {
+                        message: "import account does not exist".to_string(),
+                    });
+                }
+                (id, false)
+            }
+            ImportAccountTarget::New {
+                name,
+                bank_code,
+                is_credit_card,
+                last4,
+                currency,
+            } => {
+                let id = mint_id(&tx)?;
+                tx.execute(
+                    "INSERT INTO accounts \
+                     (id, name, bank_code, is_credit_card, last4, currency, created_at, updated_at) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+                    params![
+                        id,
+                        name,
+                        bank_code,
+                        is_credit_card as i64,
+                        last4,
+                        currency,
+                        request.now,
+                    ],
+                )?;
+                (id, true)
+            }
+        };
+
+        if request.transactions.is_empty() {
+            tx.commit()?;
+            return Ok(ImportOutcome {
+                account_id,
+                account_created,
+                statement_id: None,
+                transactions_inserted: 0,
+                duplicates_linked: 0,
+                categorized: 0,
+                uncategorized: 0,
+            });
+        }
+
+        let statement_id = mint_id(&tx)?;
+        tx.execute(
+            "INSERT INTO statements \
+             (id, account_id, bank_code, period_start, period_end, needs_review, source, \
+              created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                statement_id,
+                account_id,
+                request.bank_code,
+                request.period_start.map(date_to_sql),
+                date_to_sql(request.period_end),
+                request.needs_review as i64,
+                statement_source_to_sql(request.source),
+                request.now,
+            ],
+        )?;
+
+        {
+            let mut insert = tx.prepare(
+                "INSERT INTO transactions \
+                 (id, account_id, date, description_raw, amount, direction, currency, \
+                  source_category, category_id, categorised_by, statement_id, created_at, updated_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, NULL, ?9, ?10, ?10)",
+            )?;
+            for txn in &request.transactions {
+                let id = mint_id(&tx)?;
+                insert.execute(params![
+                    id,
+                    account_id,
+                    date_to_sql(txn.date),
+                    txn.description_raw,
+                    txn.amount.to_string(),
+                    direction_to_sql(txn.direction),
+                    txn.currency,
+                    txn.source_category,
+                    statement_id,
+                    request.now,
+                ])?;
+            }
+        }
+
+        let categorized = categorize_account_in(&tx, &account_id)?;
+        let duplicates = find_duplicates_in(&tx)?;
+        tx.commit()?;
+
+        Ok(ImportOutcome {
+            account_id,
+            account_created,
+            statement_id: Some(statement_id),
+            transactions_inserted: request.transactions.len() as u32,
+            duplicates_linked: duplicates.duplicates_linked,
+            categorized: categorized.categorized,
+            uncategorized: categorized.uncategorized,
+        })
     }
 
     /// All (non-deleted and deleted) transactions for `account_id`, oldest first.

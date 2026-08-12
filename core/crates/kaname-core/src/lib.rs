@@ -52,9 +52,9 @@ pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};
 pub use statement::reconcile::{ReconcileResult, ReconcileStatus};
 pub use statement::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
 pub use store::{
-    CategorizeSummary, DedupSummary, NewAccount, NewCategory, NewStatement, NewTransaction,
-    StatementSource, Store, StoreError, StoredAccount, StoredStatement, StoredTransaction,
-    TransferSummary,
+    CategorizeSummary, DedupSummary, ImportAccountTarget, ImportOutcome, ImportRequest, NewAccount,
+    NewCategory, NewImportTransaction, NewStatement, NewTransaction, StatementSource, Store,
+    StoreError, StoredAccount, StoredStatement, StoredTransaction, TransferSummary,
 };
 pub use transfer::{TransferInput, TransferPair};
 
