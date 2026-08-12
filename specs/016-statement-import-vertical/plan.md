@@ -192,11 +192,11 @@ import and the pipeline actor each appear in exactly one place.
 Two decisions were made on the product owner's behalf. Both are cheap to reverse and neither
 touches a settled Clarification.
 
-1. **The ten `Issuer.display_name` strings** (research R1) are invented user-facing brand copy
-   — e.g. `YES_CARD` → "YES Bank Credit Card" (the reader's comments call it "Yes Bank (Kiwi)")
-   and `FEDERAL_CARD` → "Scapia Federal Credit Card" (the Scapia co-brand on Federal Bank).
-   Because FR-033 makes the app render this verbatim, the wording *is* the product. It is one
-   table in one file.
+1. **The ten `Issuer.display_name` strings** (research R1) — **RESOLVED 2026-08-12**: the
+   product owner reviewed the table and approved it with two corrections, now applied in
+   research R1: `FEDERAL_CARD` → **"Scapia Credit Card"** and `YES_CARD` → **"Kiwi (YES Bank)
+   Credit Card"**. Because FR-033 makes the app render this verbatim, the wording *is* the
+   product. Implement the R1 table verbatim.
 2. **An import that recovers neither a statement period nor any transaction writes no
    `statements` row** (research R6). There is nothing to attribute it to, and an unattributable
    row would corrupt the coverage map. Every other case still records the import. The
