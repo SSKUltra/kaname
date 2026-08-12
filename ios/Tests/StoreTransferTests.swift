@@ -22,6 +22,7 @@ struct StoreTransferTests {
             name: name,
             bankCode: "HDFC",
             isCreditCard: isCreditCard,
+            last4: nil,
             currency: "INR",
             createdAt: "2026-08-08T00:00:00Z",
             updatedAt: "2026-08-08T00:00:00Z"

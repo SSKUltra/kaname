@@ -111,12 +111,12 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Phase 2E — Engine verification gate + FFI regeneration
 
-- [ ] T041 **GATE** `make core-lint` (cargo fmt --check + clippy -D warnings) from the repo-root `Makefile`.
-- [ ] T042 **GATE** `make core-test` — the whole engine suite, unit + parity + store. Targets live in the repo-root `Makefile`.
-- [ ] T043 **GATE** `make core-privacy-audit` — no networking crate, no `openssl-sys` in the shipped graph. Zero new dependencies were added, so this must stay green unchanged. Targets live in the repo-root `Makefile`.
-- [ ] T044 ⚠️ **FFI ordering** `make core-xcframework` — regenerates `ios/Generated/` and the xcframework. This slice changes the FFI surface (`Issuer`, `StatementKind`, `LineWords`, `ReaderError`, `detect_issuer`, `read_statement`, `import_statement`, `NewAccount.last4`), so this **must** run before any `tuist generate`. Targets live in the repo-root `Makefile`.
-- [ ] T045 Update the shipped Swift call sites for the widened `NewAccount`/`StoredAccount` in `ios/Tests/StoreTests.swift` (and any other `NewAccount(` construction under `ios/`) to supply `last4:`.
-- [ ] T046 **GATE** `make ios-gen && make ios-test` — never a bare `tuist generate`. All 20 shipped Swift suites must be green **before** any new Swift is written. Targets live in the repo-root `Makefile`.
+- [x] T041 **GATE** `make core-lint` (cargo fmt --check + clippy -D warnings) from the repo-root `Makefile`.
+- [x] T042 **GATE** `make core-test` — the whole engine suite, unit + parity + store. Targets live in the repo-root `Makefile`.
+- [x] T043 **GATE** `make core-privacy-audit` — no networking crate, no `openssl-sys` in the shipped graph. Zero new dependencies were added, so this must stay green unchanged. Targets live in the repo-root `Makefile`.
+- [x] T044 ⚠️ **FFI ordering** `make core-xcframework` — regenerates `ios/Generated/` and the xcframework. This slice changes the FFI surface (`Issuer`, `StatementKind`, `LineWords`, `ReaderError`, `detect_issuer`, `read_statement`, `import_statement`, `NewAccount.last4`), so this **must** run before any `tuist generate`. Targets live in the repo-root `Makefile`.
+- [x] T045 Update the shipped Swift call sites for the widened `NewAccount`/`StoredAccount` in `ios/Tests/StoreTests.swift` (and any other `NewAccount(` construction under `ios/`) to supply `last4:`.
+- [x] T046 **GATE** `make ios-gen && make ios-test` — never a bare `tuist generate`. All 20 shipped Swift suites must be green **before** any new Swift is written. Targets live in the repo-root `Makefile`.
 
 ### Phase 2F — Swift seams scaffolding (types only, no behaviour)
 
