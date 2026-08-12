@@ -30,6 +30,7 @@ use crate::categorize::{
     default_categories, Category, CategoryRef, CategoryTxn, Classification, MerchantMatch,
     MerchantRule, Rule, RuleMatch, SourceCategoryMapping, Stage,
 };
+use crate::coverage::{MonthCoverage, StatementCoverage, TransactionCoverage};
 use crate::dedup::{CrossSourceMatch, DedupLayer};
 use crate::model::{Direction, Transaction};
 use crate::transfer::TransferInput;
@@ -37,7 +38,7 @@ use crate::transfer::TransferInput;
 /// The schema version this build of the core knows how to run. The migration runner
 /// applies every version up to and including this one; re-opening an up-to-date database
 /// is a no-op.
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 /// Forward-only schema **v1**: the minimal real foundation the engines will later read
 /// from and write to. Money is TEXT (base-10 `Decimal`), dates/timestamps are ISO-8601
@@ -134,6 +135,30 @@ ALTER TABLE transactions ADD COLUMN dedup_layer TEXT
     CHECK (dedup_layer IS NULL OR dedup_layer IN ('Canonical', 'Fuzzy'));
 "#;
 
+/// Forward-only schema **v5**: imported statements as a first-class entity, plus per-transaction
+/// provenance. A `statements` row records one import run — its billing period, whether the run
+/// needs review (an incomplete parse or a failed reconciliation), and whether it came from a full
+/// statement or a piecemeal live alert. `transactions.statement_id` attributes a row to the run
+/// that produced it; a live-alert row simply has none. Coverage's `from_full_statement` fact is
+/// **derived** from that link (a row is from a full statement when its statement's `source` is
+/// `'Statement'`), so there is no redundant flag to drift.
+const SCHEMA_V5: &str = r#"
+CREATE TABLE statements (
+    id           TEXT PRIMARY KEY,
+    account_id   TEXT NOT NULL REFERENCES accounts(id),
+    bank_code    TEXT NOT NULL,
+    period_start TEXT,
+    period_end   TEXT NOT NULL,
+    needs_review INTEGER NOT NULL DEFAULT 0 CHECK (needs_review IN (0, 1)),
+    source       TEXT NOT NULL CHECK (source IN ('Statement', 'Alert')),
+    created_at   TEXT NOT NULL
+) STRICT;
+
+CREATE INDEX idx_statements_account ON statements(account_id);
+
+ALTER TABLE transactions ADD COLUMN statement_id TEXT REFERENCES statements(id);
+"#;
+
 /// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
 /// it surfaces in Swift as a throwing `Error`). No variant carries the key or row data.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -203,6 +228,43 @@ pub struct StoredAccount {
     pub updated_at: String,
 }
 
+/// Where an imported run's rows came from: a full statement (a PDF/CSV covering a whole
+/// billing period) or a piecemeal live alert. Coverage treats only `Statement` as covering a
+/// month.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum StatementSource {
+    Statement,
+    Alert,
+}
+
+/// A new statement to persist against an existing account — one import run. The store mints the
+/// id. `period_start` is optional (not every reader recovers it); `period_end` attributes the
+/// statement to its calendar month, and `needs_review` records that the run was incomplete or
+/// failed reconciliation.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NewStatement {
+    pub account_id: String,
+    pub bank_code: String,
+    pub period_start: Option<NaiveDate>,
+    pub period_end: NaiveDate,
+    pub needs_review: bool,
+    pub source: StatementSource,
+    pub created_at: String,
+}
+
+/// A statement as stored, including its store-minted `id`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct StoredStatement {
+    pub id: String,
+    pub account_id: String,
+    pub bank_code: String,
+    pub period_start: Option<NaiveDate>,
+    pub period_end: NaiveDate,
+    pub needs_review: bool,
+    pub source: StatementSource,
+    pub created_at: String,
+}
+
 /// A new transaction to persist against an existing account. The store mints the id;
 /// `date` is the transaction's calendar date, `amount` its exact magnitude (direction
 /// carries polarity), and timestamps are caller-supplied ISO-8601 strings.
@@ -217,6 +279,7 @@ pub struct NewTransaction {
     pub source_category: Option<String>,
     pub category_id: Option<String>,
     pub categorised_by: Option<String>,
+    pub statement_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -239,6 +302,7 @@ pub struct StoredTransaction {
     pub transfer_group_id: Option<String>,
     pub superseded_by: Option<String>,
     pub dedup_layer: Option<DedupLayer>,
+    pub statement_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -381,6 +445,46 @@ impl Store {
         Ok(rows)
     }
 
+    /// Persist a new statement — one import run — against an existing account, and return its
+    /// minted id. Transactions produced by the run reference it via `NewTransaction.statement_id`.
+    pub fn insert_statement(&self, statement: NewStatement) -> Result<String, StoreError> {
+        let conn = self.lock();
+        let id = mint_id(&conn)?;
+        conn.execute(
+            "INSERT INTO statements \
+             (id, account_id, bank_code, period_start, period_end, needs_review, source, \
+              created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                id,
+                statement.account_id,
+                statement.bank_code,
+                statement.period_start.map(date_to_sql),
+                date_to_sql(statement.period_end),
+                statement.needs_review as i64,
+                statement_source_to_sql(statement.source),
+                statement.created_at,
+            ],
+        )?;
+        Ok(id)
+    }
+
+    /// All statements for `account_id`, oldest first (insertion order).
+    pub fn list_statements(&self, account_id: String) -> Result<Vec<StoredStatement>, StoreError> {
+        let conn = self.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, bank_code, period_start, period_end, needs_review, source, \
+                    created_at \
+             FROM statements WHERE account_id = ?1 ORDER BY rowid",
+        )?;
+        let rows = stmt
+            .query_map(params![account_id], map_statement)?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     /// Persist a new transaction against an existing account and return its minted id.
     pub fn insert_transaction(&self, txn: NewTransaction) -> Result<String, StoreError> {
         let conn = self.lock();
@@ -388,8 +492,8 @@ impl Store {
         conn.execute(
             "INSERT INTO transactions \
              (id, account_id, date, description_raw, amount, direction, currency, \
-              source_category, category_id, categorised_by, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+              source_category, category_id, categorised_by, statement_id, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 id,
                 txn.account_id,
@@ -401,6 +505,7 @@ impl Store {
                 txn.source_category,
                 txn.category_id,
                 txn.categorised_by,
+                txn.statement_id,
                 txn.created_at,
                 txn.updated_at,
             ],
@@ -417,7 +522,8 @@ impl Store {
         let mut stmt = conn.prepare(
             "SELECT id, account_id, date, description_raw, amount, direction, currency, \
                     category_id, categorised_by, is_deleted, created_at, updated_at, \
-                    source_category, is_transfer, transfer_group_id, superseded_by, dedup_layer \
+                    source_category, is_transfer, transfer_group_id, superseded_by, dedup_layer, \
+                    statement_id \
              FROM transactions WHERE account_id = ?1 ORDER BY rowid",
         )?;
         let rows = stmt
@@ -699,6 +805,30 @@ impl Store {
         tx.commit()?;
         Ok(summary)
     }
+
+    /// The rolling 24-month coverage map for one account — which months are GAP / PARTIAL /
+    /// COVERED, and which COVERED months carry a needs-review badge.
+    ///
+    /// A **report, not a write-back**: it loads the account's statements and its non-deleted
+    /// transactions, derives each row's `from_full_statement` from its `statement_id` (a row
+    /// counts as fully-covered only when its statement's `source` is `Statement`, never an
+    /// `Alert`), and runs the pure [`crate::coverage::compute_coverage`]. `today` is an explicit
+    /// parameter — the core never reads the wall-clock (Constitution II), so the platform decides
+    /// where the window ends and the result is reproducible.
+    pub fn coverage(
+        &self,
+        account_id: String,
+        today: NaiveDate,
+    ) -> Result<Vec<MonthCoverage>, StoreError> {
+        let conn = self.lock();
+        let statements = load_statement_coverage(&conn, &account_id)?;
+        let transactions = load_transaction_coverage(&conn, &account_id)?;
+        Ok(crate::coverage::compute_coverage(
+            today,
+            &statements,
+            &transactions,
+        ))
+    }
 }
 
 impl Store {
@@ -754,6 +884,10 @@ fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), S
         }
         4 => {
             tx.execute_batch(SCHEMA_V4).map_err(StoreError::migration)?;
+            Ok(())
+        }
+        5 => {
+            tx.execute_batch(SCHEMA_V5).map_err(StoreError::migration)?;
             Ok(())
         }
         other => Err(StoreError::Migration {
@@ -820,6 +954,7 @@ fn map_transaction(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
                 .get::<_, Option<String>>(16)?
                 .map(|l| dedup_layer_from_sql(&l))
                 .transpose()?,
+            statement_id: row.get(17)?,
         })
     })())
 }
@@ -952,6 +1087,62 @@ fn load_dedup_candidates(conn: &Connection) -> Result<Vec<Vec<(String, Transacti
             .push((id, txn));
     }
     Ok(grouped)
+}
+
+/// Load one account's statements as [`StatementCoverage`] facts. Only the period-end (which
+/// attributes the statement to its calendar month) and the needs-review badge matter to the
+/// coverage classifier; `Alert`-sourced runs are excluded because a live alert does not cover a
+/// month, it merely populates one.
+fn load_statement_coverage(
+    conn: &Connection,
+    account_id: &str,
+) -> Result<Vec<StatementCoverage>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT period_end, needs_review FROM statements \
+         WHERE account_id = ?1 AND source = 'Statement' ORDER BY rowid",
+    )?;
+    let raw = stmt
+        .query_map(params![account_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    raw.into_iter()
+        .map(|(period_end, needs_review)| {
+            Ok(StatementCoverage {
+                period_end: date_from_sql(&period_end)?,
+                needs_review,
+            })
+        })
+        .collect()
+}
+
+/// Load one account's non-deleted transactions as [`TransactionCoverage`] facts.
+/// `from_full_statement` is **derived**, never stored: a row qualifies when its `statement_id`
+/// resolves to a statement whose `source` is `'Statement'`, so a live-alert row (no statement, or
+/// an `Alert` run) leaves its month PARTIAL.
+fn load_transaction_coverage(
+    conn: &Connection,
+    account_id: &str,
+) -> Result<Vec<TransactionCoverage>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.date, s.id IS NOT NULL \
+         FROM transactions t \
+         LEFT JOIN statements s ON s.id = t.statement_id AND s.source = 'Statement' \
+         WHERE t.account_id = ?1 AND t.is_deleted = 0 ORDER BY t.rowid",
+    )?;
+    let raw = stmt
+        .query_map(params![account_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    raw.into_iter()
+        .map(|(date, from_full_statement)| {
+            Ok(TransactionCoverage {
+                date: date_from_sql(&date)?,
+                from_full_statement,
+            })
+        })
+        .collect()
 }
 
 /// The category catalog (built-ins + user categories), oldest first.
@@ -1162,6 +1353,44 @@ fn direction_from_sql(value: &str) -> Result<Direction, StoreError> {
         "Credit" => Ok(Direction::Credit),
         other => Err(StoreError::Sql {
             message: format!("unknown direction {other:?}"),
+        }),
+    }
+}
+
+/// Map one `statements` row to a [`StoredStatement`], carrying a corrupt date as a typed error
+/// rather than panicking (the same inner-`Result` shape as [`map_transaction`]).
+fn map_statement(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<StoredStatement, StoreError>> {
+    let period_start: Option<String> = row.get(3)?;
+    let period_end: String = row.get(4)?;
+    let source: String = row.get(6)?;
+    Ok((|| {
+        Ok(StoredStatement {
+            id: row.get(0)?,
+            account_id: row.get(1)?,
+            bank_code: row.get(2)?,
+            period_start: period_start.as_deref().map(date_from_sql).transpose()?,
+            period_end: date_from_sql(&period_end)?,
+            needs_review: row.get::<_, i64>(5)? != 0,
+            source: statement_source_from_sql(&source)?,
+            created_at: row.get(7)?,
+        })
+    })())
+}
+
+/// `StatementSource` crosses SQL as its stable variant name, matching the v5 CHECK constraint.
+fn statement_source_to_sql(source: StatementSource) -> &'static str {
+    match source {
+        StatementSource::Statement => "Statement",
+        StatementSource::Alert => "Alert",
+    }
+}
+
+fn statement_source_from_sql(value: &str) -> Result<StatementSource, StoreError> {
+    match value {
+        "Statement" => Ok(StatementSource::Statement),
+        "Alert" => Ok(StatementSource::Alert),
+        other => Err(StoreError::Sql {
+            message: format!("unknown statement source {other:?}"),
         }),
     }
 }
@@ -1444,6 +1673,81 @@ mod tests {
                 [],
             )
             .is_err());
+    }
+
+    #[test]
+    fn migrating_v4_to_v5_preserves_existing_rows() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+
+        // Build a populated v4 database, as an older app version would have left it.
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=4 {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.pragma_update(None, "user_version", 4).unwrap();
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+                 VALUES ('a1', 'Savings', 'HDFC', 0, 'INR', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO transactions \
+                 (id, account_id, date, description_raw, amount, direction, currency, \
+                  is_deleted, created_at, updated_at) \
+                 VALUES ('t1', 'a1', '2026-07-04', 'desc', '1.00', 'Debit', 'INR', 0, 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        // Upgrade v4 → v5: the new table + the provenance `ADD COLUMN` run on a *populated* DB.
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 5).expect("apply v5");
+            tx.pragma_update(None, "user_version", 5).unwrap();
+            tx.commit().unwrap();
+        }
+
+        // The pre-existing row survived with no provenance (it predates statements).
+        let statement_id: Option<String> = conn
+            .query_row(
+                "SELECT statement_id FROM transactions WHERE id = 't1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(statement_id, None);
+        // The new table is usable and its FK to the surviving account resolves.
+        conn.execute(
+            "INSERT INTO statements \
+             (id, account_id, bank_code, period_start, period_end, needs_review, source, \
+              created_at) \
+             VALUES ('s1', 'a1', 'HDFC', NULL, '2026-07-31', 0, 'Statement', 't')",
+            [],
+        )
+        .expect("statements usable after upgrade");
+        // The CHECK constraint rejects a source the core doesn't know.
+        assert!(conn
+            .execute(
+                "UPDATE statements SET source = 'Telepathy' WHERE id = 's1'",
+                []
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn statement_source_round_trips_through_sql_text() {
+        for source in [StatementSource::Statement, StatementSource::Alert] {
+            assert_eq!(
+                statement_source_from_sql(statement_source_to_sql(source)).unwrap(),
+                source
+            );
+        }
+        assert!(statement_source_from_sql("Hearsay").is_err());
     }
 
     #[test]

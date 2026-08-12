@@ -92,6 +92,7 @@ fn opens_migrates_and_round_trips_an_account_and_transaction() {
         source_category: None,
         category_id: Some("FOOD_AND_DINING".to_string()),
         categorised_by: Some("T2_MERCHANT_MAP".to_string()),
+        statement_id: None,
         created_at: "2026-08-08T10:00:00Z".to_string(),
         updated_at: "2026-08-08T10:00:00Z".to_string(),
     };
@@ -139,6 +140,7 @@ fn preserves_high_precision_and_boundary_amounts_exactly() {
                 source_category: None,
                 category_id: None,
                 categorised_by: None,
+                statement_id: None,
                 created_at: "2026-08-08T00:00:00Z".to_string(),
                 updated_at: "2026-08-08T00:00:00Z".to_string(),
             })
@@ -189,13 +191,13 @@ fn migration_is_idempotent_across_reopens() {
 
     let first_id = {
         let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
-        assert_eq!(store.schema_version().unwrap(), 4);
+        assert_eq!(store.schema_version().unwrap(), 5);
         store.insert_account(sample_account()).expect("insert")
     };
 
     // Re-open: migrations must be a no-op, the version unchanged, and the data intact.
     let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
-    assert_eq!(store.schema_version().unwrap(), 4);
+    assert_eq!(store.schema_version().unwrap(), 5);
     let accounts = store.list_accounts().expect("list");
     assert_eq!(
         accounts.len(),
@@ -276,6 +278,7 @@ fn the_encrypted_file_never_contains_plaintext() {
                 source_category: None,
                 category_id: None,
                 categorised_by: None,
+                statement_id: None,
                 created_at: "2026-08-08T00:00:00Z".to_string(),
                 updated_at: "2026-08-08T00:00:00Z".to_string(),
             })

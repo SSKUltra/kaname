@@ -79,6 +79,7 @@ fn txn(
         source_category: None,
         category_id: None,
         categorised_by: None,
+        statement_id: None,
         created_at: "2026-08-08T00:00:00Z".to_string(),
         updated_at: "2026-08-08T00:00:00Z".to_string(),
     }
