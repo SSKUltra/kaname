@@ -15,7 +15,7 @@ let project = Project(
             destinations: .iOS,
             product: .app,
             bundleId: "in.beaconbrain.kaname",
-            deploymentTargets: .iOS("18.0"),
+            deploymentTargets: .iOS("26.0"),
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "Kaname",
                 "UILaunchScreen": [:],
@@ -28,7 +28,7 @@ let project = Project(
             destinations: .iOS,
             product: .framework,
             bundleId: "in.beaconbrain.kaname.core",
-            deploymentTargets: .iOS("18.0"),
+            deploymentTargets: .iOS("26.0"),
             sources: ["Generated/**"],
             dependencies: [
                 .xcframework(path: "Frameworks/KanameCoreFFI.xcframework"),
@@ -44,7 +44,7 @@ let project = Project(
             destinations: .iOS,
             product: .unitTests,
             bundleId: "in.beaconbrain.kaname.tests",
-            deploymentTargets: .iOS("18.0"),
+            deploymentTargets: .iOS("26.0"),
             sources: ["Tests/**"],
             dependencies: [
                 .target(name: "Kaname"),

@@ -43,6 +43,14 @@ The constitution is `.specify/memory/constitution.md` — it wins over any other
 
 UI polish work should apply the `make-interfaces-feel-better` skill.
 
+## UI baseline — iOS 26 + Liquid Glass
+
+The app's deployment target is **iOS 26.0** (all Tuist targets + `build-xcframework.sh`),
+chosen so **Liquid Glass is unconditional**. Never write `#available(iOS 26, *)` gates,
+fallback branches, or hand-rolled `.ultraThinMaterial` / blur imitations. Apply the
+`swiftui-liquid-glass` skill (`.github/skills/swiftui-liquid-glass/`) for any SwiftUI work,
+alongside `make-interfaces-feel-better` for polish.
+
 ## Active Technologies
 - Rust (stable, per `rust-toolchain.toml`) + Swift 5.x / SwiftUI, iOS 18 deployment target + UniFFI `0.32` (new); existing `rust_decimal`, `chrono`, `serde`, `regex`, `csv`; iOS: SwiftUI, Foundation, Tuist (project gen), Swift Testing (001-rust-swift-bridge)
 - N/A (no persistence in this slice; encrypted SQLite/SQLCipher arrives P2+) (001-rust-swift-bridge)
