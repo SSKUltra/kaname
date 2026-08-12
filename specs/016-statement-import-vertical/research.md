@@ -68,17 +68,18 @@ it (`accounts.bank_code`, `statements.bank_code`) and `source_category_map` join
 | `FEDERAL_BANK` | `FEDERAL` | BankAccount | Federal Bank Account |
 | `HDFC_BANK` | `HDFC` | BankAccount | HDFC Bank Account |
 | `ICICI_BANK` | `ICICI` | BankAccount | ICICI Bank Account |
-| `FEDERAL_CARD` | `FEDERAL` | CreditCard | Scapia Federal Credit Card |
+| `FEDERAL_CARD` | `FEDERAL` | CreditCard | Scapia Credit Card |
 | `HDFC_CARD` | `HDFC` | CreditCard | HDFC Bank Credit Card |
 | `ICICI_CARD` | `ICICI` | CreditCard | ICICI Bank Credit Card |
 | `IOB_CARD` | `IOB` | CreditCard | Indian Overseas Bank Credit Card |
 | `SBI_CARD` | `SBI_CARD` | CreditCard | SBI Card |
-| `YES_CARD` | `YES` | CreditCard | YES Bank Credit Card |
+| `YES_CARD` | `YES` | CreditCard | Kiwi (YES Bank) Credit Card |
 
-> **⚠ Judgement call for the product owner** — the ten `display_name` strings are user-facing
-> brand copy invented here. In particular `YES_CARD` reads Yes Bank statements that the code
-> comments describe as "Yes Bank (Kiwi)", and `FEDERAL_CARD` is the Scapia co-brand on Federal
-> Bank. Confirm the exact wording before implementation; it is one table in one file.
+> **✅ Confirmed by the product owner (2026-08-12)** — the ten `display_name` strings are
+> user-facing brand copy and were reviewed and approved. The two co-brands were corrected from
+> the initial proposal: `FEDERAL_CARD` is **"Scapia Credit Card"** (not "Scapia Federal Credit
+> Card") and `YES_CARD` is **"Kiwi (YES Bank) Credit Card"** (not "YES Bank Credit Card"),
+> matching how cardholders actually refer to them. Implement this table verbatim.
 
 ### Alternatives considered
 
