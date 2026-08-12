@@ -119,6 +119,16 @@ struct Anchor {
     inline_desc: String,
 }
 
+pub(crate) fn first_anchor_index<C: LedgerReaderConfig + ?Sized>(
+    cfg: &C,
+    lines: &[String],
+) -> Option<usize> {
+    find_anchors(cfg, lines)
+        .0
+        .first()
+        .map(|anchor| anchor.index)
+}
+
 /// Parse already-extracted `lines` (+ `full_text` for enrichment and `first_row_words`
 /// for the row-1 geometry bootstrap) into a [`ParsedStatement`]. Pure and total: an
 /// anchor-shaped row whose date/amount/balance will not parse is captured in

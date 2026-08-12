@@ -46,6 +46,13 @@ pub struct Word {
     pub x1: f64,
 }
 
+/// Word geometry for one extracted line, keyed by its index in the `lines` input.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
+pub struct LineWords {
+    pub line_index: u32,
+    pub words: Vec<Word>,
+}
+
 /// Ledger-specific per-row metadata for bank-account statements: the printed running
 /// balance, its delta from the previous row, whether the printed amount reconciles with
 /// that delta (`amount == |delta|`), and how the direction was decided. Absent (`None`)

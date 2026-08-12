@@ -21,7 +21,10 @@ pub mod ledger_reader;
 pub mod line_reader;
 pub mod polarity;
 pub mod reconcile;
+pub mod registry;
 pub mod sbi;
 pub mod yes;
 
-pub use base::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
+pub use base::{
+    DirectionSource, LedgerMetadata, LineWords, ParsedStatement, ParsedTransaction, Word,
+};
