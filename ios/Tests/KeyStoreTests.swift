@@ -98,6 +98,7 @@ struct KeyStoreTests {
                 name: "HDFC Savings",
                 bankCode: "HDFC",
                 isCreditCard: false,
+                last4: nil,
                 currency: "INR",
                 createdAt: "2026-08-12T00:00:00Z",
                 updatedAt: "2026-08-12T00:00:00Z"
@@ -153,6 +154,7 @@ struct KeyStoreTests {
                     name: "HDFC Savings",
                     bankCode: "HDFC",
                     isCreditCard: false,
+                    last4: nil,
                     currency: "INR",
                     createdAt: "2026-08-12T00:00:00Z",
                     updatedAt: "2026-08-12T00:00:00Z"

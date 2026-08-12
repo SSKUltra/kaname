@@ -31,6 +31,7 @@ struct StoreTests {
             name: "HDFC Savings",
             bankCode: "HDFC",
             isCreditCard: false,
+            last4: nil,
             currency: "INR",
             createdAt: "2026-08-08T00:00:00Z",
             updatedAt: "2026-08-08T00:00:00Z"
@@ -210,6 +211,7 @@ struct StoreTests {
             name: "HDFC Savings",
             bankCode: "HDFC",
             isCreditCard: false,
+            last4: nil,
             currency: "INR",
             createdAt: "2026-01-01T00:00:00Z",
             updatedAt: "2026-01-01T00:00:00Z"
@@ -221,6 +223,7 @@ struct StoreTests {
             name: "HDFC Card",
             bankCode: "HDFC",
             isCreditCard: true,
+            last4: nil,
             currency: "INR",
             createdAt: "2026-02-01T00:00:00Z",
             updatedAt: "2026-02-01T00:00:00Z"
