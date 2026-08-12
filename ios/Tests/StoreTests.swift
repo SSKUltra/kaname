@@ -55,6 +55,7 @@ struct StoreTests {
             sourceCategory: nil,
             categoryId: "FOOD_AND_DINING",
             categorisedBy: "T2_MERCHANT_MAP",
+            statementId: nil,
             createdAt: "2026-08-08T10:00:00Z",
             updatedAt: "2026-08-08T10:00:00Z"
         )
@@ -240,6 +241,7 @@ struct StoreTests {
             sourceCategory: nil,
             categoryId: nil,
             categorisedBy: nil,
+            statementId: nil,
             createdAt: "2026-08-08T00:00:00Z",
             updatedAt: "2026-08-08T00:00:00Z"
         )
@@ -256,6 +258,7 @@ struct StoreTests {
             sourceCategory: nil,
             categoryId: nil,
             categorisedBy: nil,
+            statementId: nil,
             createdAt: "2026-08-08T00:00:00Z",
             updatedAt: "2026-08-08T00:00:00Z"
         )
@@ -296,6 +299,7 @@ struct StoreTests {
             sourceCategory: nil,
             categoryId: nil,
             categorisedBy: nil,
+            statementId: nil,
             createdAt: "2026-08-08T00:00:00Z",
             updatedAt: "2026-08-08T00:00:00Z"
         )
