@@ -47,7 +47,7 @@ Two-layer repo (`plan.md` → Project Structure):
 - [x] T001 Establish the green pre-change baseline: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"` then run `make core-lint && make core-test && make core-privacy-audit` from the repo-root `Makefile`; record the passing test count so any later regression is attributable.
 - [x] T002 [P] Create the simulator `make ios-test` targets locally: `xcrun simctl create "iPhone 16" "iPhone 16"` (see the `ios-test` target in `Makefile`).
 - [x] T003 [P] Re-run the claim-replay proof in `specs/016-statement-import-vertical/quickstart.md` §3 and confirm **exactly three** AMBIG lines (`fixtures/federal/bank_account/classic.json`, `fixtures/federal/bank_account/fi.json`, `fixtures/icici/bank_account/basic.json`) before writing any dispatcher code — this is the empirical basis for T020.
-- [ ] T004 [P] Link PDFKit: add `.sdk(name: "PDFKit", type: .framework)` to the `Kaname` target's dependencies in `ios/Project.swift` (first-party Apple SDK framework; nothing enters the Rust crate graph).
+- [x] T004 [P] Link PDFKit: add `.sdk(name: "PDFKit", type: .framework)` to the `Kaname` target's dependencies in `ios/Project.swift` (first-party Apple SDK framework; nothing enters the Rust crate graph).
 - [x] T005 Declare the new engine submodule: add `pub mod registry;` to `core/crates/kaname-core/src/statement/mod.rs` and create an empty `core/crates/kaname-core/src/statement/registry.rs` so the workspace stays compiling.
 
 **Checkpoint**: Baseline green, simulator present, PDFKit linked, module declared.
@@ -120,12 +120,12 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Phase 2F — Swift seams scaffolding (types only, no behaviour)
 
-- [ ] T047 [P] Create `ios/Sources/Import/ImportModels.swift` with `ImportStage`, `ImportSummary`, `IntegrityOutcome` (`.agrees` | `.needsReview` | `.nothingToCheck`) and `ImportFailure` (`.notAPDF`, `.passwordRequired`, `.wrongPassword`, `.noExtractableText`, `.unreadable`, `.unrecognizedIssuer`, `.cancelled`, `.storageUnavailable`) per `data-model.md` §4.
-- [ ] T048 [P] Create `ios/Sources/Import/ImportFailureView.swift` — one plain-language terminal view (SF Symbol + one hand-written sentence + "Try another file"). No interpolated engine text, no `localizedDescription`, no error code (FR-034, SC-007).
-- [ ] T049 [P] Create `ios/Sources/Import/StatementTextExtractor.swift` with the `StatementTextExtractor` protocol, `ExtractedText { lines, fullText, lineWords }` and `ExtractionFailure` — **no** PDFKit implementation yet.
-- [ ] T050 [P] Create `ios/Sources/Import/ImportService.swift` with the `actor ImportService` skeleton (`private var inFlight: Task<ImportSummary, Error>?` and the `run(url:password:onStage:)` signature) — no pipeline body yet.
-- [ ] T051 [P] Create `ios/Sources/Import/ImportViewModel.swift` with the `@MainActor @Observable final class ImportViewModel` skeleton holding stage / summary / failure state only (research R9).
-- [ ] T052 **GATE** `make lint` — swiftlint --strict + swift-format lint over the new files. Remember: swift-format `[Spacing]` rejects trailing inline comments; put comments on their own line. Targets live in the repo-root `Makefile`.
+- [x] T047 [P] Create `ios/Sources/Import/ImportModels.swift` with `ImportStage`, `ImportSummary`, `IntegrityOutcome` (`.agrees` | `.needsReview` | `.nothingToCheck`) and `ImportFailure` (`.notAPDF`, `.passwordRequired`, `.wrongPassword`, `.noExtractableText`, `.unreadable`, `.unrecognizedIssuer`, `.cancelled`, `.storageUnavailable`) per `data-model.md` §4.
+- [x] T048 [P] Create `ios/Sources/Import/ImportFailureView.swift` — one plain-language terminal view (SF Symbol + one hand-written sentence + "Try another file"). No interpolated engine text, no `localizedDescription`, no error code (FR-034, SC-007).
+- [x] T049 [P] Create `ios/Sources/Import/StatementTextExtractor.swift` with the `StatementTextExtractor` protocol, `ExtractedText { lines, fullText, lineWords }` and `ExtractionFailure` — **no** PDFKit implementation yet.
+- [x] T050 [P] Create `ios/Sources/Import/ImportService.swift` with the `actor ImportService` skeleton (`private var inFlight: Task<ImportSummary, Error>?` and the `run(url:password:onStage:)` signature) — no pipeline body yet.
+- [x] T051 [P] Create `ios/Sources/Import/ImportViewModel.swift` with the `@MainActor @Observable final class ImportViewModel` skeleton holding stage / summary / failure state only (research R9).
+- [x] T052 **GATE** `make lint` — swiftlint --strict + swift-format lint over the new files. Remember: swift-format `[Spacing]` rejects trailing inline comments; put comments on their own line. Targets live in the repo-root `Makefile`.
 
 **Checkpoint**: The engine is complete and gated, the FFI is regenerated, the Swift seams exist. User story work can now begin.
 
@@ -136,7 +136,7 @@ Two-layer repo (`plan.md` → Project Structure):
 **Purpose**: Fix the visual and copy contract before any UI is built. Kaname has no Figma tooling and no "Principle IX"; the visual contract of record is `contracts/platform-seams.md` §3 plus the R13 application-point table.
 
 - [ ] T053 [Design] Walk the R13 Liquid Glass application-point table in `specs/016-statement-import-vertical/research.md` against `.github/skills/swiftui-liquid-glass/SKILL.md`, and confirm per-view: glass on the empty-state CTA and the progress capsule only; the summary as a plain `.sheet`; **opaque** figure rows; `AccountPickerView` a standard dense `List`. Record any deviation as a note in this file before building — do not edit the FINAL artifacts.
-- [ ] T054 [Design] Write the copy deck: the exact user-facing sentence for **every** `ImportFailure` case and for each of the three `IntegrityOutcome` states, as string constants in `ios/Sources/Import/ImportModels.swift`. Every sentence is hand-written; the only engine-supplied string allowed on screen is `Issuer.display_name` (FR-033, FR-034, SC-007).
+- [x] T054 [Design] Write the copy deck: the exact user-facing sentence for **every** `ImportFailure` case and for each of the three `IntegrityOutcome` states, as string constants in `ios/Sources/Import/ImportModels.swift`. Every sentence is hand-written; the only engine-supplied string allowed on screen is `Issuer.display_name` (FR-033, FR-034, SC-007).
 - [ ] T055 [Design] Trace the state machine in `specs/016-statement-import-vertical/data-model.md` §5 against the four-tap path (SC-001) and confirm every edge — including `.passwordRequired → prompt → retry/cancel` and `Summary` with zero transactions — has a defined destination before UI work begins.
 
 **Checkpoint**: Visual treatment, copy and state machine settled — UI implementation may begin.
