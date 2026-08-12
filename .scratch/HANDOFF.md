@@ -53,7 +53,8 @@ and the app itself is still the placeholder `ios/Sources/RootView.swift` (§3).
 
 ## 3. What's next
 
-**Right now: implement `016-statement-import-vertical` — start with PR A.**
+**Right now: implement `016-statement-import-vertical` — PR A and PR B are MERGED; start
+with PR C, the 🎯 MVP vertical.**
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -65,24 +66,40 @@ decisions with source-line evidence) → `contracts/` → **`tasks.md`** (136 ta
 queue) → `quickstart.md` (build order + smoke test).
 
 **It ships as five PRs, not one** (rationale + task ranges in `tasks.md` § "Recommended PR
-split"). Take the lowest unstarted one:
+split"). Take the lowest unstarted one — **that is now PR C**:
 
-| PR | Tasks | What |
-|----|-------|------|
-| **A** | T001, T006–T017, T035–T046 | Store hardening: the ⚠️ deadlock refactor, schema v6, atomic `import_statement` |
-| **B** | T003, T005, T018–T034 | The issuer dispatcher (`detect_issuer` / `read_statement`) |
-| **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build. Needs **A + B** |
-| **D** | T070–T097 | Honest failures & account attribution (US2–US4) |
-| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) |
+| PR | Tasks | What | Status |
+|----|-------|------|--------|
+| **A** | T001, T006–T017, T035–T046 | Store hardening: the ⚠️ deadlock refactor, schema v6, atomic `import_statement` | ✅ **merged** (#31) |
+| **B** | T003, T005, T018–T034 | The issuer dispatcher (`detect_issuer` / `read_statement`) | ✅ **merged** (#32) |
+| **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build | ⬅️ **NEXT** (T002 done) |
+| **D** | T070–T097 | Honest failures & account attribution (US2–US4) | |
+| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | |
 
-A and B touch disjoint files and can run in parallel; both precede C.
+**State of `main` after A + B** (verified `5b6562d`, full gate green):
+`make core-test` = **221 passing / 0 failing**; `make ios-test` = 56 tests / 20 suites.
+The engine half of this slice is **done** — schema is at **v6** (`accounts.last4`),
+`Store::import_statement` is atomic (one transaction, `*_in` helpers, full rollback), and
+`detect_issuer` / `read_statement` are exported over UniFFI. What remains in PR C is almost
+entirely **Swift**: PDFKit extraction → the `ImportService` actor → the summary sheet,
+replacing the placeholder `ios/Sources/RootView.swift`.
 
-> ⚠️ **Two verified hazards drive PR A's ordering — don't "simplify" them away.**
-> `categorize_account` and `find_duplicates` each take `self.lock()` on their first line and
-> `std::sync::Mutex` is **not reentrant**, so a composite `import_statement` deadlocks
-> silently on the happy path. The `*_in(tx, …)` split (T007/T008) lands **before**
-> `import_statement` (T038). And 3 golden fixtures are claimed by **two** readers today, so
-> `detect_issuer` needs its ledger-first tie-break plus the T020 regression.
+**PR C starts here** (`tasks.md` Phase 2F → 2.5 → 3):
+T004 (link PDFKit in `ios/Project.swift`) → T047–T052 (the `ios/Sources/Import/` seams,
+types only) → **T053–T055 the design-contract gate** (Liquid Glass application points, the
+copy deck, the state-machine trace — settle these *before* building UI) → T056–T057 RED →
+T058–T066 implementation → T067–T069 gates. T001/T002/T003/T005 are already ticked.
+
+> ⚠️ **Still live in PR C:** never call a bare `tuist generate` — always `make ios-gen` /
+> `make ios-test`, and run `make core-xcframework` first whenever the FFI surface moves.
+> T057 adds `scripts/import-path-audit.sh` + a `make import-audit` target: it is the
+> mechanical SC-004 proof that **zero networking symbols** exist under `ios/Sources/Import/`.
+> The only engine-supplied string allowed on screen is `Issuer.display_name` (FR-033/FR-034).
+
+> ⚠️ **Worktree gotcha (learned the hard way):** Tuist cannot resolve its root inside a
+> `git worktree` (there `.git` is a *file*, not a directory), so `make ios-gen` fails there.
+> Do Swift work in the primary checkout. Adding an `ios/Tuist.swift` "fixes" it but changes
+> root resolution for everyone — don't commit one.
 
 **After 016**, the rest of P3 (transaction list, dashboard, budgets, tags, search, export —
 see the spec's Out of Scope) gets specified slice by slice via `speckit.specify`.
@@ -178,13 +195,29 @@ changes don't need linting/building/testing.
 - `transfer.rs` — `detect_transfers(&[TransferInput]) -> Vec<TransferPair>`.
 - `categorize.rs` — `categorize` / `categorize_batch` (first-wins stack), `default_categories()`
   (23 builtins: code + name + `Classification`), `prepare_merchants`/`prepare_rules`.
+- `statement/registry.rs` — the ten-entry issuer registry (private `REGISTRY`, no bank list is
+  ever exported — FR-012). `detect_issuer(full_text) -> Option<Issuer>` picks the minimum under
+  `(kind_rank, id)` with **ledger before card**, so the 3 doubly-claimed fixtures resolve to the
+  bank reader (pinned by `tests/dispatcher.rs`). `read_statement(issuer, lines, full_text,
+  line_words)` is the single parse front door — cards ignore `line_words`; ledgers get only the
+  anchor row's geometry via `ledger_reader::first_anchor_index`. The ten legacy
+  `read_<bank>_statement` exports still exist and are unchanged.
 - `store.rs` — `Store::open(path, key)` (SQLCipher, forward-only `PRAGMA user_version`
-  migrations to **schema v3**, `StoreError` typed errors, wrong-key fail-closed);
+  migrations to **schema v6**, `StoreError` typed errors, wrong-key fail-closed);
   `insert_account`/`insert_transaction`/`list_*`; the categorization facts
   (`insert_merchant_rule`/`insert_source_category_mapping`/`insert_rule`/`insert_category`
   + their `list_*`); `categorize_account` (runs the pure stack over stored rows and
   persists `category_id`/`categorised_by`); and `detect_transfers` (cross-account — runs the
   pure matcher over stored rows and tags both legs `is_transfer`/`transfer_group_id`).
+  **⚠️ `Store` methods take a non-reentrant `std::sync::Mutex`.** Any *composite* write must
+  call the transaction-scoped helpers `categorize_account_in(tx, account_id)` /
+  `find_duplicates_in(tx)` — **never** the public `categorize_account` / `find_duplicates`,
+  which re-lock and deadlock. `tests/store_import.rs` holds a 10s-timeout guard that fails
+  fast and legibly if that rule is broken.
+  `Store::import_statement(ImportRequest) -> ImportOutcome` is the atomic composite: one
+  transaction doing resolve-or-create account → `statements` row → transactions →
+  `categorize_account_in` → `find_duplicates_in` → COMMIT, rolling back entirely on failure.
+  No `statements` row is written when there is neither a period nor a transaction (R6).
   **Timestamps are explicit inputs** (the core reads no wall-clock); the platform owns the
   Keychain key + file path + NSFileProtection.
 - `common.rs` / `polarity.rs` — `parse_amount`/`parse_date`/`find_last4`/…; `classify`.

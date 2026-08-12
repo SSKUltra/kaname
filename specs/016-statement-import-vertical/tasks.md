@@ -44,8 +44,8 @@ Two-layer repo (`plan.md` → Project Structure):
 
 **Purpose**: Establish a green baseline, the local simulator, the PDFKit link, and the new engine module — before a single behaviour changes.
 
-- [ ] T001 Establish the green pre-change baseline: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"` then run `make core-lint && make core-test && make core-privacy-audit` from the repo-root `Makefile`; record the passing test count so any later regression is attributable.
-- [ ] T002 [P] Create the simulator `make ios-test` targets locally: `xcrun simctl create "iPhone 16" "iPhone 16"` (see the `ios-test` target in `Makefile`).
+- [x] T001 Establish the green pre-change baseline: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"` then run `make core-lint && make core-test && make core-privacy-audit` from the repo-root `Makefile`; record the passing test count so any later regression is attributable.
+- [x] T002 [P] Create the simulator `make ios-test` targets locally: `xcrun simctl create "iPhone 16" "iPhone 16"` (see the `ios-test` target in `Makefile`).
 - [x] T003 [P] Re-run the claim-replay proof in `specs/016-statement-import-vertical/quickstart.md` §3 and confirm **exactly three** AMBIG lines (`fixtures/federal/bank_account/classic.json`, `fixtures/federal/bank_account/fi.json`, `fixtures/icici/bank_account/basic.json`) before writing any dispatcher code — this is the empirical basis for T020.
 - [ ] T004 [P] Link PDFKit: add `.sdk(name: "PDFKit", type: .framework)` to the `Kaname` target's dependencies in `ios/Project.swift` (first-party Apple SDK framework; nothing enters the Rust crate graph).
 - [x] T005 Declare the new engine submodule: add `pub mod registry;` to `core/crates/kaname-core/src/statement/mod.rs` and create an empty `core/crates/kaname-core/src/statement/registry.rs` so the workspace stays compiling.
