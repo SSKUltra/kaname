@@ -21,7 +21,12 @@ let project = Project(
                 "UILaunchScreen": [:],
             ]),
             sources: ["Sources/**"],
-            dependencies: [.target(name: "KanameCore")]
+            dependencies: [
+                .target(name: "KanameCore"),
+                // Statement text extraction is a platform concern (Constitution II): PDFKit
+                // is the only PDF engine, and the Rust core never opens a document.
+                .sdk(name: "PDFKit", type: .framework),
+            ]
         ),
         .target(
             name: "KanameCore",
