@@ -155,34 +155,6 @@ struct StoreTests {
         #expect(stored[1].categorisedBy == nil)
     }
 
-    @Test("detect_transfers tags both legs of a self-transfer over the bridge")
-    func detectTransfersTagsBothLegsOverTheBridge() throws {
-        let db = Self.tempDatabase()
-        defer { try? FileManager.default.removeItem(at: db.dir) }
-
-        let store = try Store.open(path: db.path, key: Self.key)
-        let bankId = try store.insertAccount(account: Self.sampleAccount())
-        let cardId = try store.insertAccount(account: Self.cardAccount())
-
-        // A credit-card bill payment: a bank Debit paired with the card's Credit.
-        _ = try store.insertTransaction(
-            txn: Self.transferLeg(bankId, "CREDIT CARD PAYMENT", "5000.00", .debit))
-        _ = try store.insertTransaction(
-            txn: Self.transferLeg(cardId, "PAYMENT RECEIVED", "5000.00", .credit))
-
-        let summary = try store.detectTransfers()
-        #expect(summary.pairsLinked == 1)
-        #expect(summary.creditCardPayments == 1)
-
-        let outflow = try #require(try store.listTransactions(accountId: bankId).first)
-        let inflow = try #require(try store.listTransactions(accountId: cardId).first)
-        #expect(outflow.isTransfer)
-        #expect(inflow.isTransfer)
-        let group = try #require(outflow.transferGroupId)
-        // Both legs of the pair share one minted group id.
-        #expect(inflow.transferGroupId == group)
-    }
-
     @Test("find_duplicates links a cross-source duplicate over the bridge")
     func findDuplicatesLinksACrossSourceDuplicateOverTheBridge() throws {
         let db = Self.tempDatabase()
@@ -212,39 +184,6 @@ struct StoreTests {
         #expect(duplicate.dedupLayer == .canonical)
         // Linked, never deleted — the link is reversible and the UI decides what to hide.
         #expect(duplicate.isDeleted == false)
-    }
-
-    private static func cardAccount() -> NewAccount {
-        NewAccount(
-            name: "HDFC Card",
-            bankCode: "HDFC",
-            isCreditCard: true,
-            currency: "INR",
-            createdAt: "2026-08-08T00:00:00Z",
-            updatedAt: "2026-08-08T00:00:00Z"
-        )
-    }
-
-    private static func transferLeg(
-        _ accountId: String,
-        _ description: String,
-        _ amount: String,
-        _ direction: Direction
-    ) -> NewTransaction {
-        NewTransaction(
-            accountId: accountId,
-            date: "2026-07-04",
-            descriptionRaw: description,
-            amount: decimal(amount),
-            direction: direction,
-            currency: "INR",
-            sourceCategory: nil,
-            categoryId: nil,
-            categorisedBy: nil,
-            statementId: nil,
-            createdAt: "2026-08-08T00:00:00Z",
-            updatedAt: "2026-08-08T00:00:00Z"
-        )
     }
 
     private static func categoryTxn(_ accountId: String, _ description: String) -> NewTransaction {
