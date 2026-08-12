@@ -83,6 +83,7 @@ fn txn(
         source_category: source_category.map(str::to_string),
         category_id: None,
         categorised_by: None,
+        statement_id: None,
         created_at: "2026-08-08T00:00:00Z".to_string(),
         updated_at: "2026-08-08T00:00:00Z".to_string(),
     }
@@ -421,7 +422,7 @@ fn schema_is_at_current_version_and_migration_is_idempotent() {
     let db = TempDb::new("schema");
     {
         let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
-        assert_eq!(store.schema_version().expect("version"), 4);
+        assert_eq!(store.schema_version().expect("version"), 5);
         let bank = store.insert_account(account(false)).expect("bank");
         store
             .insert_transaction(txn(
@@ -435,7 +436,7 @@ fn schema_is_at_current_version_and_migration_is_idempotent() {
     }
     // Re-open: the migration is a no-op and the v1 data + the new source_category survive.
     let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
-    assert_eq!(store.schema_version().expect("version"), 4);
+    assert_eq!(store.schema_version().expect("version"), 5);
     let accounts = store.list_accounts().expect("accounts");
     assert_eq!(accounts.len(), 1);
     let rows = store
