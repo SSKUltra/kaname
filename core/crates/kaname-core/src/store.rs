@@ -40,6 +40,14 @@ use crate::transfer::TransferInput;
 /// is a no-op.
 const SCHEMA_VERSION: i64 = 5;
 
+/// The built-in category a bank-to-bank self-transfer's legs are assigned.
+const SELF_TRANSFER: &str = "SELF_TRANSFER";
+/// The built-in category a credit-card bill payment's legs are assigned.
+const CREDIT_CARD_BILL_PAYMENT: &str = "CREDIT_CARD_BILL_PAYMENT";
+/// The `categorised_by` provenance written by [`Store::detect_transfers`] — distinct from the
+/// categorization stack's stages, so a transfer-assigned category is recognisable as such.
+const TRANSFER_DETECTOR: &str = "TRANSFER_DETECTOR";
+
 /// Forward-only schema **v1**: the minimal real foundation the engines will later read
 /// from and write to. Money is TEXT (base-10 `Decimal`), dates/timestamps are ISO-8601
 /// TEXT, direction is `'Debit'`/`'Credit'`, classification is a stable upper-snake code —
@@ -640,6 +648,11 @@ impl Store {
     /// Recomputes every row, so it is idempotent; a row no stage matches is left
     /// uncategorized (both columns `NULL`). Reuses the pure engine verbatim — no network, no
     /// clock. Returns how many rows were categorized vs left uncategorized.
+    ///
+    /// **Rows already tagged as transfers are skipped** (and counted in neither total):
+    /// [`Store::detect_transfers`] assigns those their `SELF_TRANSFER` /
+    /// `CREDIT_CARD_BILL_PAYMENT` category, and a confirmed cross-account pair outranks a
+    /// keyword match — so re-running this can never clobber a transfer's category.
     pub fn categorize_account(&self, account_id: String) -> Result<CategorizeSummary, StoreError> {
         let mut conn = self.lock();
 
@@ -693,15 +706,22 @@ impl Store {
         Ok(summary)
     }
 
-    /// Detect self-transfers across **all** accounts and tag both legs of each pair.
+    /// Detect self-transfers across **all** accounts, tag both legs of each pair, and assign the
+    /// pair's category.
     ///
     /// Loads every non-deleted, not-yet-linked transaction (`transfer_group_id IS NULL`)
     /// joined to its owning account for `is_credit_card`, runs the pure
     /// [`crate::transfer::detect_transfers`] matcher, and for each returned pair mints one
-    /// `transfer_group_id` and sets `is_transfer = 1` on both legs. Idempotent: already-linked
-    /// rows are excluded from the candidate load and the UPDATE is guarded by
-    /// `transfer_group_id IS NULL`, so re-running links nothing new. Writes only the transfer
-    /// identity — category assignment is a later slice.
+    /// `transfer_group_id`, sets `is_transfer = 1` on both legs, and assigns the built-in
+    /// category — `CREDIT_CARD_BILL_PAYMENT` when the pair has a credit-card leg, else
+    /// `SELF_TRANSFER` — with `categorised_by = 'TRANSFER_DETECTOR'`. Detection and assignment
+    /// share one write transaction, so a linked pair is never left uncategorized.
+    ///
+    /// **Transfer wins over the categorization stack**: a confirmed cross-account pair is
+    /// stronger evidence than a keyword match, so [`Store::categorize_account`] skips
+    /// `is_transfer` rows and can never clobber what this writes — in either running order.
+    /// Idempotent: already-linked rows are excluded from the candidate load and the UPDATE is
+    /// guarded by `transfer_group_id IS NULL`, so re-running links (and assigns) nothing new.
     pub fn detect_transfers(&self) -> Result<TransferSummary, StoreError> {
         let mut conn = self.lock();
         let tx = conn.transaction()?;
@@ -712,13 +732,30 @@ impl Store {
         let mut summary = TransferSummary::default();
         {
             let mut update = tx.prepare(
-                "UPDATE transactions SET is_transfer = 1, transfer_group_id = ?2 \
+                "UPDATE transactions \
+                 SET is_transfer = 1, transfer_group_id = ?2, category_id = ?3, \
+                     categorised_by = ?4 \
                  WHERE id = ?1 AND transfer_group_id IS NULL",
             )?;
             for pair in &pairs {
                 let group_id = mint_id(&tx)?;
-                update.execute(params![pair.outflow_id, group_id])?;
-                update.execute(params![pair.inflow_id, group_id])?;
+                let category = if pair.is_credit_card_payment {
+                    CREDIT_CARD_BILL_PAYMENT
+                } else {
+                    SELF_TRANSFER
+                };
+                update.execute(params![
+                    pair.outflow_id,
+                    group_id,
+                    category,
+                    TRANSFER_DETECTOR
+                ])?;
+                update.execute(params![
+                    pair.inflow_id,
+                    group_id,
+                    category,
+                    TRANSFER_DETECTOR
+                ])?;
                 summary.pairs_linked += 1;
                 if pair.is_credit_card_payment {
                     summary.credit_card_payments += 1;
@@ -959,9 +996,10 @@ fn map_transaction(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
     })())
 }
 
-/// Load one account's non-deleted transactions as `(id, CategoryTxn)` pairs ready for the
-/// categorization stack. `bank_code`/`is_credit_card` come from the owning account; the rest
-/// from each row (the issuer's `source_category` hint feeds T1).
+/// Load one account's non-deleted, non-transfer transactions as `(id, CategoryTxn)` pairs ready
+/// for the categorization stack. `bank_code`/`is_credit_card` come from the owning account; the
+/// rest from each row (the issuer's `source_category` hint feeds T1). Transfer legs are excluded
+/// so the stack never overwrites the category the transfer detector assigned them.
 fn load_account_transactions(
     conn: &Connection,
     account_id: &str,
@@ -970,7 +1008,8 @@ fn load_account_transactions(
 ) -> Result<Vec<(String, CategoryTxn)>, StoreError> {
     let mut stmt = conn.prepare(
         "SELECT id, source_category, description_raw, amount, direction \
-         FROM transactions WHERE account_id = ?1 AND is_deleted = 0 ORDER BY rowid",
+         FROM transactions \
+         WHERE account_id = ?1 AND is_deleted = 0 AND is_transfer = 0 ORDER BY rowid",
     )?;
     let raw = stmt
         .query_map(params![account_id], |row| {
