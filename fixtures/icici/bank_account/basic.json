@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic ICICI savings/current bank-account golden vector (no real data). Ported from the web engine's icici_bank.py (BalanceLedgerStatementReader) — a Withdrawal/Deposit/running-Balance ledger with NO Dr/Cr marker; direction is derived from the running-balance delta and the printed amount is an independent integrity check (amount == |balance delta|). Values captured from a live run of the web reader + balance_chain.check (RECONCILED). Row-1 is anchored by the printed Opening Balance (geometry-free, so first_row_words is empty).",
+  "_comment": "Synthetic ICICI savings/current bank-account golden vector (no real data). Ported from the web engine's icici_bank.py (BalanceLedgerStatementReader) — a Withdrawal/Deposit/running-Balance ledger with NO Dr/Cr marker; direction is derived from the balance delta and the printed amount is an independent integrity check (amount == |balance delta|). Values captured from a live run of the web reader + balance_chain.check (RECONCILED). Row-1 is anchored by the printed Opening Balance for parity; line_words is synthetic geometry used only by the dispatcher anchor-row test.",
   "lines": [
     "ICICI Bank Limited",
     "Statement of Transactions in Savings Account",
@@ -15,6 +15,25 @@
     "Closing Balance 1,43,000.00"
   ],
   "full_text": "ICICI Bank Limited\nStatement of Transactions in Savings Account\nAccount Number 000401000123456\nStatement Period June 16, 2025 to July 15, 2025\nOpening Balance 1,00,000.00\nS No. Value Date Transaction Date Cheque No. Transaction Remarks Withdrawal Deposit Balance\nUPI/512345/ALICE STORE/Payment\n1 16.06.2025 16.06.2025 5,000.00 95,000.00\nNEFT-N123-EMPLOYER PRIVATE LIMITED-SALARY\n2 18.06.2025 18.06.2025 50,000.00 1,45,000.00\n3 20.06.2025 20.06.2025 ATM CASH WITHDRAWAL 2,000.00 1,43,000.00\nClosing Balance 1,43,000.00",
+  "line_words": [
+    {
+      "line_index": 0,
+      "words": [
+        { "text": "5,000.00", "x0": 450.0, "x1": 500.0 },
+        { "text": "95,000.00", "x0": 520.0, "x1": 590.0 }
+      ]
+    },
+    {
+      "line_index": 7,
+      "words": [
+        { "text": "1", "x0": 40.0, "x1": 48.0 },
+        { "text": "16.06.2025", "x0": 60.0, "x1": 130.0 },
+        { "text": "16.06.2025", "x0": 145.0, "x1": 215.0 },
+        { "text": "5,000.00", "x0": 320.0, "x1": 370.0 },
+        { "text": "95,000.00", "x0": 520.0, "x1": 590.0 }
+      ]
+    }
+  ],
   "expected": {
     "rows": [
       {

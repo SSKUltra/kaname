@@ -40,17 +40,20 @@ pub use dedup::{
 };
 pub use ffi::{
     au_bank_claims, categorize, categorize_batch, check_balance_chain, compute_coverage,
-    cross_source_duplicates, default_categories, detect_transfers, federal_bank_claims,
-    federal_claims, hdfc_bank_claims, hdfc_claims, icici_bank_claims, icici_claims, iob_claims,
-    read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
-    read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
-    read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
-    yes_claims,
+    cross_source_duplicates, default_categories, detect_issuer, detect_transfers,
+    federal_bank_claims, federal_claims, hdfc_bank_claims, hdfc_claims, icici_bank_claims,
+    icici_claims, iob_claims, read_au_bank_statement, read_federal_bank_statement,
+    read_federal_statement, read_hdfc_bank_statement, read_hdfc_statement,
+    read_icici_bank_statement, read_icici_statement, read_iob_statement, read_sbi_statement,
+    read_statement, read_yes_statement, reconcile_statement, sbi_claims, yes_claims, Issuer,
+    ReaderError, StatementKind,
 };
 pub use model::{Direction, Transaction};
 pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};
 pub use statement::reconcile::{ReconcileResult, ReconcileStatus};
-pub use statement::{DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word};
+pub use statement::{
+    DirectionSource, LedgerMetadata, LineWords, ParsedStatement, ParsedTransaction, Word,
+};
 pub use store::{
     CategorizeSummary, DedupSummary, ImportAccountTarget, ImportOutcome, ImportRequest, NewAccount,
     NewCategory, NewImportTransaction, NewStatement, NewTransaction, StatementSource, Store,

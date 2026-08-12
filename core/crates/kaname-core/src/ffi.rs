@@ -15,7 +15,7 @@ use crate::model::Transaction;
 use crate::normalize_description;
 use crate::statement::au_bank::AuBankReader;
 use crate::statement::balance_chain::{check, ChainResult};
-use crate::statement::base::{ParsedStatement, Word};
+use crate::statement::base::{LineWords, ParsedStatement, Word};
 use crate::statement::federal::FederalReader;
 use crate::statement::federal_bank::FederalBankReader;
 use crate::statement::hdfc_bank::HdfcBankReader;
@@ -30,6 +30,29 @@ use crate::statement::yes::YesReader;
 use crate::transfer::{TransferInput, TransferPair};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
+
+/// The two statement shapes the engine reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum StatementKind {
+    CreditCard,
+    BankAccount,
+}
+
+/// Which reader produced or will produce a statement.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Issuer {
+    pub id: String,
+    pub display_name: String,
+    pub bank_code: String,
+    pub kind: StatementKind,
+}
+
+/// Reader dispatch errors are programmer errors, not user-facing messages.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+pub enum ReaderError {
+    #[error("no reader is registered for issuer id {id}")]
+    UnknownIssuer { id: String },
+}
 
 // Money crosses the FFI as an exact base-10 string and surfaces in Swift as a native
 // Foundation.Decimal (see uniffi.toml) — never a float.
@@ -145,6 +168,23 @@ pub fn categorize_batch(
 #[uniffi::export]
 pub fn default_categories() -> Vec<Category> {
     crate::categorize::default_categories()
+}
+
+/// Identify the statement issuer from extracted document text.
+#[uniffi::export]
+pub fn detect_issuer(full_text: String) -> Option<Issuer> {
+    crate::statement::registry::detect_issuer(&full_text)
+}
+
+/// Parse extracted statement text with a previously detected issuer.
+#[uniffi::export]
+pub fn read_statement(
+    issuer: Issuer,
+    lines: Vec<String>,
+    full_text: String,
+    line_words: Vec<LineWords>,
+) -> Result<ParsedStatement, ReaderError> {
+    crate::statement::registry::read_statement(&issuer, &lines, &full_text, &line_words)
 }
 
 /// Parse an ICICI credit-card statement from already-extracted text (lines + full

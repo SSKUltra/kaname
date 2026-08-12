@@ -11,8 +11,8 @@ use std::str::FromStr;
 use chrono::NaiveDate;
 use kaname_core::{
     categorize, categorize_batch, check_balance_chain, compute_coverage, cross_source_duplicates,
-    default_categories, detect_transfers, federal_claims, hdfc_claims, icici_claims, iob_claims,
-    read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
+    default_categories, detect_issuer, detect_transfers, federal_claims, hdfc_claims, icici_claims,
+    iob_claims, read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
     read_hdfc_bank_statement, read_hdfc_statement, read_icici_bank_statement, read_icici_statement,
     read_iob_statement, read_sbi_statement, read_yes_statement, reconcile_statement, sbi_claims,
     yes_claims, Category, CategoryRef, CategoryTxn, ChainStatus, Classification, CoverageState,
@@ -81,6 +81,7 @@ struct Case {
     label: &'static str,
     parse: fn(Vec<String>, String) -> ParsedStatement,
     rel_path: &'static str,
+    expected_issuer_id: &'static str,
 }
 
 const CASES: &[Case] = &[
@@ -88,66 +89,79 @@ const CASES: &[Case] = &[
         label: "ICICI",
         parse: read_icici_statement,
         rel_path: "icici/credit_card/basic.json",
+        expected_issuer_id: "ICICI_CARD",
     },
     Case {
         label: "HDFC year-end",
         parse: read_hdfc_statement,
         rel_path: "hdfc/credit_card/year_end.json",
+        expected_issuer_id: "HDFC_CARD",
     },
     Case {
         label: "HDFC monthly",
         parse: read_hdfc_statement,
         rel_path: "hdfc/credit_card/monthly.json",
+        expected_issuer_id: "HDFC_CARD",
     },
     Case {
         label: "SBI Card",
         parse: read_sbi_statement,
         rel_path: "sbi_card/credit_card/basic.json",
+        expected_issuer_id: "SBI_CARD",
     },
     Case {
         label: "Yes Bank",
         parse: read_yes_statement,
         rel_path: "yes/credit_card/basic.json",
+        expected_issuer_id: "YES_CARD",
     },
     Case {
         label: "IOB",
         parse: read_iob_statement,
         rel_path: "iob/credit_card/basic.json",
+        expected_issuer_id: "IOB_CARD",
     },
     Case {
         label: "Federal/Scapia",
         parse: read_federal_statement,
         rel_path: "federal/credit_card/basic.json",
+        expected_issuer_id: "FEDERAL_CARD",
     },
     Case {
         label: "ICICI bank",
         parse: parse_icici_bank,
         rel_path: "icici/bank_account/basic.json",
+        expected_issuer_id: "ICICI_BANK",
     },
     Case {
         label: "HDFC bank compact",
         parse: parse_hdfc_bank,
         rel_path: "hdfc/bank_account/compact.json",
+        expected_issuer_id: "HDFC_BANK",
     },
     Case {
         label: "HDFC bank detailed",
         parse: parse_hdfc_bank,
         rel_path: "hdfc/bank_account/detailed.json",
+        expected_issuer_id: "HDFC_BANK",
     },
     Case {
         label: "Federal bank classic",
         parse: parse_federal_bank,
         rel_path: "federal/bank_account/classic.json",
+        expected_issuer_id: "FEDERAL_BANK",
     },
     Case {
         label: "Federal bank fi",
         parse: parse_federal_bank,
         rel_path: "federal/bank_account/fi.json",
+        expected_issuer_id: "FEDERAL_BANK",
     },
     Case {
         label: "AU bank",
         parse: parse_au_bank,
         rel_path: "au/bank_account/savings.json",
+        expected_issuer_id: "AU_BANK",
     },
 ];
 
@@ -173,6 +187,16 @@ fn parse_federal_bank(lines: Vec<String>, full_text: String) -> ParsedStatement 
 /// Wrapper for the AU bank-account reader (opening-anchored → no geometry needed).
 fn parse_au_bank(lines: Vec<String>, full_text: String) -> ParsedStatement {
     read_au_bank_statement(lines, full_text, Vec::new())
+}
+
+#[test]
+fn detect_issuer_resolves_every_golden_fixture_to_its_expected_issuer() {
+    for case in CASES {
+        let fx = load_fixture(case.rel_path);
+        let issuer = detect_issuer(fx.full_text)
+            .unwrap_or_else(|| panic!("{}: no issuer detected", case.label));
+        assert_eq!(issuer.id, case.expected_issuer_id, "{}", case.label);
+    }
 }
 
 fn load_fixture(rel_path: &str) -> Fixture {
