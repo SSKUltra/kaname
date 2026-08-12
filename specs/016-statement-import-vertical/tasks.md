@@ -135,9 +135,56 @@ Two-layer repo (`plan.md` → Project Structure):
 
 **Purpose**: Fix the visual and copy contract before any UI is built. Kaname has no Figma tooling and no "Principle IX"; the visual contract of record is `contracts/platform-seams.md` §3 plus the R13 application-point table.
 
-- [ ] T053 [Design] Walk the R13 Liquid Glass application-point table in `specs/016-statement-import-vertical/research.md` against `.github/skills/swiftui-liquid-glass/SKILL.md`, and confirm per-view: glass on the empty-state CTA and the progress capsule only; the summary as a plain `.sheet`; **opaque** figure rows; `AccountPickerView` a standard dense `List`. Record any deviation as a note in this file before building — do not edit the FINAL artifacts.
+- [x] T053 [Design] Walk the R13 Liquid Glass application-point table in `specs/016-statement-import-vertical/research.md` against `.github/skills/swiftui-liquid-glass/SKILL.md`, and confirm per-view: glass on the empty-state CTA and the progress capsule only; the summary as a plain `.sheet`; **opaque** figure rows; `AccountPickerView` a standard dense `List`. Record any deviation as a note in this file before building — do not edit the FINAL artifacts.
 - [x] T054 [Design] Write the copy deck: the exact user-facing sentence for **every** `ImportFailure` case and for each of the three `IntegrityOutcome` states, as string constants in `ios/Sources/Import/ImportModels.swift`. Every sentence is hand-written; the only engine-supplied string allowed on screen is `Issuer.display_name` (FR-033, FR-034, SC-007).
-- [ ] T055 [Design] Trace the state machine in `specs/016-statement-import-vertical/data-model.md` §5 against the four-tap path (SC-001) and confirm every edge — including `.passwordRequired → prompt → retry/cancel` and `Summary` with zero transactions — has a defined destination before UI work begins.
+- [x] T055 [Design] Trace the state machine in `specs/016-statement-import-vertical/data-model.md` §5 against the four-tap path (SC-001) and confirm every edge — including `.passwordRequired → prompt → retry/cancel` and `Summary` with zero transactions — has a defined destination before UI work begins.
+
+#### T053 outcome — R13 walked against the skill
+
+Every R13 row is confirmed as written; no row changes. Three notes settled before building:
+
+- **N1 — `ImportFailureView` is not in the R13 table.** It is a terminal screen with exactly
+  one action, so its "Try another file" button takes `.buttonStyle(.glassProminent)`: the
+  skill's "single primary action on a screen" rule, and "at most one prominent element per
+  screen" still holds because it is a screen, not an overlay on the empty state.
+- **N2 — the progress capsule holds two glass surfaces**, the capsule itself and the Cancel
+  `Button(.glass)`. Both live in the one `GlassEffectContainer(spacing:)` and both use the
+  **capsule** shape, satisfying the container rule and the consistent-shape rule. The
+  `ProgressView` and stage `Text` are plain children — they are not separately glassed.
+- **N3 — no explicit `.tint(_:)` anywhere in this slice.** `.glassProminent` supplies the
+  accent for the one primary action per screen, so the "tint sparingly" rule holds without a
+  per-view decision, and FR-047's "no debit/credit colour on tinted glass" holds structurally
+  because the summary reports counts, never signed amounts.
+
+#### T055 outcome — state machine traced
+
+The four-tap path (SC-001) is: **1** Import CTA → **2** select the file → **3** confirm in the
+picker → **4** Dismiss the summary. Nothing in US1 adds a fifth tap: the FR-024 account picker
+is reachable only from the ambiguous branch (US4), never from the fresh-install path, and an
+unprotected statement requires no typing. Four edges needed a defined destination:
+
+- **E1 — dismissing the document picker returns to `Idle` silently.** It is not `.cancelled`:
+  that case ("Import stopped. Nothing was saved.") belongs to the Cancel button on an
+  in-flight import. Backing out of a picker the person opened by accident must not be
+  answered with a failure screen.
+- **E2 — `.passwordRequired` and `.wrongPassword` never render `ImportFailureView`.** Both are
+  handled on the prompt path: `.passwordRequired` presents the `.alert` with a `SecureField`;
+  `.wrongPassword` re-presents that same alert carrying its sentence, so "retry" means try
+  another password, not pick another file. Cancelling the alert → `Idle`, and the binding is
+  cleared on disappear (FR-008).
+- **E3 — `ReaderError.UnknownIssuer` maps to `.unreadable`.** It is unreachable by
+  construction (the app hands back only an `Issuer` that `detect_issuer` minted) and is a
+  programmer error, so it must never surface as `.unrecognizedIssuer`, which is a real and
+  different user-facing meaning.
+- **E4 — `Summary` with `transactionsImported == 0` is a terminal success** and takes the same
+  two exits as any other summary: Dismiss → `Idle`, "Import another" → `Picking` (FR-020,
+  FR-035). Its integrity row follows `IntegrityOutcome` as usual — a statement with nothing to
+  check against renders no integrity row at all.
+
+In US1's scope, account resolution covers only the unambiguous cases: exactly one candidate →
+attach (FR-021), zero → create and flag `accountIsNew` (FR-022). The `nil`-last-4 and ≥2
+candidate branches are US4 (T091–T094) and must never silently guess in the meantime.
+
 
 **Checkpoint**: Visual treatment, copy and state machine settled — UI implementation may begin.
 
