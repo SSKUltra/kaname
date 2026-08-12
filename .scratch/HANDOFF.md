@@ -90,7 +90,7 @@ make lint               # swiftlint --strict + swift-format lint + core-lint
 make ios-gen            # tuist generate (depends on core-xcframework)
 make ios-test           # simulator build + Swift Testing (sim named "iPhone 16")
 ```
-CI (`.github/workflows/ci.yml`): Rust on `ubuntu-latest`, iOS on `macos-15`. Docs-only
+CI (`.github/workflows/ci.yml`): Rust on `ubuntu-latest`, iOS on `macos-26`. Docs-only
 changes don't need linting/building/testing.
 
 ---
@@ -108,13 +108,18 @@ changes don't need linting/building/testing.
   `core/crates/kaname-core/build.rs` links `tomcrypt` + shadows the `-lcrypto`
   libsqlite3-sys hard-codes with an **empty stub archive** so zero OpenSSL links. Do **not**
   switch to `bundled-sqlcipher-vendored-openssl` (the privacy audit denylists `openssl-sys`).
-- **`build-xcframework.sh` pins `IPHONEOS_DEPLOYMENT_TARGET=18.0`** so SQLCipher's
+- **`build-xcframework.sh` pins `IPHONEOS_DEPLOYMENT_TARGET=26.0`** so SQLCipher's
   `sqlite3.o` (which references `___chkstk_darwin`) links on-device — keep it aligned with
   the app's Tuist deployment target.
+- **Deployment target is iOS 26.0** (`ios/Project.swift`, all three targets). Chosen so
+  **Liquid Glass is unconditional** — never write `#available(iOS 26, *)` or a
+  `.ultraThinMaterial` fallback. See the `swiftui-liquid-glass` skill.
 - **iOS simulator:** local `make ios-test` targets a sim named **"iPhone 16"** (create once:
   `xcrun simctl create "iPhone 16" "iPhone 16"`). CI selects one **by UDID**
   (`.github/scripts/select-ios-simulator.sh`) — never re-hardcode a device name in CI.
-- **CI iOS job MUST stay on `macos-15`** (Homebrew `tuist` cask breaks on `macos-14`).
+- **CI iOS job runs on `macos-26`** and selects the newest **Xcode 26.x** — the iOS 26 SDK is
+  required by the deployment target. Never drop below `macos-15` (Homebrew `tuist` cask breaks
+  on `macos-14`).
 - **swift-format `[Spacing]` rejects trailing inline comments** after code — put comments on
   their own line above the statement.
 - **`DATE_FORMATS` order matters** (`common.rs`): `%d/%m/%y` before `%d/%m/%Y`. chrono's

@@ -33,7 +33,7 @@ SIM_TARGETS=("aarch64-apple-ios-sim" "x86_64-apple-ios")
 # rustc link to the app's deployment target. SQLCipher's sqlite3.o references
 # `___chkstk_darwin` (a stack-probe builtin); without a consistent, modern deployment
 # target rustc would default to an ancient iOS that cannot resolve it, failing the link.
-export IPHONEOS_DEPLOYMENT_TARGET="18.0"
+export IPHONEOS_DEPLOYMENT_TARGET="26.0"
 
 cd "$CORE_DIR"
 

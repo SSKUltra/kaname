@@ -15,7 +15,8 @@ record: `.scratch/persistence/spec.md`;
 **Blocked by:** #01 encrypted-store bootstrap **and** #02 categorization write-back — both
 **done** (schema v2: accounts / categories / transactions + categorization facts).
 
-**Status:** ready-for-agent
+**Status:** resolved (shipped — `57506da`: schema v3 `is_transfer`/`transfer_group_id` +
+cross-account `detect_transfers` write-back, `tests/store_transfer.rs`)
 
 ## Why this slice
 

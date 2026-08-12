@@ -45,15 +45,15 @@ jobs:
 
   ios:
     name: iOS app (SwiftUI)
-    runs-on: macos-15
+    runs-on: macos-26
     defaults:
       run:
         working-directory: ios
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode (newest 16.x for the iOS 18 target)
+      - name: Select Xcode (newest 26.x — the iOS 26 SDK is required for Liquid Glass)
         run: |
-          xcode="$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1 || true)"
+          xcode="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
           if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
           xcodebuild -version
       - name: Install tooling
