@@ -1,8 +1,8 @@
 # Kaname — task pickup (START HERE)
 
 > **Read order:** this file → `.specify/memory/constitution.md` (wins over everything) →
-> the feature you're picking up under `.scratch/<slug>/` (its `spec.md` + `issues/`) →
-> `docs/kaname-ios-plan.md` (architecture + P0–P6) → `.github/copilot-instructions.md`.
+> **the feature you're picking up (§3 names it)** → `docs/kaname-ios-plan.md` (architecture +
+> P0–P6) → `.github/copilot-instructions.md`.
 > Durable "why" reference: `docs/HANDOFF.md` (original scaffold) + `docs/adr/`.
 
 Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS client
@@ -11,25 +11,23 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 
 ---
 
-## 1. Where work is tracked — the `.scratch/` convention
+## 1. Where work is tracked — TWO trackers, know which one
 
-**Tasks live as local markdown in this folder** (git-tracked), one directory per feature
-(see `docs/agents/issue-tracker.md`):
+**→ §3 always names the live one. Read it before scanning either.**
 
-- Spec: `.scratch/<feature-slug>/spec.md`
-- Tickets: `.scratch/<feature-slug>/issues/<NN>-<slug>.md` (numbered from `01`; one file
-  per ticket, never a combined file). A `Status:` line records
-  `needs-triage`/`needs-info`/`ready-for-agent`/`ready-for-human`/`wontfix`
-  (`docs/agents/triage-labels.md`).
+**A. `specs/NNN-<slug>/` — Spec Kit. This is where current work lives.** Every UI/engine
+slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
+`contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
+A feature here is picked up by working `tasks.md` in order, respecting its PR split.
 
-To pick up a task: scan `.scratch/<slug>/issues/` for the lowest-numbered open,
-unblocked, `ready-for-agent` ticket, read its `spec.md`, and implement.
+**B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
+`docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
+`Status:` line (`needs-triage`/`needs-info`/`ready-for-agent`/`ready-for-human`/`wontfix`,
+per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
+`.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
-**Current feature dirs:**
-- `.scratch/categorization/` — deterministic categorization stack.
-- `.scratch/persistence/` — encrypted on-device store. `spec.md` is the design of record;
-  each slice is an `issues/NN-*.md` whose `Status:` line is the single source of truth for
-  whether it shipped — don't restate that here. Upcoming slices are queued (§3).
+⚠️ **Don't conclude "no work left" from an empty `.scratch/` queue** — that is the older
+tracker. Check §3.
 
 ---
 
@@ -40,30 +38,58 @@ truth instead of copying them:
 
 - **The engine + store API that's built** → §7 "Key reusable seams" (names the functions,
   points at the code); the P0–P6 phase map → `docs/kaname-ios-plan.md`.
-- **Which slices shipped** → the `Status: resolved` line in each `.scratch/*/issues/NN-*.md`
-  and the merged PRs (`gh pr list --state merged`).
+- **Which slices shipped** → the `Status: resolved` line in each `.scratch/*/issues/NN-*.md`,
+  the unchecked boxes in the live `specs/NNN-*/tasks.md`, and the merged PRs
+  (`gh pr list --state merged`).
 - **Test counts / current `main`** → `make core-test` && `make ios-test`; `git rev-parse main`.
 - **Source layout** → §8 repo map, or `ls core/crates/kaname-core/src/`.
 
 Orientation in one line: the deterministic engine (10 readers + balance-chain, reconcile,
 dedup, coverage, transfer, categorize), the UniFFI bridge, and the SQLCipher encrypted store
-are all in — the engines are being wired to the store slice by slice (§3).
+are all in and fully wired together — **P2 is done; P3 (the SwiftUI app) is now the work**,
+and the app itself is still the placeholder `ios/Sources/RootView.swift` (§3).
 
 ---
 
-## 3. What's next (queued as tickets)
+## 3. What's next
 
-No ranked list here — it drifts every slice. **The tickets are the queue:** scan
-`.scratch/persistence/issues/` for the lowest-numbered open, unblocked ticket (§1 rule). Each
-upcoming slice is `Status: needs-triage` and opens with **one design decision** to settle with
-the user at the slice boundary (the pattern every slice here has followed); settling it flips
-the ticket to `ready-for-agent`, then implement it.
+**Right now: implement `016-statement-import-vertical` — start with PR A.**
 
-The near-term arc (detail lives in the tickets, not here): finish the **engine→store wiring**
-(dedup, coverage), do the **deferred transfer→category** piece from slice 03, then the
-**platform Keychain/Secure-Enclave key ceremony**. After the store is fully wired, **P3 — the
-Core SwiftUI app** (onboarding → import → list → categorize → dashboard) begins as its own
-feature dir via `speckit.specify`.
+P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
+broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
+locked and its four product decisions are settled (see the spec's `## Clarifications`).
+
+Read, in order:
+`specs/016-statement-import-vertical/spec.md` → `plan.md` → `research.md` (R1–R13, the
+decisions with source-line evidence) → `contracts/` → **`tasks.md`** (136 tasks, the actual
+queue) → `quickstart.md` (build order + smoke test).
+
+**It ships as five PRs, not one** (rationale + task ranges in `tasks.md` § "Recommended PR
+split"). Take the lowest unstarted one:
+
+| PR | Tasks | What |
+|----|-------|------|
+| **A** | T001, T006–T017, T035–T046 | Store hardening: the ⚠️ deadlock refactor, schema v6, atomic `import_statement` |
+| **B** | T003, T005, T018–T034 | The issuer dispatcher (`detect_issuer` / `read_statement`) |
+| **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build. Needs **A + B** |
+| **D** | T070–T097 | Honest failures & account attribution (US2–US4) |
+| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) |
+
+A and B touch disjoint files and can run in parallel; both precede C.
+
+> ⚠️ **Two verified hazards drive PR A's ordering — don't "simplify" them away.**
+> `categorize_account` and `find_duplicates` each take `self.lock()` on their first line and
+> `std::sync::Mutex` is **not reentrant**, so a composite `import_statement` deadlocks
+> silently on the happy path. The `*_in(tx, …)` split (T007/T008) lands **before**
+> `import_statement` (T038). And 3 golden fixtures are claimed by **two** readers today, so
+> `detect_issuer` needs its ledger-first tie-break plus the T020 regression.
+
+**After 016**, the rest of P3 (transaction list, dashboard, budgets, tags, search, export —
+see the spec's Out of Scope) gets specified slice by slice via `speckit.specify`.
+
+The older `.scratch/persistence/` and `.scratch/categorization/` queues are **fully
+resolved** — the engine→store wiring and the Keychain key ceremony all shipped. Nothing is
+open there.
 
 ---
 
@@ -176,7 +202,8 @@ core/crates/kaname-core/   Rust engine (kaname-core)
   tests/                   parity golden harness + store behavioural tests (store*.rs)
 ios/                       SwiftUI app (Tuist). Tests/*Tests.swift = per-bank + engine + store bridge tests
 fixtures/<bank>/<kind>/    synthetic golden vectors (NO real data — Constitution I)
-.scratch/<slug>/           THE task tracker: spec.md + issues/NN-*.md   ← pick up work here
+specs/NNN-<slug>/          Spec Kit: spec/plan/research/contracts/tasks  ← CURRENT work (§3)
+.scratch/<slug>/           older ticket tracker: spec.md + issues/NN-*.md (all resolved)
 .specify/memory/constitution.md   THE rules (privacy non-negotiable; wins over all)
 docs/kaname-ios-plan.md    architecture + P0–P6 (durable)
 docs/adr/                  architecture decision records (durable)
