@@ -58,6 +58,7 @@ fn sample_account() -> NewAccount {
         name: "HDFC Savings".to_string(),
         bank_code: "HDFC".to_string(),
         is_credit_card: false,
+        last4: None,
         currency: "INR".to_string(),
         created_at: "2026-08-08T00:00:00Z".to_string(),
         updated_at: "2026-08-08T00:00:00Z".to_string(),
@@ -191,13 +192,13 @@ fn migration_is_idempotent_across_reopens() {
 
     let first_id = {
         let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
-        assert_eq!(store.schema_version().unwrap(), 5);
+        assert_eq!(store.schema_version().unwrap(), 6);
         store.insert_account(sample_account()).expect("insert")
     };
 
     // Re-open: migrations must be a no-op, the version unchanged, and the data intact.
     let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
-    assert_eq!(store.schema_version().unwrap(), 5);
+    assert_eq!(store.schema_version().unwrap(), 6);
     let accounts = store.list_accounts().expect("list");
     assert_eq!(
         accounts.len(),
@@ -206,6 +207,25 @@ fn migration_is_idempotent_across_reopens() {
     );
     assert_eq!(accounts[0].id, first_id);
     // Categories are still exactly the 23 seeded rows (seeding ran once).
+    assert_eq!(store.list_categories().expect("categories").len(), 23);
+}
+
+#[test]
+fn reopening_a_v6_store_is_a_no_op() {
+    let db = TempDb::new("v6-no-op");
+
+    let first_id = {
+        let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
+        assert_eq!(store.schema_version().unwrap(), 6);
+        store.insert_account(sample_account()).expect("insert")
+    };
+
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
+    assert_eq!(store.schema_version().unwrap(), 6);
+    let accounts = store.list_accounts().expect("list");
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(accounts[0].id, first_id);
+    assert_eq!(accounts[0].last4, None);
     assert_eq!(store.list_categories().expect("categories").len(), 23);
 }
 
