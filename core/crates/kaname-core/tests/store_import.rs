@@ -60,6 +60,7 @@ fn account(name: &str, is_credit_card: bool, created_day: u32) -> NewAccount {
         name: name.to_string(),
         bank_code: "HDFC".to_string(),
         is_credit_card,
+        last4: None,
         currency: "INR".to_string(),
         created_at: created_at.clone(),
         updated_at: created_at,

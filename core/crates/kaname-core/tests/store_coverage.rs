@@ -60,6 +60,7 @@ fn account() -> NewAccount {
         name: "HDFC Savings".to_string(),
         bank_code: "HDFC".to_string(),
         is_credit_card: false,
+        last4: None,
         currency: "INR".to_string(),
         created_at: "2026-01-01T00:00:00Z".to_string(),
         updated_at: "2026-01-01T00:00:00Z".to_string(),

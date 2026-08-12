@@ -38,7 +38,7 @@ use crate::transfer::TransferInput;
 /// The schema version this build of the core knows how to run. The migration runner
 /// applies every version up to and including this one; re-opening an up-to-date database
 /// is a no-op.
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 /// The built-in category a bank-to-bank self-transfer's legs are assigned.
 const SELF_TRANSFER: &str = "SELF_TRANSFER";
@@ -167,6 +167,10 @@ CREATE INDEX idx_statements_account ON statements(account_id);
 ALTER TABLE transactions ADD COLUMN statement_id TEXT REFERENCES statements(id);
 "#;
 
+/// Forward-only schema **v6**: accounts carry the masked account/card tail so import
+/// resolution keys on data, not display names.
+const SCHEMA_V6: &str = "ALTER TABLE accounts ADD COLUMN last4 TEXT;";
+
 /// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
 /// it surfaces in Swift as a throwing `Error`). No variant carries the key or row data.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -219,6 +223,7 @@ pub struct NewAccount {
     pub name: String,
     pub bank_code: String,
     pub is_credit_card: bool,
+    pub last4: Option<String>,
     pub currency: String,
     pub created_at: String,
     pub updated_at: String,
@@ -231,6 +236,7 @@ pub struct StoredAccount {
     pub name: String,
     pub bank_code: String,
     pub is_credit_card: bool,
+    pub last4: Option<String>,
     pub currency: String,
     pub created_at: String,
     pub updated_at: String,
@@ -415,13 +421,14 @@ impl Store {
         let id = mint_id(&conn)?;
         conn.execute(
             "INSERT INTO accounts \
-             (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (id, name, bank_code, is_credit_card, last4, currency, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 id,
                 account.name,
                 account.bank_code,
                 account.is_credit_card as i64,
+                account.last4,
                 account.currency,
                 account.created_at,
                 account.updated_at,
@@ -434,7 +441,7 @@ impl Store {
     pub fn list_accounts(&self) -> Result<Vec<StoredAccount>, StoreError> {
         let conn = self.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, name, bank_code, is_credit_card, currency, created_at, updated_at \
+            "SELECT id, name, bank_code, is_credit_card, last4, currency, created_at, updated_at \
              FROM accounts ORDER BY rowid",
         )?;
         let rows = stmt
@@ -444,9 +451,10 @@ impl Store {
                     name: row.get(1)?,
                     bank_code: row.get(2)?,
                     is_credit_card: row.get::<_, i64>(3)? != 0,
-                    currency: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
+                    last4: row.get(4)?,
+                    currency: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -939,6 +947,10 @@ fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), S
         }
         5 => {
             tx.execute_batch(SCHEMA_V5).map_err(StoreError::migration)?;
+            Ok(())
+        }
+        6 => {
+            tx.execute_batch(SCHEMA_V6).map_err(StoreError::migration)?;
             Ok(())
         }
         other => Err(StoreError::Migration {
@@ -1790,6 +1802,73 @@ mod tests {
                 []
             )
             .is_err());
+    }
+
+    #[test]
+    fn migrating_v5_to_v6_preserves_existing_rows() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=5 {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.pragma_update(None, "user_version", 5).unwrap();
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
+                 VALUES ('a1', 'Savings', 'HDFC', 0, 'INR', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO statements \
+                 (id, account_id, bank_code, period_start, period_end, needs_review, source, \
+                  created_at) \
+                 VALUES ('s1', 'a1', 'HDFC', '2026-07-01', '2026-07-31', 0, 'Statement', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO transactions \
+                 (id, account_id, date, description_raw, amount, direction, currency, \
+                  is_deleted, statement_id, created_at, updated_at) \
+                 VALUES ('t1', 'a1', '2026-07-04', 'desc', '1.00', 'Debit', 'INR', 0, 's1', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 6).expect("apply v6");
+            tx.pragma_update(None, "user_version", 6).unwrap();
+            tx.commit().unwrap();
+        }
+
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 6);
+        let last4: Option<String> = conn
+            .query_row("SELECT last4 FROM accounts WHERE id = 'a1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(last4, None);
+        let statement_count: i64 = conn
+            .query_row("SELECT count(*) FROM statements", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(statement_count, 1);
+        let transaction_statement_id: Option<String> = conn
+            .query_row(
+                "SELECT statement_id FROM transactions WHERE id = 't1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(transaction_statement_id.as_deref(), Some("s1"));
     }
 
     #[test]

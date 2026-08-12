@@ -72,13 +72,13 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Phase 2B — Schema v6 (`accounts.last4`), forward-only
 
-- [ ] T011 RED: add `migrating_v5_to_v6_preserves_existing_rows` to the `#[cfg(test)] mod tests` block in `core/crates/kaname-core/src/store.rs`, mirroring `migrating_v4_to_v5_preserves_existing_rows` (`store.rs:1718`): build a **populated** v5 DB (accounts + transactions + statements rows), open it, assert `PRAGMA user_version == 6`, every pre-existing row is intact, and `accounts.last4` exists and is `NULL`.
-- [ ] T012 RED: add `reopening_a_v6_store_is_a_no_op` to `core/crates/kaname-core/tests/store.rs` beside `migration_is_idempotent_across_reopens` (`tests/store.rs:189`) — re-open must not re-run the migration or alter a row.
-- [ ] T013 GREEN: add `const SCHEMA_V6: &str = "ALTER TABLE accounts ADD COLUMN last4 TEXT;"` and bump `const SCHEMA_VERSION: i64` from `5` to `6` in `core/crates/kaname-core/src/store.rs:41`.
-- [ ] T014 GREEN: add the `6 => { tx.execute_batch(SCHEMA_V6).map_err(StoreError::migration) }` arm to `apply_migration` in `core/crates/kaname-core/src/store.rs:907`, following the shipped v2/v3/v4/v5 pattern exactly.
-- [ ] T015 GREEN: add `last4: Option<String>` to `NewAccount` (`core/crates/kaname-core/src/store.rs:218`) and `StoredAccount` (`store.rs:229`).
-- [ ] T016 GREEN: thread `last4` through `Store::insert_account` (`core/crates/kaname-core/src/store.rs:413`) and `Store::list_accounts` (`store.rs:434`) — insert the column, read it back.
-- [ ] T017 Run `make core-fmt && make core-test`: T011 and T012 GREEN, and **no** shipped store test regressed. `statements` is untouched — the v5 table already satisfies FR-026 (research R6). Targets live in the repo-root `Makefile`.
+- [x] T011 RED: add `migrating_v5_to_v6_preserves_existing_rows` to the `#[cfg(test)] mod tests` block in `core/crates/kaname-core/src/store.rs`, mirroring `migrating_v4_to_v5_preserves_existing_rows` (`store.rs:1718`): build a **populated** v5 DB (accounts + transactions + statements rows), open it, assert `PRAGMA user_version == 6`, every pre-existing row is intact, and `accounts.last4` exists and is `NULL`.
+- [x] T012 RED: add `reopening_a_v6_store_is_a_no_op` to `core/crates/kaname-core/tests/store.rs` beside `migration_is_idempotent_across_reopens` (`tests/store.rs:189`) — re-open must not re-run the migration or alter a row.
+- [x] T013 GREEN: add `const SCHEMA_V6: &str = "ALTER TABLE accounts ADD COLUMN last4 TEXT;"` and bump `const SCHEMA_VERSION: i64` from `5` to `6` in `core/crates/kaname-core/src/store.rs:41`.
+- [x] T014 GREEN: add the `6 => { tx.execute_batch(SCHEMA_V6).map_err(StoreError::migration) }` arm to `apply_migration` in `core/crates/kaname-core/src/store.rs:907`, following the shipped v2/v3/v4/v5 pattern exactly.
+- [x] T015 GREEN: add `last4: Option<String>` to `NewAccount` (`core/crates/kaname-core/src/store.rs:218`) and `StoredAccount` (`store.rs:229`).
+- [x] T016 GREEN: thread `last4` through `Store::insert_account` (`core/crates/kaname-core/src/store.rs:413`) and `Store::list_accounts` (`store.rs:434`) — insert the column, read it back.
+- [x] T017 Run `make core-fmt && make core-test`: T011 and T012 GREEN, and **no** shipped store test regressed. `statements` is untouched — the v5 table already satisfies FR-026 (research R6). Targets live in the repo-root `Makefile`.
 
 ### Phase 2C — The issuer dispatcher (registry, tie-break, unified parse)
 
