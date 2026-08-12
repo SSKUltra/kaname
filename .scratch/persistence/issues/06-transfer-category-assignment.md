@@ -1,6 +1,6 @@
 # 06 — Transfer → category assignment (deferred from slice 03)
 
-**Status:** needs-triage
+**Status:** resolved (shipped — transfer-wins precedence + category assignment in `detect_transfers`)
 
 **What to build:** the piece slice 03 (`03-transfer-persistence.md`) deliberately deferred.
 Slice 03 tags transfer legs (`is_transfer` + `transfer_group_id`) but assigns **no category**.
@@ -13,27 +13,31 @@ changes to the pure matcher. Design of record: `.scratch/persistence/spec.md`;
 **Blocked by:** #02 categorization write-back (done) + #03 transfer persistence (done). Unblocked
 once triaged.
 
-## Open decision (settle with the user before implementing)
+## Settled decisions (triage)
 
-1. **Precedence — the clobber problem.** `store.categorize_account` re-runs over **all**
-   non-deleted rows and currently sets `category_id` unconditionally (even to NULL on no-match),
-   so it would **overwrite** a transfer-assigned category on the next run. Decide the contract:
-   does `categorize_account` **skip `is_transfer` rows**? Does transfer assignment **win** and
-   categorize leave it? What's the order of operations on import?
-2. **Where the assignment lives.** Extend `detect_transfers` to also set `category_id` (couple
-   them in one pass, like the web `transfer_detector`), vs a separate
-   `store.assign_transfer_categories()`, vs making `categorize_account` transfer-aware. The
-   `is_credit_card_payment` split already surfaces in slice 03's `TransferSummary`.
+1. **Precedence → transfer wins.** `categorize_account` **skips rows where `is_transfer = 1`**,
+   leaving their `category_id` / `categorised_by` untouched (and not counting them as
+   uncategorized). A confirmed cross-account pair — two rows on two accounts agreeing on date,
+   amount and opposite direction — is stronger evidence than a keyword match, so the rule is
+   enforced in code rather than documented as an ordering contract. Import order stays free: a
+   `categorize_account` re-run can never clobber a transfer category, whichever ran first.
+2. **Assignment lives in `detect_transfers`.** The pass that mints the `transfer_group_id` also
+   writes `category_id` (`CREDIT_CARD_BILL_PAYMENT` when the pair had a credit-card leg, else
+   `SELF_TRANSFER`) and `categorised_by = 'TRANSFER_DETECTOR'`, in the same write transaction —
+   mirroring the web `transfer_detector`, with no second call to forget. The existing
+   `WHERE … transfer_group_id IS NULL` guard keeps it idempotent.
 
-## Sketch (post-triage)
+## Sketch
 
-- No new schema (both categories are seeded; `is_transfer`/`transfer_group_id`/`category_id`
-  all exist).
-- Assign `CREDIT_CARD_BILL_PAYMENT` when the pair had a CC leg, else `SELF_TRANSFER`; honour the
-  precedence rule above so a re-run is idempotent and doesn't clobber.
+- No new schema: both categories are seeded builtins, and
+  `is_transfer`/`transfer_group_id`/`category_id`/`categorised_by` all exist.
+- `detect_transfers`' UPDATE also sets `category_id` + `categorised_by`; the CC/self split comes
+  from `TransferPair.is_credit_card_payment`, which the matcher already returns.
+- `load_account_transactions` (the categorize candidate loader) gains `AND is_transfer = 0`.
 - Behavioural tests (temp DB): a CC bill-payment pair ⇒ both legs `CREDIT_CARD_BILL_PAYMENT`; a
-  bank-to-bank pair ⇒ `SELF_TRANSFER`; a `categorize_account` re-run does **not** clobber; a
-  non-transfer row is unaffected.
+  bank-to-bank pair ⇒ `SELF_TRANSFER`, both `categorised_by = 'TRANSFER_DETECTOR'`; a
+  `categorize_account` re-run does **not** clobber (either order); a non-transfer row still
+  categorizes normally; the skipped rows aren't counted in `CategorizeSummary`.
 
 ## Deferred
 Manual un-tagging/override of a mistaken transfer (arrives with the learning/correction work).
