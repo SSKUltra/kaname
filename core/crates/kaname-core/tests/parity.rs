@@ -496,6 +496,24 @@ fn yes_statement_reconciles_against_its_printed_totals() {
 }
 
 #[test]
+fn yes_statement_whose_rows_disagree_with_its_printed_totals_needs_review() {
+    // A purchase row that never reached the reader: read debit 100.00 against a printed
+    // 4,750.00. The credit side still agrees, so this also pins that one failing side is
+    // enough — and the rows are still returned, because a statement that fails its check is
+    // imported and flagged, never discarded.
+    let fx = load_fixture("yes/credit_card/mismatched_totals.json");
+    let statement = read_yes_statement(fx.lines, fx.full_text);
+    assert_matches_expected("Yes mismatched", &statement, &fx.expected);
+    let result = reconcile_statement(statement);
+    let dec = |s: &str| Decimal::from_str(s).unwrap();
+    assert_eq!(result.status, Some(ReconcileStatus::NeedsReview));
+    assert_eq!(result.read_debits, dec("100.00"));
+    assert_eq!(result.printed_debits, Some(dec("4750.00")));
+    assert_eq!(result.read_credits, dec("9000.00"));
+    assert_eq!(result.printed_credits, Some(dec("9000.00")));
+}
+
+#[test]
 fn iob_statement_reconciles_against_its_account_summary() {
     // Read debit 3500.00 == printed 3500.00 and read credit 1000.00 == printed 1000.00.
     let fx = load_fixture("iob/credit_card/basic.json");
