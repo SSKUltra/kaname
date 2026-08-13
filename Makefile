@@ -1,4 +1,4 @@
-.PHONY: bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test lint
+.PHONY: bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test import-audit lint
 
 # SQLCipher crypto backend is chosen per-OS with NO OpenSSL (Constitution I): Apple
 # auto-selects CommonCrypto; on Linux we force LibTomCrypt by injecting the compile flag
@@ -43,6 +43,11 @@ ios-gen: core-xcframework
 ios-test: ios-gen
 	cd ios && xcodebuild -workspace Kaname.xcworkspace -scheme Kaname \
 		-destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' test
+
+# The platform half of the Principle I gate: fail if any networking symbol appears on the
+# statement-import path. `core-privacy-audit` cannot see Swift.
+import-audit:
+	./scripts/import-path-audit.sh
 
 # --- Everything ---
 lint: core-lint
