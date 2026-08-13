@@ -39,7 +39,23 @@ struct ImportSummary: Equatable, Sendable {
     /// Rows that matched a transaction's shape but whose fields would not parse. Surfaced
     /// rather than silently dropped.
     let unreadableRows: Int
+    /// The document carried text and named its issuer, yet no transaction was recognised in
+    /// it, and nothing the statement printed confirms it was genuinely empty. Reporting that
+    /// as "0 transactions" would tell a person they had no spending — this says the truth
+    /// instead. Nothing wrong was written, so it is a notice, not a failure.
+    let nothingRecognized: Bool
     let integrity: IntegrityOutcome
+}
+
+extension ImportSummary {
+    /// What a statement whose transactions could not be recognised says to the person.
+    static let nothingRecognizedNotice = IntegrityNotice(
+        symbolName: "text.magnifyingglass",
+        message: "Kaname opened this statement but couldn't make out any transactions in it. "
+            + "Nothing was added. If you know it has spending on it, this layout is one Kaname "
+            + "can't read yet.",
+        isWarning: true
+    )
 }
 
 /// Every way an import can end without writing anything.

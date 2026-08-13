@@ -41,6 +41,19 @@ struct ImportSummaryView: View {
                         }
                     }
                 }
+
+                // Said plainly, and above nothing else: an empty import that Kaname cannot
+                // vouch for must never be left to read as "you had no spending".
+                if summary.nothingRecognized {
+                    Section {
+                        Label {
+                            Text(ImportSummary.nothingRecognizedNotice.message)
+                        } icon: {
+                            Image(systemName: ImportSummary.nothingRecognizedNotice.symbolName)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
             }
             .navigationTitle("Import complete")
             .navigationBarTitleDisplayMode(.inline)
@@ -91,7 +104,9 @@ struct ImportSummaryView: View {
 #Preview {
     ImportSummaryView(
         summary: ImportSummary(
-            issuerDisplayName: "ICICI Bank Credit Card",
+            // Deliberately not a real bank: the app never knows which issuers exist, it only
+            // renders whatever name the engine handed back.
+            issuerDisplayName: "Example Bank Credit Card",
             last4: "1002",
             accountIsNew: true,
             period: DateInterval(start: .now.addingTimeInterval(-2_592_000), end: .now),
@@ -100,6 +115,7 @@ struct ImportSummaryView: View {
             categorized: 38,
             uncategorized: 4,
             unreadableRows: 1,
+            nothingRecognized: false,
             integrity: .needsReview
         ),
         onDismiss: {},
