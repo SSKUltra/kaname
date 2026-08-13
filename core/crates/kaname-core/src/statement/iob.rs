@@ -81,6 +81,7 @@ impl LineReaderConfig for IobReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::statement::claim::Regions;
     use crate::statement::line_reader::read_lines;
     use rust_decimal_macros::dec;
 
@@ -136,11 +137,13 @@ mod tests {
     fn claims_gates_by_issuer() {
         let (_, full_text) = sample();
         assert!(crate::statement::line_reader::claims(
-            &IobReader, &full_text, BANK_CODE
+            &IobReader,
+            &Regions::of(&full_text),
+            BANK_CODE
         ));
         assert!(!crate::statement::line_reader::claims(
             &IobReader,
-            "HDFC Bank Credit Cards statement",
+            &Regions::of("HDFC Bank Credit Cards statement"),
             BANK_CODE
         ));
     }

@@ -104,6 +104,7 @@ mod tests {
     use super::*;
     use crate::model::Direction;
     use crate::statement::base::DirectionSource;
+    use crate::statement::claim::Regions;
     use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
     use rust_decimal_macros::dec;
 
@@ -176,12 +177,24 @@ mod tests {
     #[test]
     fn claims_accepts_savings_and_rejects_credit_card() {
         let (_, full_text) = sample();
-        assert!(claims_ledger(&IciciBankReader, &full_text, BANK_CODE));
+        assert!(claims_ledger(
+            &IciciBankReader,
+            &Regions::of(&full_text),
+            BANK_CODE
+        ));
         // An ICICI credit-card statement is not a bank-account statement.
         let cc = "ICICI Bank\nSPENDS OVERVIEW\nStatement Date May 28, 2026\n4315XXXXXXXX1002\n";
-        assert!(!claims_ledger(&IciciBankReader, cc, BANK_CODE));
+        assert!(!claims_ledger(
+            &IciciBankReader,
+            &Regions::of(cc),
+            BANK_CODE
+        ));
         // Wrong bank_code is rejected outright.
-        assert!(!claims_ledger(&IciciBankReader, &full_text, "HDFC"));
+        assert!(!claims_ledger(
+            &IciciBankReader,
+            &Regions::of(&full_text),
+            "HDFC"
+        ));
     }
 
     #[test]

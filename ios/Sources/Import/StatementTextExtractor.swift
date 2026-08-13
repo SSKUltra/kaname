@@ -100,6 +100,14 @@ struct PDFKitStatementTextExtractor: StatementTextExtractor {
     /// The readers are fixture-locked to plain newline splitting — no trimming, no dropping
     /// of blank lines, no reshaping of any kind. Used when a page's geometry cannot be
     /// trusted, and by callers that only have text.
+    ///
+    /// ⚠️ **Frozen, and permanent.** This is the model of the pre-017 extraction — the text
+    /// layer's own newlines, exactly as they arrived. `ios/Tests/GeometryFixtureTests.swift`
+    /// parses through it to assert **A4, non-vacuity**: every geometry fixture must yield
+    /// strictly fewer transactions through this path than through the reshaping one, which
+    /// is what stops a fixture that would have passed *before* the fix from being mistaken
+    /// for proof of it. Keep it `static` and test-visible; do not delete or alter it when
+    /// the extractor around it is rewritten.
     static func split(_ fullText: String) -> [String] {
         fullText.components(separatedBy: "\n")
     }

@@ -83,7 +83,7 @@ struct ImportPipelineTests {
         let summary = try #require(result.summary)
 
         // The issuer's own name is shown, so a tie-break between two readers is visible.
-        #expect(summary.issuerDisplayName == "ICICI Bank Credit Card")
+        #expect(summary.issuerDisplayName == "ICICI Amazon Pay Credit Card")
         #expect(summary.last4 == "1002")
         // Nothing existed before this import, so the account was created for it.
         #expect(summary.accountIsNew)

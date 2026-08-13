@@ -9,6 +9,7 @@
 pub mod au_bank;
 pub mod balance_chain;
 pub mod base;
+pub mod claim;
 pub mod common;
 pub mod federal;
 pub mod federal_bank;

@@ -114,6 +114,7 @@ mod tests {
     use super::*;
     use crate::model::Direction;
     use crate::statement::base::DirectionSource;
+    use crate::statement::claim::Regions;
     use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
     use rust_decimal_macros::dec;
 
@@ -195,12 +196,24 @@ mod tests {
 
     #[test]
     fn claims_accepts_both_savings_layouts_and_rejects_credit_card() {
-        assert!(claims_ledger(&HdfcBankReader, &compact(), BANK_CODE));
-        assert!(claims_ledger(&HdfcBankReader, &detailed(), BANK_CODE));
+        assert!(claims_ledger(
+            &HdfcBankReader,
+            &Regions::of(&compact()),
+            BANK_CODE
+        ));
+        assert!(claims_ledger(
+            &HdfcBankReader,
+            &Regions::of(&detailed()),
+            BANK_CODE
+        ));
         // An HDFC credit-card statement is not a bank-account statement.
         let cc = "HDFC Bank Credit Cards\nCard Number XXXX6873XXXXXX9070\n";
-        assert!(!claims_ledger(&HdfcBankReader, cc, BANK_CODE));
+        assert!(!claims_ledger(&HdfcBankReader, &Regions::of(cc), BANK_CODE));
         // Wrong issuer code is rejected outright.
-        assert!(!claims_ledger(&HdfcBankReader, &compact(), "ICICI"));
+        assert!(!claims_ledger(
+            &HdfcBankReader,
+            &Regions::of(&compact()),
+            "ICICI"
+        ));
     }
 }

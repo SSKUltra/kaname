@@ -16,6 +16,7 @@ use crate::normalize_description;
 use crate::statement::au_bank::AuBankReader;
 use crate::statement::balance_chain::{check, ChainResult};
 use crate::statement::base::{LineWords, ParsedStatement, Word};
+use crate::statement::claim::Regions;
 use crate::statement::federal::FederalReader;
 use crate::statement::federal_bank::FederalBankReader;
 use crate::statement::hdfc_bank::HdfcBankReader;
@@ -200,7 +201,7 @@ pub fn read_icici_statement(lines: Vec<String>, full_text: String) -> ParsedStat
 /// document-plausibility gate); `false` for other issuers.
 #[uniffi::export]
 pub fn icici_claims(full_text: String) -> bool {
-    claims(&IciciReader, &full_text, "ICICI")
+    claims(&IciciReader, &Regions::of(&full_text), "ICICI")
 }
 
 /// Parse an HDFC credit-card statement from already-extracted text (both the year-end
@@ -215,7 +216,7 @@ pub fn read_hdfc_statement(lines: Vec<String>, full_text: String) -> ParsedState
 /// issuers.
 #[uniffi::export]
 pub fn hdfc_claims(full_text: String) -> bool {
-    crate::statement::hdfc::hdfc_claims(&full_text)
+    crate::statement::hdfc::hdfc_claims(&Regions::of(&full_text))
 }
 
 /// Parse an SBI Card credit-card statement from already-extracted text. Same
@@ -228,7 +229,7 @@ pub fn read_sbi_statement(lines: Vec<String>, full_text: String) -> ParsedStatem
 /// Whether `full_text` is recognizably an SBI Card statement; `false` for other issuers.
 #[uniffi::export]
 pub fn sbi_claims(full_text: String) -> bool {
-    claims(&SbiReader, &full_text, "SBI_CARD")
+    claims(&SbiReader, &Regions::of(&full_text), "SBI")
 }
 
 /// Parse a Yes Bank (Kiwi) credit-card statement from already-extracted text. Same
@@ -241,7 +242,7 @@ pub fn read_yes_statement(lines: Vec<String>, full_text: String) -> ParsedStatem
 /// Whether `full_text` is recognizably a Yes Bank statement; `false` for other issuers.
 #[uniffi::export]
 pub fn yes_claims(full_text: String) -> bool {
-    claims(&YesReader, &full_text, "YES")
+    claims(&YesReader, &Regions::of(&full_text), "YES")
 }
 
 /// Parse an Indian Overseas Bank (IOB) credit-card statement from already-extracted text.
@@ -255,7 +256,7 @@ pub fn read_iob_statement(lines: Vec<String>, full_text: String) -> ParsedStatem
 /// issuers.
 #[uniffi::export]
 pub fn iob_claims(full_text: String) -> bool {
-    claims(&IobReader, &full_text, "IOB")
+    claims(&IobReader, &Regions::of(&full_text), "IOB")
 }
 
 /// Parse a Scapia / Federal Bank credit-card statement from already-extracted text. Same
@@ -269,7 +270,7 @@ pub fn read_federal_statement(lines: Vec<String>, full_text: String) -> ParsedSt
 /// other issuers.
 #[uniffi::export]
 pub fn federal_claims(full_text: String) -> bool {
-    claims(&FederalReader, &full_text, "FEDERAL")
+    claims(&FederalReader, &Regions::of(&full_text), "FEDERAL")
 }
 
 /// Parse an ICICI savings/current bank-account statement from already-extracted text.
@@ -292,7 +293,7 @@ pub fn read_icici_bank_statement(
 /// statement; `false` for other issuers and for an ICICI *credit-card* statement.
 #[uniffi::export]
 pub fn icici_bank_claims(full_text: String) -> bool {
-    claims_ledger(&IciciBankReader, &full_text, "ICICI")
+    claims_ledger(&IciciBankReader, &Regions::of(&full_text), "ICICI")
 }
 
 /// Verify a bank-account statement's running-balance chain: that each printed amount
@@ -329,7 +330,7 @@ pub fn read_hdfc_bank_statement(
 /// statement; `false` for other issuers and for an HDFC *credit-card* statement.
 #[uniffi::export]
 pub fn hdfc_bank_claims(full_text: String) -> bool {
-    claims_ledger(&HdfcBankReader, &full_text, "HDFC")
+    claims_ledger(&HdfcBankReader, &Regions::of(&full_text), "HDFC")
 }
 
 /// Parse a Federal Bank savings/current statement from already-extracted text (both the
@@ -351,7 +352,7 @@ pub fn read_federal_bank_statement(
 /// statement; `false` for other issuers and for a Scapia/Federal *credit-card* statement.
 #[uniffi::export]
 pub fn federal_bank_claims(full_text: String) -> bool {
-    claims_ledger(&FederalBankReader, &full_text, "FEDERAL")
+    claims_ledger(&FederalBankReader, &Regions::of(&full_text), "FEDERAL")
 }
 
 /// Parse an AU Small Finance Bank savings/current statement from already-extracted text.
@@ -371,7 +372,7 @@ pub fn read_au_bank_statement(
 /// `false` for other issuers and for a credit-card statement.
 #[uniffi::export]
 pub fn au_bank_claims(full_text: String) -> bool {
-    claims_ledger(&AuBankReader, &full_text, "AU")
+    claims_ledger(&AuBankReader, &Regions::of(&full_text), "AU")
 }
 
 #[cfg(test)]

@@ -40,6 +40,7 @@ use crate::statement::base::{
     truncate_chars, DirectionSource, LedgerMetadata, ParsedStatement, ParsedTransaction, Word,
     MAX_RAW,
 };
+use crate::statement::claim::Regions;
 use crate::statement::common::{parse_amount, parse_date};
 
 // A withdrawal/deposit column value that may be a bare integer (e.g. `0`, `59`, `50000`)
@@ -88,25 +89,24 @@ pub trait LedgerReaderConfig {
     }
 }
 
-/// True when `cfg` recognises `text` as a bank-account statement for `bank_code`:
+/// True when `cfg` recognises a document as a bank-account statement for `bank_code`:
 /// the issuer `bank_code` plus all of `claim_all` and (when set) any of `claim_any`.
-pub fn claims_ledger<C: LedgerReaderConfig + ?Sized>(cfg: &C, text: &str, bank_code: &str) -> bool {
+///
+/// Matched against the document's identity region — see [`crate::statement::claim`] for why
+/// `hdfc_bank`'s mandatory `"HDFC"` marker makes that the difference between identification
+/// and coincidence.
+pub fn claims_ledger<C: LedgerReaderConfig + ?Sized>(
+    cfg: &C,
+    regions: &Regions,
+    bank_code: &str,
+) -> bool {
     if bank_code != cfg.bank_code() {
         return false;
     }
-    let hay = text.to_lowercase();
-    if !cfg
-        .claim_all()
-        .iter()
-        .all(|m| hay.contains(&m.to_lowercase()))
-    {
+    if !cfg.claim_all().iter().all(|m| regions.identity_has(m)) {
         return false;
     }
-    cfg.claim_any().is_empty()
-        || cfg
-            .claim_any()
-            .iter()
-            .any(|m| hay.contains(&m.to_lowercase()))
+    cfg.claim_any().is_empty() || cfg.claim_any().iter().any(|m| regions.identity_has(m))
 }
 
 /// A parsed transaction anchor line and its position in the page text.
@@ -548,13 +548,17 @@ mod tests {
     fn claims_requires_bank_code_and_markers() {
         assert!(claims_ledger(
             &TwoColumnReader,
-            "Test Bank statement",
+            &Regions::of("Test Bank statement"),
             "TEST2COL"
         ));
-        assert!(!claims_ledger(&TwoColumnReader, "Test Bank", "OTHER"));
         assert!(!claims_ledger(
             &TwoColumnReader,
-            "Some other bank",
+            &Regions::of("Test Bank"),
+            "OTHER"
+        ));
+        assert!(!claims_ledger(
+            &TwoColumnReader,
+            &Regions::of("Some other bank"),
             "TEST2COL"
         ));
     }

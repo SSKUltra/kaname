@@ -73,6 +73,7 @@ impl LineReaderConfig for FederalReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::statement::claim::Regions;
     use crate::statement::line_reader::read_lines;
     use rust_decimal_macros::dec;
 
@@ -122,12 +123,12 @@ mod tests {
         let (_, full_text) = sample();
         assert!(crate::statement::line_reader::claims(
             &FederalReader,
-            &full_text,
+            &Regions::of(&full_text),
             BANK_CODE
         ));
         assert!(!crate::statement::line_reader::claims(
             &FederalReader,
-            "ICICI Bank Statement",
+            &Regions::of("ICICI Bank Statement"),
             BANK_CODE
         ));
     }

@@ -54,9 +54,13 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**Right now: `016-statement-import-vertical` is code-complete and fully merged — PRs A, B, C,
-D and E are all on `main`. What remains is the two manual gates only a person can run (T123
-and T129), then the next P3 slice.**
+**Right now: `017-column-major-pdf` is the live queue — spec, plan and `tasks.md` (119 tasks)
+are all written and it is ready to implement, starting at T001. Its detail is further down
+this section (⚠️ "017 jumps the queue"); read that before touching it.**
+
+`016-statement-import-vertical` is code-complete and fully merged — PRs A, B, C, D and E are
+all on `main`. What remains there is the two manual gates only a person can run (T123 and
+T129); they are release-blocking but they do not block 017.
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -172,6 +176,98 @@ are release-blocking:
 **After the two manual gates**, the rest of P3 (transaction list, dashboard, budgets, tags,
 search, export — see the spec's Out of Scope) gets specified slice by slice via
 `speckit.specify`.
+
+**⚠️ 017 jumps the queue — real statements do not import.** `specs/017-column-major-pdf/`
+(branch `017-column-major-pdf`, **spec + plan + tasks all written — this is the live queue**;
+do not re-run `speckit.specify`/`plan`/`tasks`) exists because running
+thirteen genuine statement PDFs through the shipped pipeline showed the import vertical does
+not work on real documents: **2 recognised no issuer, 8 more were recognised and imported zero
+transactions**, and the remaining 3 under-read. Cause: real statements are multi-column tables
+whose text layer is emitted **column-major**, and `PDFKitStatementTextExtractor.lineRanges(on:)`
+can only *add* line breaks, never re-join what the text layer split — the mirror image of the
+merged-row bug 016 PR D fixed. Both must hold at once. The fix is two-sided: a prototype that
+recovered complete rows broke issuer detection on 11 of 13 files, because claim markers are
+matched as literal substrings and several contain spaces. **All clarifications are answered —
+the spec (53 FRs) is planned and broken into 119 tasks.** Four findings there are worth knowing before you
+touch it:
+
+1. **No file needs a *new* reader.** All 13 belong to issuers already in the registry, so the
+   slice is smaller than it looks. (`SBI-bank.pdf` is misleadingly named — it is an **SBI Cashback
+   credit card** statement, so the "card reader claimed a bank statement" defect the spec was
+   first drafted around **does not exist**; FR-016 survives as an unevidenced invariant.)
+2. **The registry gains a naming rule** (FR-041–053): **credit cards per card product, bank
+   accounts per bank**, with ids shaped `<INSTITUTION>_<PRODUCT>_CARD` / `<INSTITUTION>_BANK`.
+   Six card entries are renamed (`SBI_CASHBACK_CARD`, `HDFC_SWIGGY_CARD`, `ICICI_AMAZONPAY_CARD`,
+   `IOB_RUPAY_CARD`, `YES_KIWI_CARD`, `FEDERAL_SCAPIA_CARD`); the four bank entries are
+   **untouched** — the two HDFC and two Federal savings layouts are template versions of one
+   product, not four products. The full future-state table is in the spec under **Q1**.
+   ⚠️ Defect fixed in PR B: `sbi.rs` set `BANK_CODE = "SBI_CARD"`, a product value in a
+   field that holds a bare institution everywhere else; it is now `"SBI"` (FR-053), and gate
+   G4 fails the build if a product or kind token reappears in any `bank_code`.
+3. **Matching a literal anywhere in a document is not identification.** One reference statement
+   names six of its issuer's *other* card products in marketing copy; the HDFC card statement
+   contains `Swiggy` ~40× **inside merchant descriptions**; an AU statement contains `HDFC` inside
+   a UPI description while `hdfc_bank.rs`'s mandatory claim marker is exactly `"HDFC"`. Products
+   and issuers must be identified from the **title/header region** only (FR-044/FR-047).
+   Related: **all six card readers currently claim at bank level**, so today's per-card
+   identification is correct by *uniqueness*, not evidence — FR-050/051 make a test fail the build
+   if two card entries for one institution are not both product-proven, and FR-048 replaces
+   `detect_issuer`'s silent **alphabetical** tie-break with a specificity rule.
+4. **The app is unreleased, so ids, names and even the store schema may change freely.**
+   `bank_code` is nonetheless kept at institution granularity on *modelling* grounds (FR-046).
+   Planning MUST explicitly take or defer one thing rather than let it pass: **an account cannot
+   currently say which card product it is** (the store persists `bank_code` + `last4`, not the
+   registry id) — a free schema change today, an expensive one after release.
+
+**How to pick 017 up.** Read, in order:
+`specs/017-column-major-pdf/spec.md` → `plan.md` → `research.md` (R1–R16) →
+`contracts/` (`extraction-seam.md`, `engine-recognition.md`, `geometry-fixture.md`) →
+**`tasks.md`** (119 tasks, T001–T119 — the actual queue) → `quickstart.md`.
+It ships as **five PRs**:
+
+| PR | Phase | What |
+|----|-------|------|
+| **A** 🔒 | 3 (T017–T024 + G6/G7) | Recognition: `claim.rs`, identity region, whitespace-insensitive matching |
+| **B** | 4 | Registry: `ClaimEvidence`, the six card renames, `sbi::BANK_CODE`, specificity, G1–G5 |
+| **C** 🎯 | 5 | Extraction: the `StatementTextExtractor` rewrite — zones → row bands → lines, all-page `lineWords` |
+| **D** | 9 | Evidence: 10 generated geometry vectors + cross-bank, non-vacuity, privacy review |
+| **E** | 10 | Gates: `make reference-check`, perf/cancellation, audits, docs, sign-off |
+
+Three non-negotiables the plan settled — **don't re-litigate them**:
+
+- 🔒 **PR A merges before PR C.** Recognition (US2, P2) is deliberately sequenced ahead of
+  extraction (US1, P1), *against* priority order: R16 measured the reverse breaking 11 of 13
+  files. PR A is a strict superset of today's matching, so `main` is never worse at any commit.
+  PRs B and C can then run in parallel (different languages, no file overlap).
+- 🔒 **Gate G7 ships in the same PR as the widening.** Whitespace-insensitivity widens every
+  bare-institution marker at once, and `hdfc_bank::CLAIM_ALL` is literally `["HDFC"]` while
+  `AU-statment-savings.pdf` contains `HDFC` in a UPI description. The false-claim gate is not
+  a follow-up.
+- **Geometry-first replaces the text layer's grouping entirely**, so splitting merged rows and
+  re-joining split columns fall out of *one* algorithm rather than two fighting mechanisms.
+
+Two items are **not closable by an agent**:
+
+- **T119 ⛔ blocked** — the AU account-kind header literal (R15) cannot be read from this repo;
+  it needs the reference-set holder. Fallback: defer that task **alone**; `AU-statment-savings.pdf`
+  keeps reporting "format not recognised yet" (FR-025). Nothing else depends on it.
+- **T116 human-gated** — the reference-set pass closing SC-002 (zero-transaction files 10 → 0),
+  per the spec's Q3 Option A.
+
+Also deferred on purpose: **persisting `issuer_id` (schema v7)**, priced and recorded as
+"must land before first release" — no FR or SC needs it yet.
+
+**Then: the unknown-bank contribution slice — how Kaname reaches every Indian bank.**
+Decided but never sliced, so it is easy to miss: `docs/adr/0004-unknown-bank-ingestion.md`,
+including **two amendments added 2026-08-13**. In short — a *layout signature* (column
+positions, row shape, date format; **no values**) is the contribution unit; it can be rendered
+back into a **synthetic statement** that is committable as a golden fixture *and* is the first
+fixture that would exercise the native extractor rather than assume it; the fallback ladder's
+trigger changes from "no reader claims it" to "the parse is unusable", because 8 of the 13
+reference files were recognised correctly and still read nothing; and contribution must be
+**inspectable** — the person sees the exact payload before it leaves the device, in plain
+language, with a passing test proving no value from their statement survives into it.
+017 is a prerequisite: a signature derived from fragmented text records a broken layout.
 
 The older `.scratch/persistence/` and `.scratch/categorization/` queues are **fully
 resolved** — the engine→store wiring and the Keychain key ceremony all shipped. Nothing is
