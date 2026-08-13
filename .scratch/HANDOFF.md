@@ -54,9 +54,9 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**Right now: `016-statement-import-vertical` is code-complete — PRs A, B, C, D and E are all
-done. What remains is the two manual gates only a person can run (T123 and T129), then the
-next P3 slice.**
+**Right now: `016-statement-import-vertical` is code-complete and fully merged — PRs A, B, C,
+D and E are all on `main`. What remains is the two manual gates only a person can run (T123
+and T129), then the next P3 slice.**
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -76,7 +76,7 @@ split"):
 | **B** | T003, T005, T018–T034 | The issuer dispatcher (`detect_issuer` / `read_statement`) | ✅ **merged** (#32) |
 | **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build | ✅ **merged** (#33) |
 | **D** | T070–T097, T137–T139 | Honest failures & account attribution (US2–US4) | ✅ **merged** (#34) |
-| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | ✅ **done, unmerged** |
+| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | ✅ **merged** (#35) |
 
 **⬅️ NEXT: the two manual gates, which no agent can run.** Both are on the simulator, both
 are release-blocking:
