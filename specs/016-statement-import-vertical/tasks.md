@@ -266,6 +266,34 @@ candidate branches are US4 (T091–T094) and must never silently guess in the me
 - [ ] T086 [US3] Confirm each of the five failures renders its own distinct sentence in `ios/Sources/Import/ImportFailureView.swift`, drawn from the T054 copy deck — no shared generic message.
 - [ ] T087 [US3] **GATE** `make lint && make ios-test` — T077–T079 GREEN. Targets live in the repo-root `Makefile`.
 
+### Extraction fidelity — the silent-empty-import gap ⚠️ (added after PR C)
+
+**Why this exists**: the ten readers are fixture-locked to the **web engine's** PDF extraction
+(pdfplumber); iOS extracts with **PDFKit**, and nothing has yet proven the two produce the same
+line shapes. A PR C probe against a differently-generated PDF found PDFKit **merging adjacent
+lines**: the document was still identified as its issuer, but *zero* rows parsed and the app
+reported "0 transactions" — a **success** under FR-020. A person whose statement PDFKit merges
+would be told their statement had no spending. That is the one way this slice can currently
+mislead, and it fails silently.
+
+- [ ] T137 [US3] RED: create `ios/Tests/ExtractionFidelityTests.swift` — for a representative
+      card fixture **and** a representative ledger fixture, render the fixture's `lines` into a
+      PDF in-test with `UIGraphicsPDFRenderer`, extract it with `PDFKitStatementTextExtractor`,
+      and assert `readStatement` over the *extracted* text yields the **same** transactions
+      (dates, exact `Decimal` amounts, directions) as `readStatement` over the fixture lines
+      fed directly. This is the parity proof that iOS extraction and the fixture contract
+      agree. Generated, never committed (FR-043, SC-011). Include a **line-merge** case —
+      rows laid out close enough that PDFKit joins them — and pin the *current* behaviour so
+      the failure mode is documented rather than discovered by a person.
+- [ ] T138 [US3] Make the empty result **honest**: a parse that recognised no transactions in a
+      document that *did* carry extractable text must not read as "your statement had no
+      spending". Surface it as its own summary state with its own hand-written sentence
+      (copy deck, `ios/Sources/Import/ImportModels.swift`), distinct from both a genuinely
+      empty statement and from `.unrecognizedIssuer`. Nothing is written that is wrong, so this
+      is a **notice, not a failure** — FR-020 still holds. If the engine cannot distinguish the
+      two cases from `ParsedStatement` alone, stop and raise it rather than guessing.
+- [ ] T139 [US3] **GATE** `make lint && make ios-test` — T137 GREEN.
+
 **Checkpoint**: Every unusable input fails honestly with the store untouched.
 
 ---
@@ -479,8 +507,8 @@ Setup + Foundational + Design → US1 (MVP) → US2 (bank-agnostic honesty) → 
 |---|---|---|---|
 | **PR A — Engine: store hardening** | T001, T006–T017, T035–T046 | The ⚠️ `*_in` deadlock refactor, schema v6, `Store::import_statement`, the FFI regeneration and the Swift call-site update | Highest-risk, smallest surface. The deadlock refactor and the migration deserve a reviewer's full attention and nothing else's. Rust-only + one test file. |
 | **PR B — Engine: issuer dispatcher** | T003, T005, T018–T034 | `registry.rs`, `detect_issuer`, `read_statement`, `first_anchor_index`, the `(kind_rank, id)` tie-break, the **three-fixture collision regression**, the parity guard | Touches entirely different files from PR A, so the two can be developed in parallel and reviewed independently. The tie-break argument is a self-contained design review. |
-| **PR C — MVP vertical** | T002, T004, T047–T069 | PDFKit link, the Swift seams, the extractor happy path, the `ImportService` pipeline, the summary sheet, the minimal `RootView`, the network audit | 🎯 The MVP. The first PR that is demoable, and the natural place to stop and validate. Depends on A **and** B. |
-| **PR D — Honest failures & correct attribution** | T070–T097 | US2 (bank-agnosticism, unrecognized, tie-break visibility) + US3 (the five extraction failures, password handling) + US4 (account identity, re-import dedup) | The three "don't corrupt or mislead" stories. Split further into **D1 (US2+US3)** and **D2 (US4)** if D exceeds ~600 changed lines — D2 also touches `store.rs`, so it may warrant its own review. |
+| **PR C — MVP vertical** ✅ merged (#33) | T002, T004, T047–T069 | PDFKit link, the Swift seams, the extractor happy path, the `ImportService` pipeline, the summary sheet, the minimal `RootView`, the network audit | 🎯 The MVP. The first PR that is demoable, and the natural place to stop and validate. Depends on A **and** B. |
+| **PR D — Honest failures & correct attribution** | T070–T097, **T137–T139** | US2 (bank-agnosticism, unrecognized, tie-break visibility) + US3 (the five extraction failures, password handling, **the PDFKit extraction-fidelity parity proof and the silent-empty-import notice**) + US4 (account identity, re-import dedup) | The three "don't corrupt or mislead" stories. Split further into **D1 (US2+US3)** and **D2 (US4)** if D exceeds ~600 changed lines — D2 also touches `store.rs`, so it may warrant its own review. |
 | **PR E — Trust, responsiveness & the front door** | T098–T136 | US5 (integrity in plain language) + US6 (progress, cancellation, Liquid Glass capsule) + US7 (empty state, accessibility) + Polish | Almost entirely UI and copy; reviewed with a simulator open, against the Liquid Glass and accessibility gates rather than against engine logic. Split into **E1 (US5+US6)** and **E2 (US7+Polish)** if the accessibility sweep drags. |
 
 **Ordering constraints across PRs**: A and B are independent and may land in either order (or in parallel), but **both must land before C**. D depends on C. E depends on C, and its US4-adjacent parts depend on D. Every PR runs the full Local Verification Gate before it opens, and every PR that changes the FFI surface (A, B, D) must run `make core-xcframework` before `make ios-gen`.

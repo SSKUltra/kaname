@@ -86,11 +86,23 @@ holds `PDFKitStatementTextExtractor`, the `ImportService` actor, `ImportViewMode
 pick → progress → summary flow.
 
 **PR D starts here** (`tasks.md` Phase 4 → 6): T070–T071 RED → T072–T078 (US2, the
-issuer-agnostic guarantees) → T079–T090 (US3, honest failures) → T091–T097 (US4, the FR-024
+issuer-agnostic guarantees) → T079–T090 (US3, honest failures) → **T137–T139 (the extraction
+fidelity gap found while smoke-testing PR C — see below)** → T091–T097 (US4, the FR-024
 account-attribution matrix + `AccountPickerView`). Note that US1 deliberately implements only
 the unambiguous account cases — exactly one candidate attaches, zero creates — so **T093 is
 where the `nil`-last-4 and ≥2-candidate branches finally get their human decision**; until
 then the code must never silently guess.
+
+> ⚠️ **Known gap, highest-value thing in PR D — the silent empty import.** The ten readers are
+> fixture-locked to the **web engine's** extraction (pdfplumber); iOS extracts with **PDFKit**,
+> and nothing yet proves the two agree. Smoke-testing PR C against a differently-generated PDF
+> found PDFKit **merging adjacent lines**: the document was still identified as HDFC, but zero
+> rows parsed and the app reported *"0 transactions"* — a success under FR-020. A person whose
+> statement PDFKit merges would be told they had no spending. **T137** is the parity proof
+> (render fixture lines → PDF → extract → parse → must equal parsing the lines directly);
+> **T138** makes the empty result honest. A known-good synthetic demo PDF can be regenerated
+> the way T137 does it — render fixture lines with `UIGraphicsPDFRenderer` at ~22pt line
+> spacing (tighter spacing is what triggers the merge).
 
 > ⚠️ **Still live in PR D:** never call a bare `tuist generate` — always `make ios-gen` /
 > `make ios-test`, and run `make core-xcframework` first whenever the FFI surface moves.
