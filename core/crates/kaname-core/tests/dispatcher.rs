@@ -111,6 +111,87 @@ fn detect_issuer_is_deterministic_over_repeated_calls() {
     assert_eq!(first, second);
 }
 
+/// Gate **G6** (FR-013, SC-004): the pre-slice recognition baseline, captured as data while
+/// `main` was still unchanged. Every statement fixture in `fixtures/` resolved to exactly the
+/// issuer named here before 017 widened claim matching, and must resolve to it after.
+///
+/// When 017 PR B renames the six card entries per FR-041–FR-043, the **right-hand column** is
+/// updated to the new ids and nothing else: a row may be renamed, never removed, and no fixture
+/// may change which *institution and kind* it resolves to.
+const FIXTURE_ISSUER_BASELINE: &[(&str, &str)] = &[
+    ("au/bank_account/savings.json", "AU_BANK"),
+    ("federal/bank_account/classic.json", "FEDERAL_BANK"),
+    ("federal/bank_account/fi.json", "FEDERAL_BANK"),
+    ("federal/credit_card/basic.json", "FEDERAL_CARD"),
+    ("hdfc/bank_account/compact.json", "HDFC_BANK"),
+    ("hdfc/bank_account/detailed.json", "HDFC_BANK"),
+    ("hdfc/credit_card/monthly.json", "HDFC_CARD"),
+    ("hdfc/credit_card/year_end.json", "HDFC_CARD"),
+    ("icici/bank_account/basic.json", "ICICI_BANK"),
+    ("icici/credit_card/basic.json", "ICICI_CARD"),
+    ("iob/credit_card/basic.json", "IOB_CARD"),
+    ("sbi_card/credit_card/basic.json", "SBI_CARD"),
+    ("yes/credit_card/basic.json", "YES_CARD"),
+    ("yes/credit_card/mismatched_totals.json", "YES_CARD"),
+];
+
+#[test]
+fn every_fixture_resolves_to_its_pre_slice_issuer() {
+    for (rel_path, expected_id) in FIXTURE_ISSUER_BASELINE {
+        let fx = load_fixture(rel_path);
+        let issuer = detect_issuer(fx.full_text)
+            .unwrap_or_else(|| panic!("{rel_path}: recognised before this slice, not now"));
+        assert_eq!(&issuer.id, expected_id, "{rel_path}");
+    }
+}
+
+/// The baseline above is only a gate if it is *total*. A statement fixture added later must be
+/// added to it too, so this walks `fixtures/` and demands every document-shaped vector — anything
+/// carrying a `full_text` — appear in the table.
+#[test]
+fn the_issuer_baseline_covers_every_statement_fixture() {
+    let root = format!("{}/../../../fixtures", env!("CARGO_MANIFEST_DIR"));
+    let listed: HashSet<&str> = FIXTURE_ISSUER_BASELINE
+        .iter()
+        .map(|(path, _)| *path)
+        .collect();
+
+    let mut found = Vec::new();
+    let mut stack = vec![std::path::PathBuf::from(&root)];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read_dir {dir:?}: {e}")) {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "json") {
+                let raw = std::fs::read_to_string(&path).expect("read fixture");
+                let value: serde_json::Value = serde_json::from_str(&raw).expect("parse fixture");
+                if value.get("full_text").is_some() {
+                    let rel = path
+                        .strip_prefix(&root)
+                        .expect("fixture under fixtures/")
+                        .to_string_lossy()
+                        .into_owned();
+                    found.push(rel);
+                }
+            }
+        }
+    }
+
+    found.sort();
+    for rel in &found {
+        assert!(
+            listed.contains(rel.as_str()),
+            "{rel} is a statement fixture but is missing from FIXTURE_ISSUER_BASELINE"
+        );
+    }
+    assert_eq!(
+        found.len(),
+        FIXTURE_ISSUER_BASELINE.len(),
+        "baseline lists a fixture that no longer exists"
+    );
+}
+
 #[test]
 fn ledger_beats_card_on_a_doubly_claimed_document() {
     let text = concat!(

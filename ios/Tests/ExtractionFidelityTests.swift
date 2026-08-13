@@ -14,6 +14,13 @@ import UIKit
 /// wrongly, that their statement had no spending.
 ///
 /// Every document is rendered in the test from synthetic lines and thrown away.
+///
+/// ⚠️ **Frozen for 017 (FR-028, SC-005).** `cardLines`, `ledgerLines` and every expectation
+/// already in this file record how the shipped readers behave on a document the text layer
+/// gets *right*. 017 reshapes rows that the text layer gets wrong, and the only way that
+/// change can be shown not to have broken the working case is if this file's expectations
+/// are not adjusted to fit it. New tests may be **added**; nothing already here may be
+/// edited, relaxed or deleted.
 @Suite("PDFKit extraction agrees with what the readers expect")
 struct ExtractionFidelityTests {
     /// A representative card statement: a credit and a debit.

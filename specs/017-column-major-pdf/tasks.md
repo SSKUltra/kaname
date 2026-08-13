@@ -77,10 +77,10 @@ Two-layer repo (`plan.md` → *Project Structure*):
 **Purpose**: Establish a green, *recorded* baseline and the empty scaffolding, before a single
 behaviour changes.
 
-- [ ] T001 Establish the green pre-change baseline: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"` then run `make core-lint && make core-test && make core-privacy-audit && make import-audit` from the repo-root `Makefile`; record the passing test count in the PR description so any later regression is attributable
-- [ ] T002 [P] Declare the new engine submodule: add `pub mod claim;` to `core/crates/kaname-core/src/statement/mod.rs` and create an empty `core/crates/kaname-core/src/statement/claim.rs` so the workspace stays compiling
-- [ ] T003 [P] Create `fixtures/geometry/` with a `fixtures/geometry/README.md` stating the privacy rules P1–P5 from `specs/017-column-major-pdf/contracts/geometry-fixture.md` (fabricated content only; header literals come from the reader's own published claim markers; card numbers masked with invented last-four)
-- [ ] T004 [P] Confirm the iOS test loop runs locally: `xcrun simctl create "iPhone 16" "iPhone 16"` if absent, then `make ios-gen` (which runs `make core-xcframework` first, per the `ios-gen` target in `Makefile`)
+- [x] T001 Establish the green pre-change baseline: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"` then run `make core-lint && make core-test && make core-privacy-audit && make import-audit` from the repo-root `Makefile`; record the passing test count in the PR description so any later regression is attributable
+- [x] T002 [P] Declare the new engine submodule: add `pub mod claim;` to `core/crates/kaname-core/src/statement/mod.rs` and create an empty `core/crates/kaname-core/src/statement/claim.rs` so the workspace stays compiling
+- [x] T003 [P] Create `fixtures/geometry/` with a `fixtures/geometry/README.md` stating the privacy rules P1–P5 from `specs/017-column-major-pdf/contracts/geometry-fixture.md` (fabricated content only; header literals come from the reader's own published claim markers; card numbers masked with invented last-four)
+- [x] T004 [P] Confirm the iOS test loop runs locally: `xcrun simctl create "iPhone 16" "iPhone 16"` if absent, then `make ios-gen` (which runs `make core-xcframework` first, per the `ios-gen` target in `Makefile`)
 
 **Checkpoint**: Baseline recorded and green; `claim.rs` declared; fixture directory exists.
 
@@ -93,9 +93,9 @@ assert against these pins, so neither can start until they exist.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Capture the pre-slice recognition baseline as data: add a `fixture_issuer_baseline` table (fixture relative path → resolved issuer id) covering every fixture under `fixtures/` to `core/crates/kaname-core/tests/dispatcher.rs`, generated from the current `detect_issuer`, and assert it — this table *is* gate G6 (FR-013, SC-004) and must be written while `main` is still unchanged
-- [ ] T006 [P] Pin the legacy extraction path permanently: document `PDFKitStatementTextExtractor.split(_:)` in `ios/Sources/Import/StatementTextExtractor.swift` as the frozen model of the pre-slice text-layer newline split, keep it `static` and test-visible, and add a comment stating it exists to serve assertion A4 (non-vacuity) forever and must not be deleted when the extractor is rewritten
-- [ ] T007 [P] Record the pre-slice `ExtractionFidelityTests` expectations as untouchable: add a header comment to `ios/Tests/ExtractionFidelityTests.swift` naming FR-028/SC-005 and stating that `cardLines`, `ledgerLines` and every existing expectation in this file are **frozen** for this slice — extensions may be added, existing expectations may not be edited
+- [x] T005 Capture the pre-slice recognition baseline as data: add a `fixture_issuer_baseline` table (fixture relative path → resolved issuer id) covering every fixture under `fixtures/` to `core/crates/kaname-core/tests/dispatcher.rs`, generated from the current `detect_issuer`, and assert it — this table *is* gate G6 (FR-013, SC-004) and must be written while `main` is still unchanged
+- [x] T006 [P] Pin the legacy extraction path permanently: document `PDFKitStatementTextExtractor.split(_:)` in `ios/Sources/Import/StatementTextExtractor.swift` as the frozen model of the pre-slice text-layer newline split, keep it `static` and test-visible, and add a comment stating it exists to serve assertion A4 (non-vacuity) forever and must not be deleted when the extractor is rewritten
+- [x] T007 [P] Record the pre-slice `ExtractionFidelityTests` expectations as untouchable: add a header comment to `ios/Tests/ExtractionFidelityTests.swift` naming FR-028/SC-005 and stating that `cardLines`, `ledgerLines` and every existing expectation in this file are **frozen** for this slice — extensions may be added, existing expectations may not be edited
 
 **Checkpoint**: The "before" state is pinned on both sides. User story work can begin.
 
