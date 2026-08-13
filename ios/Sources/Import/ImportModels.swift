@@ -112,26 +112,34 @@ extension ImportFailure {
     }
 }
 
+/// What an integrity verdict says to the person, when it says anything at all.
+struct IntegrityNotice: Equatable, Sendable {
+    let symbolName: String
+    let message: String
+    /// Icon plus colour plus text — the colour is never the only thing carrying the meaning.
+    let isWarning: Bool
+}
+
 extension IntegrityOutcome {
     /// `nothingToCheck` renders as nothing at all — neither a pass nor a fail — so it has no
-    /// sentence by design.
-    var message: String? {
+    /// notice by design.
+    var notice: IntegrityNotice? {
         switch self {
         case .agrees:
-            return "Every figure on this statement adds up."
+            return IntegrityNotice(
+                symbolName: "checkmark.seal",
+                message: "Every figure on this statement adds up.",
+                isWarning: false
+            )
         case .needsReview:
-            return "Some figures on this statement don't add up. The transactions were imported "
-                + "and are marked for you to review."
+            return IntegrityNotice(
+                symbolName: "exclamationmark.triangle",
+                message: "Some figures on this statement don't add up. The transactions were "
+                    + "imported and are marked for you to review.",
+                isWarning: true
+            )
         case .nothingToCheck:
             return nil
-        }
-    }
-
-    var symbolName: String? {
-        switch self {
-        case .agrees: return "checkmark.seal"
-        case .needsReview: return "exclamationmark.triangle"
-        case .nothingToCheck: return nil
         }
     }
 }
