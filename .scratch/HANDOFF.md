@@ -54,9 +54,13 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**Right now: `016-statement-import-vertical` is code-complete and fully merged — PRs A, B, C,
-D and E are all on `main`. What remains is the two manual gates only a person can run (T123
-and T129), then the next P3 slice.**
+**Right now: `017-column-major-pdf` is the live queue — spec, plan and `tasks.md` (119 tasks)
+are all written and it is ready to implement, starting at T001. Its detail is further down
+this section (⚠️ "017 jumps the queue"); read that before touching it.**
+
+`016-statement-import-vertical` is code-complete and fully merged — PRs A, B, C, D and E are
+all on `main`. What remains there is the two manual gates only a person can run (T123 and
+T129); they are release-blocking but they do not block 017.
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -174,7 +178,8 @@ search, export — see the spec's Out of Scope) gets specified slice by slice vi
 `speckit.specify`.
 
 **⚠️ 017 jumps the queue — real statements do not import.** `specs/017-column-major-pdf/`
-(branch `017-column-major-pdf`, spec written, **plan not started**) exists because running
+(branch `017-column-major-pdf`, **spec + plan + tasks all written — this is the live queue**;
+do not re-run `speckit.specify`/`plan`/`tasks`) exists because running
 thirteen genuine statement PDFs through the shipped pipeline showed the import vertical does
 not work on real documents: **2 recognised no issuer, 8 more were recognised and imported zero
 transactions**, and the remaining 3 under-read. Cause: real statements are multi-column tables
@@ -183,7 +188,7 @@ can only *add* line breaks, never re-join what the text layer split — the mirr
 merged-row bug 016 PR D fixed. Both must hold at once. The fix is two-sided: a prototype that
 recovered complete rows broke issuer detection on 11 of 13 files, because claim markers are
 matched as literal substrings and several contain spaces. **All clarifications are answered —
-the spec (53 FRs) is ready for `speckit.plan`.** Four findings there are worth knowing before you
+the spec (53 FRs) is planned and broken into 119 tasks.** Four findings there are worth knowing before you
 touch it:
 
 1. **No file needs a *new* reader.** All 13 belong to issuers already in the registry, so the
@@ -212,6 +217,44 @@ touch it:
    Planning MUST explicitly take or defer one thing rather than let it pass: **an account cannot
    currently say which card product it is** (the store persists `bank_code` + `last4`, not the
    registry id) — a free schema change today, an expensive one after release.
+
+**How to pick 017 up.** Read, in order:
+`specs/017-column-major-pdf/spec.md` → `plan.md` → `research.md` (R1–R16) →
+`contracts/` (`extraction-seam.md`, `engine-recognition.md`, `geometry-fixture.md`) →
+**`tasks.md`** (119 tasks, T001–T119 — the actual queue) → `quickstart.md`.
+It ships as **five PRs**:
+
+| PR | Phase | What |
+|----|-------|------|
+| **A** 🔒 | 3 (T017–T024 + G6/G7) | Recognition: `claim.rs`, identity region, whitespace-insensitive matching |
+| **B** | 4 | Registry: `ClaimEvidence`, the six card renames, `sbi::BANK_CODE`, specificity, G1–G5 |
+| **C** 🎯 | 5 | Extraction: the `StatementTextExtractor` rewrite — zones → row bands → lines, all-page `lineWords` |
+| **D** | 9 | Evidence: 10 generated geometry vectors + cross-bank, non-vacuity, privacy review |
+| **E** | 10 | Gates: `make reference-check`, perf/cancellation, audits, docs, sign-off |
+
+Three non-negotiables the plan settled — **don't re-litigate them**:
+
+- 🔒 **PR A merges before PR C.** Recognition (US2, P2) is deliberately sequenced ahead of
+  extraction (US1, P1), *against* priority order: R16 measured the reverse breaking 11 of 13
+  files. PR A is a strict superset of today's matching, so `main` is never worse at any commit.
+  PRs B and C can then run in parallel (different languages, no file overlap).
+- 🔒 **Gate G7 ships in the same PR as the widening.** Whitespace-insensitivity widens every
+  bare-institution marker at once, and `hdfc_bank::CLAIM_ALL` is literally `["HDFC"]` while
+  `AU-statment-savings.pdf` contains `HDFC` in a UPI description. The false-claim gate is not
+  a follow-up.
+- **Geometry-first replaces the text layer's grouping entirely**, so splitting merged rows and
+  re-joining split columns fall out of *one* algorithm rather than two fighting mechanisms.
+
+Two items are **not closable by an agent**:
+
+- **T119 ⛔ blocked** — the AU account-kind header literal (R15) cannot be read from this repo;
+  it needs the reference-set holder. Fallback: defer that task **alone**; `AU-statment-savings.pdf`
+  keeps reporting "format not recognised yet" (FR-025). Nothing else depends on it.
+- **T116 human-gated** — the reference-set pass closing SC-002 (zero-transaction files 10 → 0),
+  per the spec's Q3 Option A.
+
+Also deferred on purpose: **persisting `issuer_id` (schema v7)**, priced and recorded as
+"must land before first release" — no FR or SC needs it yet.
 
 **Then: the unknown-bank contribution slice — how Kaname reaches every Indian bank.**
 Decided but never sliced, so it is easy to miss: `docs/adr/0004-unknown-bank-ingestion.md`,
