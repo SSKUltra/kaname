@@ -54,8 +54,8 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**Right now: implement `016-statement-import-vertical` — PR A, B and C are MERGED; start
-with PR D.**
+**Right now: implement `016-statement-import-vertical` — PR A, B, C and D are MERGED; start
+with PR E, the last one.**
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -67,44 +67,63 @@ decisions with source-line evidence) → `contracts/` → **`tasks.md`** (136 ta
 queue) → `quickstart.md` (build order + smoke test).
 
 **It ships as five PRs, not one** (rationale + task ranges in `tasks.md` § "Recommended PR
-split"). Take the lowest unstarted one — **that is now PR D**:
+split"). Take the lowest unstarted one — **that is now PR E**:
 
 | PR | Tasks | What | Status |
 |----|-------|------|--------|
 | **A** | T001, T006–T017, T035–T046 | Store hardening: the ⚠️ deadlock refactor, schema v6, atomic `import_statement` | ✅ **merged** (#31) |
 | **B** | T003, T005, T018–T034 | The issuer dispatcher (`detect_issuer` / `read_statement`) | ✅ **merged** (#32) |
 | **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build | ✅ **merged** (#33) |
-| **D** | T070–T097 | Honest failures & account attribution (US2–US4) | ⬅️ **NEXT** |
-| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | |
+| **D** | T070–T097, T137–T139 | Honest failures & account attribution (US2–US4) | ✅ **merged** (#34) |
+| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | ⬅️ **NEXT** |
 
-**State of `main` after A + B + C** (verified `ee0f9a7`, full gate green):
-`make core-test` = **221 passing / 0 failing**; `make ios-test` = **61 tests / 21 suites**;
-`make lint` = 0 violations / 32 files; `make import-audit` + `make core-privacy-audit` OK.
-**The MVP vertical is live** — the app is no longer a placeholder: `ios/Sources/Import/`
-holds `PDFKitStatementTextExtractor`, the `ImportService` actor, `ImportViewModel`,
-`ImportSummaryView` and `ImportFailureView`, and `RootView` is the real
-pick → progress → summary flow.
+**State of `main` after A + B + C + D** (verified `0808a5a`, full gate green):
+`make core-test` = **238 passing / 0 failing**; `make ios-test` = **96 tests / 26 suites**;
+`make lint` = 0 violations; `make import-audit` + `make core-privacy-audit` OK.
+**The vertical is real and honest end to end** — `ios/Sources/Import/` holds
+`PDFKitStatementTextExtractor`, the `ImportService` actor, `ImportViewModel`,
+`ImportSummaryView`, `ImportFailureView`, `PasswordPromptView` and `AccountPickerView`.
 
-**PR D starts here** (`tasks.md` Phase 4 → 6): T070–T071 RED → T072–T078 (US2, the
-issuer-agnostic guarantees) → T079–T090 (US3, honest failures) → **T137–T139 (the extraction
-fidelity gap found while smoke-testing PR C — see below)** → T091–T097 (US4, the FR-024
-account-attribution matrix + `AccountPickerView`). Note that US1 deliberately implements only
-the unambiguous account cases — exactly one candidate attaches, zero creates — so **T093 is
-where the `nil`-last-4 and ≥2-candidate branches finally get their human decision**; until
-then the code must never silently guess.
+**PR E starts here** (`tasks.md` Phase 7 → 10): T098–T105 (US5, the integrity verdict on
+screen) → T106–T113 (US6, responsiveness + cancellation) → T114–T129 (US7, the first-run
+front door) → T130–T136 (the full gate). Nothing is blocked; the seams it needs all exist.
 
-> ⚠️ **Known gap, highest-value thing in PR D — the silent empty import.** The ten readers are
-> fixture-locked to the **web engine's** extraction (pdfplumber); iOS extracts with **PDFKit**,
-> and nothing yet proves the two agree. Smoke-testing PR C against a differently-generated PDF
-> found PDFKit **merging adjacent lines**: the document was still identified as HDFC, but zero
-> rows parsed and the app reported *"0 transactions"* — a success under FR-020. A person whose
-> statement PDFKit merges would be told they had no spending. **T137** is the parity proof
-> (render fixture lines → PDF → extract → parse → must equal parsing the lines directly);
-> **T138** makes the empty result honest. A known-good synthetic demo PDF can be regenerated
-> the way T137 does it — render fixture lines with `UIGraphicsPDFRenderer` at ~22pt line
-> spacing (tighter spacing is what triggers the merge).
+**What PR D settled — don't re-litigate it:**
 
-> ⚠️ **Still live in PR D:** never call a bare `tuist generate` — always `make ios-gen` /
+- **The silent empty import is closed, and it was worse than recorded.** PDFKit does merge
+  adjacent rows on tight layouts, but the result was not "0 transactions": it parsed into
+  **one confidently wrong transaction** (row 1's date, row 2's amount, row 1's Dr/Cr marker).
+  `PDFKitStatementTextExtractor.lineRanges(on:)` now re-derives line breaks from glyph
+  geometry — **words are atomic** (PDFKit returns a stray far-off rect for the last glyph or
+  two of a drawn run) and rows are grouped by **overlapping vertical extents**, with PDFKit's
+  own newlines kept as hard breaks. A page whose character indices or bounds can't be trusted
+  falls back to plain newline splitting. `ios/Tests/ExtractionFidelityTests.swift` is the
+  parity proof and must stay green: it renders fixture lines to a PDF (22pt spacing, and 8pt
+  for the merge case), extracts, and demands identical dates, exact `Decimal` amounts and
+  directions versus parsing the lines directly.
+- **A zero-transaction parse is only reported as an empty statement when the statement's own
+  printed figures agree** (`integrity == .agrees`). Everything else gets
+  `ImportSummary.nothingRecognized` and its own sentence. A **bank ledger** can never reach
+  the trusted state — with no anchor row the reader records no printed balance at all — so a
+  genuinely quiet ledger month gets the cautious sentence. That was a deliberate choice over
+  extending the engine to expose printed Dr/Cr counts; revisit only if people complain.
+- **Re-importing a statement used to double history.** `find_duplicates_in` compares accounts
+  against each other and never an account against itself. `link_reimported_rows_in`
+  (`store.rs`) now links a new statement's rows against what that account already had —
+  **canonical layer only**, never fuzzy, because within one account the fuzzy layer would
+  merge two genuine same-day, same-amount purchases. Two identical rows inside one statement
+  stay two rows (pinned by `two_identical_rows_in_one_statement_are_both_kept`).
+- **`ImportAccountTarget::Existing` now carries `last4`** and the store fills a blank one in,
+  so an account created from a statement without an account number learns it later. The FFI
+  moved: `make core-xcframework` before `tuist generate`.
+- **`ImportService.run` returns `ImportResult`** (`.finished` / `.needsAccount`), and holds
+  the parse in `PendingImport` while the person answers — so answering costs no re-read and
+  no second password prompt. `resolveAccount(_:)` finishes it.
+- **`make import-audit` gained a bank-literal check**, parsed out of the Rust registry, so an
+  eleventh issuer is guarded without touching the script. It fails on any registry id, bank
+  code or display name anywhere under `ios/Sources/` — including in a `#Preview`.
+
+> ⚠️ **Still live in PR E:** never call a bare `tuist generate` — always `make ios-gen` /
 > `make ios-test`, and run `make core-xcframework` first whenever the FFI surface moves.
 > `make import-audit` is the mechanical SC-004 proof that **zero networking symbols** exist
 > under `ios/Sources/Import/` — run it on every PR that touches that directory. The only
@@ -239,12 +258,16 @@ changes don't need linting/building/testing.
   **Timestamps are explicit inputs** (the core reads no wall-clock); the platform owns the
   Keychain key + file path + NSFileProtection.
 - `common.rs` / `polarity.rs` — `parse_amount`/`parse_date`/`find_last4`/…; `classify`.
-- `ios/Sources/Import/` — the platform vertical (016 PR C). `StatementTextExtractor` is the
+- `ios/Sources/Import/` — the platform vertical (016 PR C + D). `StatementTextExtractor` is the
   PDFKit seam (a protocol, so the pipeline is provable without a PDF — see
   `ios/Tests/ImportPipelineTests.swift`); `ImportService` is the actor owning the whole
   pipeline and the in-flight `Task`; `ImportModels.swift` holds **the copy deck** — every
   user-facing sentence for `ImportFailure` and `IntegrityOutcome` lives there, and
-  `Issuer.display_name` is the only engine string allowed on screen.
+  `Issuer.display_name` is the only engine string allowed on screen; `lineRanges(on:)` is the
+  glyph-geometry line splitter that keeps PDFKit from merging two statement rows into one
+  (proved by `ios/Tests/ExtractionFidelityTests.swift`); `AccountPickerView` is the only place
+  an account is ever chosen, and `ImportService.run` returns `ImportResult` so an ambiguous
+  attribution asks instead of guessing.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
 
 ---
