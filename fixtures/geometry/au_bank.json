@@ -1,0 +1,94 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date, account number and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time — the shape that made real statements report no spending. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/au_bank.rs. Both money columns print on every row, the empty side as a dash, so a column lost in reshaping would move the amount into the other direction entirely.",
+  "issuer_id": "AU_BANK",
+  "kind": "bank_account",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD MMM YYYY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "valuedate",
+        "x": 120.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 200.0,
+        "align": "left"
+      },
+      {
+        "role": "withdrawal",
+        "x": 380.0,
+        "align": "right"
+      },
+      {
+        "role": "deposit",
+        "x": 450.0,
+        "align": "right"
+      },
+      {
+        "role": "balance",
+        "x": 520.0,
+        "align": "right"
+      }
+    ]
+  },
+  "header_lines": [
+    "ACCOUNT STATEMENT www.aubank.in",
+    "Account Number : 1234567890120042 Account Type : AU Lite Savings Account",
+    "Statement Date : 22 Jun 2026 Opening Balance(₹) : 11,570.79",
+    "Statement Period : 01 Mar 2026 to 31 May 2026 Closing Balance(₹) : 16,570.79"
+  ],
+  "footer_lines": [
+    "Closing Balance(₹) : 16,570.79"
+  ],
+  "rows": [
+    {
+      "date": "01 Mar 2026",
+      "valuedate": "01 Mar 2026",
+      "description": "UPI/DR/000001/EXAMPLE",
+      "withdrawal": "5,000.00",
+      "deposit": "-",
+      "balance": "6,570.79"
+    },
+    {
+      "date": "02 Mar 2026",
+      "valuedate": "02 Mar 2026",
+      "description": "UPI/CR/000002/SAMPLE",
+      "withdrawal": "-",
+      "deposit": "10,000.00",
+      "balance": "16,570.79"
+    }
+  ],
+  "expected": {
+    "issuer_id": "AU_BANK",
+    "transactions": [
+      {
+        "date": "2026-03-01",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "description_raw": "UPI/DR/000001/EXAMPLE"
+      },
+      {
+        "date": "2026-03-02",
+        "amount": "10000.00",
+        "direction": "Credit",
+        "description_raw": "UPI/CR/000002/SAMPLE"
+      }
+    ],
+    "closing_balance": "16570.79",
+    "direction_source": "OpeningBalance",
+    "legacy_max_transactions": 0
+  }
+}

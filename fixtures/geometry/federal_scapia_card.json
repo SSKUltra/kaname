@@ -1,0 +1,80 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time. The date and time are printed with spaces around the middle dot, and the billing cycle with spaces inside its dates, because that is what a real statement of this card was measured to print — a reader anchored on the space-stripped shape recognised such a document and then matched none of its rows. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/federal.rs.",
+  "issuer_id": "FEDERAL_SCAPIA_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD-MM-YYYY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 150.0,
+        "align": "left"
+      },
+      {
+        "role": "amount",
+        "x": 330.0,
+        "align": "right"
+      }
+    ]
+  },
+  "header_lines": [
+    "Scapia by Federal Bank",
+    "• XXXXXXXXXXXX4836 20 Apr 2026 - 19 May 2026"
+  ],
+  "footer_lines": [
+    "Total spends this cycle ₹3,533.13"
+  ],
+  "rows": [
+    {
+      "date": "24-04-2026 · 06:03",
+      "description": "ExampleMerchantTokyo",
+      "amount": "₹2,353.13"
+    },
+    {
+      "date": "26-04-2026 · 11:20",
+      "description": "SampleCafeOsaka",
+      "amount": "₹1,180.00"
+    },
+    {
+      "date": "29-04-2026 · 16:18",
+      "description": "Billpayment Payment",
+      "amount": "+₹324.45"
+    }
+  ],
+  "expected": {
+    "issuer_id": "FEDERAL_SCAPIA_CARD",
+    "transactions": [
+      {
+        "date": "2026-04-24",
+        "amount": "2353.13",
+        "direction": "Debit",
+        "description_raw": "ExampleMerchantTokyo"
+      },
+      {
+        "date": "2026-04-26",
+        "amount": "1180.00",
+        "direction": "Debit",
+        "description_raw": "SampleCafeOsaka"
+      },
+      {
+        "date": "2026-04-29",
+        "amount": "324.45",
+        "direction": "Credit",
+        "description_raw": "Billpayment Payment"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}

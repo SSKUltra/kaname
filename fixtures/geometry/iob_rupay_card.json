@@ -1,0 +1,77 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date, account number and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time — the shape that made real statements report no spending. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/iob.rs. Drawn a column at a time, no line the text layer emits carries a date beside an amount — the case that reported no spending at all.",
+  "issuer_id": "IOB_RUPAY_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD-MMM-YYYY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 150.0,
+        "align": "left"
+      },
+      {
+        "role": "amount",
+        "x": 400.0,
+        "align": "right"
+      },
+      {
+        "role": "direction",
+        "x": 415.0,
+        "align": "left"
+      }
+    ]
+  },
+  "header_lines": [
+    "INDIAN OVERSEAS BANK CREDIT CARD DIVISION",
+    "Stmt Date: 20-APR-2026 E-Mail: creditcard@iobnet.co.in",
+    "123456XXXXXX0042 16000 25091.5"
+  ],
+  "footer_lines": [
+    "Total Purchase : 3,500.00"
+  ],
+  "rows": [
+    {
+      "date": "31-MAR-2026",
+      "description": "ExampleRefundMerchant",
+      "amount": "1,000.00",
+      "direction": "Cr"
+    },
+    {
+      "date": "04-APR-2026",
+      "description": "ExampleStorePurchase",
+      "amount": "3,500.00",
+      "direction": "Dr"
+    }
+  ],
+  "expected": {
+    "issuer_id": "IOB_RUPAY_CARD",
+    "transactions": [
+      {
+        "date": "2026-03-31",
+        "amount": "1000.00",
+        "direction": "Credit",
+        "description_raw": "ExampleRefundMerchant"
+      },
+      {
+        "date": "2026-04-04",
+        "amount": "3500.00",
+        "direction": "Debit",
+        "description_raw": "ExampleStorePurchase"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "_comment": "Synthetic. Fabricated merchants/amounts/dates/card numbers/addresses. A page with things printed on it besides its table: an address block beside the rows on its own leading, a narration that wrapped out of its column onto its own visual row, and a page footer printed hard under the last row. None of them may be absorbed into a transaction, and none of them may invent one. The block sits clear of the rows because that is the only case anything can be said about: a block printed level with a row is, to a page, a column of that row, and PrintedRowsTests pins what holds there instead — that it is joined, never invented as a row of its own. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/yes.rs.",
+  "issuer_id": "YES_KIWI_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [595.0, 842.0],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD/MM/YYYY",
+    "columns": [
+      { "role": "date", "x": 40.0, "align": "left" },
+      { "role": "description", "x": 96.0, "align": "left" },
+      { "role": "amount", "x": 300.0, "align": "right" },
+      { "role": "direction", "x": 310.0, "align": "left" }
+    ]
+  },
+  "header_lines": [
+    "YES BANK KLICK",
+    "Card Number 3561XXXXXXXX7788",
+    "Statement Period: 01/07/2026 To 31/07/2026"
+  ],
+  "footer_lines": [
+    "Purchases : Rs. 300.00 Dr",
+    "Payment & Credits Received : Rs. 500.00 Cr"
+  ],
+  "extra_lines": [
+    { "text": "EXAMPLE TOWER PLOT 42", "x": 400.0, "y": 509.35 },
+    { "text": "SAMPLE CITY 560001", "x": 400.0, "y": 466.75 },
+    { "text": "Ref No: RT2002 continued", "x": 96.0, "y": 488.05 },
+    { "text": "Page 1 of 1 generated 05/08/2026", "x": 40.0, "y": 445.45 }
+  ],
+  "rows": [
+    {
+      "date": "05/07/2026",
+      "description": "UPI_SAMPLE STORE RT2001",
+      "amount": "100.00",
+      "direction": "Dr"
+    },
+    {
+      "date": "09/07/2026",
+      "description": "UPI_EXAMPLE CAFE RT2002",
+      "amount": "200.00",
+      "direction": "Dr"
+    },
+    {
+      "date": "15/07/2026",
+      "description": "PAYMENT RECEIVED RT2003",
+      "amount": "500.00",
+      "direction": "Cr"
+    }
+  ],
+  "expected": {
+    "issuer_id": "YES_KIWI_CARD",
+    "transactions": [
+      {
+        "date": "2026-07-05",
+        "amount": "100.00",
+        "direction": "Debit",
+        "description_raw": "UPI_SAMPLE STORE RT2001"
+      },
+      {
+        "date": "2026-07-09",
+        "amount": "200.00",
+        "direction": "Debit",
+        "description_raw": "UPI_EXAMPLE CAFE RT2002"
+      },
+      {
+        "date": "2026-07-15",
+        "amount": "500.00",
+        "direction": "Credit",
+        "description_raw": "PAYMENT RECEIVED RT2003"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}

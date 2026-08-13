@@ -1,0 +1,83 @@
+{
+  "_comment": "Synthetic. Fabricated merchants/amounts/dates/card numbers. Geometry mirrors the Kiwi (YES Bank) column-major layout measured in research R12 (21.3 pt row pitch, DD/MM/YYYY). Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/yes.rs.",
+  "issuer_id": "YES_KIWI_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [595.0, 842.0],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD/MM/YYYY",
+    "columns": [
+      { "role": "date", "x": 40.0, "align": "left" },
+      { "role": "description", "x": 96.0, "align": "left" },
+      { "role": "amount", "x": 500.0, "align": "right" },
+      { "role": "direction", "x": 515.0, "align": "left" }
+    ]
+  },
+  "header_lines": [
+    "YES BANK KLICK",
+    "Statement for YES BANK Card Number 3561XXXXXXXX6686",
+    "Statement Period: 17/04/2026 To 16/05/2026 Payment Due Date: 05/06/2026 Total Amount Due: Rs. 345.50"
+  ],
+  "footer_lines": [
+    "Current Purchases / Cash Advance & Other Charges : Rs. 345.50 Dr",
+    "Payment & Credits Received : Rs. 9,037.25 Cr"
+  ],
+  "rows": [
+    {
+      "date": "29/04/2026",
+      "description": "PAYMENT RECEIVED BBPS - Ref No: RT0001",
+      "amount": "9,000.00",
+      "direction": "Cr"
+    },
+    {
+      "date": "19/04/2026",
+      "description": "UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores",
+      "amount": "100.00",
+      "direction": "Dr"
+    },
+    {
+      "date": "22/04/2026",
+      "description": "UPI_SAMPLE CAFE IND - Ref No: RT0003 Restaurants",
+      "amount": "245.50",
+      "direction": "Dr"
+    },
+    {
+      "date": "05/05/2026",
+      "description": "CASHBACK CREDIT - Ref No: RT0004",
+      "amount": "37.25",
+      "direction": "Cr"
+    }
+  ],
+  "expected": {
+    "issuer_id": "YES_KIWI_CARD",
+    "transactions": [
+      {
+        "date": "2026-04-29",
+        "amount": "9000.00",
+        "direction": "Credit",
+        "description_raw": "PAYMENT RECEIVED BBPS - Ref No: RT0001"
+      },
+      {
+        "date": "2026-04-19",
+        "amount": "100.00",
+        "direction": "Debit",
+        "description_raw": "UPI_EXAMPLE STORE IND - Ref No: RT0002 Miscellaneous Stores"
+      },
+      {
+        "date": "2026-04-22",
+        "amount": "245.50",
+        "direction": "Debit",
+        "description_raw": "UPI_SAMPLE CAFE IND - Ref No: RT0003 Restaurants"
+      },
+      {
+        "date": "2026-05-05",
+        "amount": "37.25",
+        "direction": "Credit",
+        "description_raw": "CASHBACK CREDIT - Ref No: RT0004"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}

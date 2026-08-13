@@ -1,0 +1,97 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date, account number and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time — the shape that made real statements report no spending. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/hdfc.rs. Its rows deliberately repeat the co-brand's name in the holder's own spending: the statement must be identified by what its title block says it is, never by what was bought on it.",
+  "issuer_id": "HDFC_SWIGGY_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD-MMM-YYYY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 120.0,
+        "align": "left"
+      },
+      {
+        "role": "amount",
+        "x": 350.0,
+        "align": "right"
+      },
+      {
+        "role": "direction",
+        "x": 360.0,
+        "align": "left"
+      },
+      {
+        "role": "card",
+        "x": 390.0,
+        "align": "left"
+      }
+    ]
+  },
+  "header_lines": [
+    "HDFC Bank Credit Cards",
+    "Account Summary for the period from APRIL-26 to MARCH-27",
+    "Card Number XXXX6873XXXXXX9070"
+  ],
+  "footer_lines": [
+    "Total Dues 3,411.00"
+  ],
+  "rows": [
+    {
+      "date": "04-Apr-2026",
+      "description": "SWIGGY BANGALORE",
+      "amount": "1,071.00",
+      "direction": "DR",
+      "card": "526873XXXXXX9070"
+    },
+    {
+      "date": "09-Apr-2026",
+      "description": "SWIGGY INSTAMART BANGALORE",
+      "amount": "2,340.00",
+      "direction": "DR",
+      "card": "526873XXXXXX9070"
+    },
+    {
+      "date": "16-Apr-2026",
+      "description": "ONLINE TRF - PYMT RECD - THANK YOU",
+      "amount": "10,610.00",
+      "direction": "CR",
+      "card": "526873XXXXXX9070"
+    }
+  ],
+  "expected": {
+    "issuer_id": "HDFC_SWIGGY_CARD",
+    "transactions": [
+      {
+        "date": "2026-04-04",
+        "amount": "1071.00",
+        "direction": "Debit",
+        "description_raw": "SWIGGY BANGALORE"
+      },
+      {
+        "date": "2026-04-09",
+        "amount": "2340.00",
+        "direction": "Debit",
+        "description_raw": "SWIGGY INSTAMART BANGALORE"
+      },
+      {
+        "date": "2026-04-16",
+        "amount": "10610.00",
+        "direction": "Credit",
+        "description_raw": "ONLINE TRF - PYMT RECD - THANK YOU"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}

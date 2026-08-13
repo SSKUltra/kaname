@@ -27,3 +27,14 @@ file. See `docs/agents/triage-labels.md`.
 
 Single-context — `CONTEXT.md` + `docs/adr/` at the repo root.
 See `docs/agents/domain.md`.
+
+### Reading a statement
+
+Extraction is **geometry-first** and platform-side: a line is one *printed row*, rebuilt from
+where the glyphs sit, never the PDF text layer's own newlines. It lives in
+`ios/Sources/Import/PrintedRows.swift` (which words form a row) and `WordGeometry.swift` (where
+a word is, and the three separate ways PDFKit gets that wrong). Evidence is
+`fixtures/geometry/*.json` — synthetic layout signatures rendered to real PDFs at test time,
+each of which must fail against the pre-017 extraction to count. No real statement, and no
+fragment of one, ever enters this repository.
+

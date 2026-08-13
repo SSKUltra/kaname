@@ -20,19 +20,25 @@ use crate::statement::polarity::classify;
 
 pub const BANK_CODE: &str = "FEDERAL";
 
-// "29-04-2026·16:18 Billpayment Payment +₹324.45". The unescaped "." matches the
-// date/time separator encoding-robustly (it renders as a middle dot, U+00B7); the ₹
-// (U+20B9) literal precedes the amount and is not part of the amount group.
+// "29-04-2026 · 16:18 Billpayment Payment +₹324.45". Between the date and the time sits a
+// separator that renders as a middle dot (U+00B7) — matched as "any single non-digit,
+// non-space" so no assumption is made about how it encodes — and it may be printed with
+// spaces around it, without them, or not at all. **The spacing is not cosmetic**: a real
+// statement prints `date · time` spaced, and a pattern that allowed exactly one character
+// there matched nothing on it, so a card's whole year of spending read as zero
+// transactions. The ₹ (U+20B9) precedes the amount and is not part of the amount group.
 static ROW_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"^(?P<date>\d{2}-\d{2}-\d{4}).\d{2}:\d{2}\s+(?P<desc>.+?)\s+(?P<sign>\+)?₹(?P<amount>[\d,]+\.\d{2})$",
+        r"^(?P<date>\d{2}-\d{2}-\d{4})[ ]*[^\d\s]?[ ]*\d{2}:\d{2}\s+(?P<desc>.+?)\s+(?P<sign>\+)?₹(?P<amount>[\d,]+\.\d{2})$",
     )
     .unwrap()
 });
 
-// "XXXXXXXXXXXX4836 20Apr2026-19May2026".
+// "XXXXXXXXXXXX4836 20 Apr 2026 - 19 May 2026", or the same thing space-stripped. Both
+// shapes are printed by the same issuer, and `parse_date` accepts either token.
 static CYCLE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(\d{1,2}[A-Za-z]{3}\d{4})\s*-\s*(\d{1,2}[A-Za-z]{3}\d{4})").unwrap()
+    Regex::new(r"(\d{1,2}[ ]?[A-Za-z]{3}[ ]?\d{4})\s*-\s*(\d{1,2}[ ]?[A-Za-z]{3}[ ]?\d{4})")
+        .unwrap()
 });
 
 const CLAIM_MARKERS: &[&str] = &["Scapia", "Federal Bank"];
@@ -106,6 +112,52 @@ mod tests {
         );
         assert_eq!(st.period_end, chrono::NaiveDate::from_ymd_opt(2026, 5, 19));
         assert_eq!(st.card_last4.as_deref(), Some("4836"));
+    }
+
+    /// The layout a real Scapia statement prints: spaces around the middle dot, and a
+    /// billing cycle whose dates are spaced too. Both were measured on a reference document
+    /// that read **zero** transactions before this — the reader claimed it, recognised it,
+    /// and then matched not one of its rows.
+    #[test]
+    fn parses_the_spaced_layout_a_real_statement_prints() {
+        let lines = vec![
+            "29-04-2026 · 16:18 Billpayment Payment +₹324.45".to_string(),
+            "24-04-2026 · 06:03 ExampleMerchantTokyo ₹2,353.13".to_string(),
+        ];
+        let full_text = format!(
+            "Scapia by Federal Bank\n• XXXXXXXXXXXX4836 20 Apr 2026 - 19 May 2026\n{}\n{}",
+            lines[0], lines[1]
+        );
+
+        let st = read_lines(&FederalReader, &lines, &full_text);
+
+        assert_eq!(st.lines.len(), 2);
+        assert_eq!(st.lines[0].direction, Direction::Credit);
+        assert_eq!(st.lines[0].amount, dec!(324.45));
+        assert_eq!(st.lines[0].description_raw, "Billpayment Payment");
+        assert_eq!(st.lines[1].direction, Direction::Debit);
+        assert_eq!(st.lines[1].amount, dec!(2353.13));
+        assert_eq!(
+            st.period_start,
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 20)
+        );
+        assert_eq!(st.period_end, chrono::NaiveDate::from_ymd_opt(2026, 5, 19));
+        assert_eq!(st.card_last4.as_deref(), Some("4836"));
+    }
+
+    /// A row printed with no separator at all still reads. The separator is the one part of
+    /// this layout the issuer has been seen to vary, so none of the three shapes may be the
+    /// only one that works.
+    #[test]
+    fn parses_a_row_with_no_separator_between_date_and_time() {
+        let lines = vec!["24-04-2026 06:03 ExampleMerchantTokyo ₹2,353.13".to_string()];
+        let full_text = format!("Scapia by Federal Bank\n{}", lines[0]);
+
+        let st = read_lines(&FederalReader, &lines, &full_text);
+
+        assert_eq!(st.lines.len(), 1);
+        assert_eq!(st.lines[0].amount, dec!(2353.13));
+        assert_eq!(st.lines[0].description_raw, "ExampleMerchantTokyo");
     }
 
     #[test]

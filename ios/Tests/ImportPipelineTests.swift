@@ -222,4 +222,100 @@ struct ImportPipelineTests {
             #expect(stored.contains { $0.amount == expected })
         }
     }
+
+    // MARK: - Through a real document
+
+    /// The suites above stub extraction so the stages after it are genuine. These do the
+    /// opposite: a real file, opened by the real PDF engine, its rows recovered from the
+    /// page geometry. Slice 017 changed the text every judgement below is made from, so the
+    /// honest-failure behaviour has to be shown to survive the change — not just the happy
+    /// path.
+    private final class Rendered {
+        let directory: URL
+
+        init() {
+            directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kaname-rendered-\(UUID().uuidString)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+
+        deinit { try? FileManager.default.removeItem(at: directory) }
+
+        var url: URL { directory.appendingPathComponent("statement.pdf") }
+    }
+
+    private static func realService(store: Store) -> ImportService {
+        ImportService(
+            extractor: PDFKitStatementTextExtractor(),
+            store: store,
+            now: { ISO8601DateFormatter().date(from: importedAt) ?? Date(timeIntervalSince1970: 0) }
+        )
+    }
+
+    private static func writeLines(_ lines: [String], to url: URL) throws {
+        try StatementTextExtractorTests.writeTextPDF(lines: lines, to: url)
+    }
+
+    @Test("A real document with no text to read fails honestly and writes nothing")
+    func aRenderedScanFailsHonestlyAndWritesNothing() async throws {
+        let db = Self.tempDatabase()
+        defer { try? FileManager.default.removeItem(at: db.dir) }
+        let store = try Store.open(path: db.path, key: Self.key)
+        let rendered = Rendered()
+        // A real page with nothing printed on it: no words to reshape and no geometry to
+        // trust. Reshaping must not turn that into an empty statement.
+        try Self.writeLines([], to: rendered.url)
+
+        await #expect(throws: ImportFailure.noExtractableText) {
+            _ = try await Self.realService(store: store).run(url: rendered.url, password: nil) { _ in }
+        }
+        #expect(try store.listAccounts().isEmpty)
+    }
+
+    @Test("A real document no reader claims is unrecognized, and the store is untouched")
+    func aRenderedUnclaimedDocumentWritesNothing() async throws {
+        let db = Self.tempDatabase()
+        defer { try? FileManager.default.removeItem(at: db.dir) }
+        let store = try Store.open(path: db.path, key: Self.key)
+        let rendered = Rendered()
+        try Self.writeLines(
+            [
+                "EXAMPLE COOPERATIVE SOCIETY",
+                "Passbook extract for April 2026",
+                "01/04/2026 Subscription 500.00",
+            ],
+            to: rendered.url
+        )
+
+        await #expect(throws: ImportFailure.unrecognizedIssuer) {
+            _ = try await Self.realService(store: store).run(url: rendered.url, password: nil) { _ in }
+        }
+        #expect(try store.listAccounts().isEmpty)
+    }
+
+    @Test("A real statement whose rows cannot be read says so rather than reporting no spending")
+    func aRenderedStatementWithNoReadableRowsIsNotReportedAsEmpty() async throws {
+        let db = Self.tempDatabase()
+        defer { try? FileManager.default.removeItem(at: db.dir) }
+        let store = try Store.open(path: db.path, key: Self.key)
+        let rendered = Rendered()
+        // A document a reader claims, printed with nothing it can parse as a row. This is
+        // what a lost extraction looks like from here, and it is the one thing that must
+        // never come back as "no spending".
+        try Self.writeLines(
+            [
+                "ICICI Bank Statement",
+                "Statement Date May 28, 2026",
+                "4315XXXXXXXX1002",
+            ],
+            to: rendered.url
+        )
+
+        let summary = try #require(
+            (try await Self.realService(store: store).run(url: rendered.url, password: nil) { _ in }).summary
+        )
+
+        #expect(summary.transactionsImported == 0)
+        #expect(summary.nothingRecognized)
+    }
 }

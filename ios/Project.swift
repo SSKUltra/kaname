@@ -51,6 +51,12 @@ let project = Project(
             bundleId: "in.beaconbrain.kaname.tests",
             deploymentTargets: .iOS("26.0"),
             sources: ["Tests/**"],
+            // The geometry vectors are data, not code: `GeometryFixtureTests` renders each
+            // one into a real PDF at test time, so they have to reach the simulator's test
+            // bundle. A folder reference keeps them as `geometry/*.json` inside it, which
+            // is how `GeometryFixtureLoader` finds them without colliding with any other
+            // resource.
+            resources: [.folderReference(path: "../fixtures/geometry")],
             dependencies: [
                 .target(name: "Kaname"),
                 .target(name: "KanameCore"),

@@ -57,12 +57,38 @@ struct ImportIntegrityTests {
         lines: [String],
         fullText: String? = nil
     ) async throws -> Imported {
+        try await run { store in service(lines: lines, fullText: fullText, store: store) }
+    }
+
+    /// Import a document the way a person's would arrive: a real file, opened by the real
+    /// PDF engine. Nothing is stubbed but the clock.
+    private static func importRendered(_ fixture: String) async throws -> Imported {
+        let vector = try GeometryFixtureLoader.load(fixture)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kaname-integrity-pdf-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("statement.pdf")
+        try GeometryFixtureRenderer.render(vector, to: url)
+
+        return try await run(url: url) { store in
+            ImportService(
+                extractor: PDFKitStatementTextExtractor(),
+                store: store,
+                now: { ISO8601DateFormatter().date(from: importedAt) ?? Date(timeIntervalSince1970: 0) }
+            )
+        }
+    }
+
+    private static func run(
+        url: URL = anyURL,
+        _ build: (Store) -> ImportService
+    ) async throws -> Imported {
         let db = tempDatabase()
         defer { try? FileManager.default.removeItem(at: db.dir) }
         let store = try Store.open(path: db.path, key: key)
 
-        let result = try await service(lines: lines, fullText: fullText, store: store)
-            .run(url: anyURL, password: nil) { _ in }
+        let result = try await build(store).run(url: url, password: nil) { _ in }
         let summary = try #require(result.summary)
         let account = try #require(try store.listAccounts().first)
         return Imported(
@@ -139,6 +165,32 @@ struct ImportIntegrityTests {
         #expect(imported.summary.integrity.notice == nil)
         #expect(imported.summary.transactionsImported == 2)
         #expect(imported.statement.needsReview == false)
+    }
+
+    @Test("A rendered card statement reconciles against the totals printed on it")
+    func aRenderedCardStatementReconciles() async throws {
+        // Not a stub: a real PDF, opened by the real PDF engine, its rows recovered from the
+        // page geometry, and the engine's reconcile check run over what came out. The
+        // vector's printed totals are the sum of its own rows, so a row lost or doubled in
+        // reshaping would land here as a mismatch.
+        let imported = try await Self.importRendered("yes_kiwi_card.json")
+
+        #expect(imported.summary.transactionsImported == 4)
+        #expect(imported.summary.integrity == .agrees)
+        #expect(imported.statement.needsReview == false)
+    }
+
+    @Test("A rendered ledger's balance chain is walked over the rows reshaping recovered")
+    func aRenderedLedgerWalksItsBalanceChain() async throws {
+        // A three-page ledger whose first row is on page two. Every balance follows from the
+        // one before it, so the chain confirms the amounts and the directions — but its first
+        // row was anchored on which column the amount was printed in rather than on a printed
+        // opening balance, and the engine says so by asking for a second look.
+        let imported = try await Self.importRendered("icici_bank.json")
+
+        #expect(imported.summary.transactionsImported == 4)
+        #expect(imported.summary.integrity == .needsReview)
+        #expect(imported.transactions.count == 4)
     }
 
     @Test("Rows the engine could not read are counted, and make the import reviewable")

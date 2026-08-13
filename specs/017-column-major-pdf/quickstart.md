@@ -126,13 +126,36 @@ that are easy to get wrong:
 
 ## Definition of done
 
-- [ ] All ten issuers import 100% of the transactions their geometry fixture prints (SC-001)
-- [ ] Every geometry fixture fails against the pre-slice extraction path (SC-011)
-- [ ] Every existing golden vector and the slice-016 parity proof pass unchanged (SC-005)
-- [ ] Zero issuers regress to "not recognised" (SC-004)
-- [ ] Zero inverted directions across the fixtures (SC-006)
-- [ ] Re-import is byte-identical (SC-007)
-- [ ] 40-page statement stays responsive and cancels within 2 s (SC-008)
-- [ ] Privacy audits green; zero network requests (SC-009)
-- [ ] Every added file reviewed: no real merchant, amount, date, account or card number (SC-010)
-- [ ] **Human-run reference pass recorded**: zero-transaction files down from 10 to 0 (SC-002)
+- [x] All ten issuers import 100% of the transactions their geometry fixture prints (SC-001)
+- [x] Every geometry fixture fails against the pre-slice extraction path (SC-011)
+- [x] Every existing golden vector and the slice-016 parity proof pass unchanged (SC-005)
+- [x] Zero issuers regress to "not recognised" (SC-004)
+- [x] Zero inverted directions across the fixtures (SC-006)
+- [x] Re-import is byte-identical (SC-007)
+- [x] 40-page statement stays responsive and cancels within 2 s (SC-008)
+- [x] Privacy audits green; zero network requests (SC-009)
+- [x] Every added file reviewed: no real merchant, amount, date, account or card number (SC-010)
+- [x] **Human-run reference pass recorded**: zero-transaction files down from 10 to 0 (SC-002)
+      — run on the holder's own machine with `make reference-check DIR=…`; counts only, below.
+
+### Reference pass — counts only (T116)
+
+13 documents, all on the operator's own machine; nothing written anywhere.
+
+| | Before | After |
+|---|---|---|
+| Read **zero** transactions | 10 | **0** |
+| **Unrecognised** | 2 | **0** |
+
+Two defects were found by this pass and by nothing else:
+
+- **AU Small Finance Bank** was recognised without the header literal R15 was blocked on
+  (209 transactions), closing T119 by evidence.
+- **Scapia** was recognised but read **0 of its rows**: `federal.rs` allowed exactly one
+  character between a row's date and time, and the statement prints `date · time` spaced. Its
+  billing-cycle pattern had the same brittleness. Fixed in the reader, pinned by two unit
+  tests and by a geometry vector re-modelled on the real layout — which was confirmed red
+  against the old reader before it went green against the new one.
+
+The Scapia defect is the argument for this gate: extraction was correct, every geometry
+fixture was green, and the card still imported nothing.

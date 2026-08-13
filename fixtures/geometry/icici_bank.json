@@ -1,0 +1,92 @@
+{
+  "_comment": "Synthetic. Fabricated merchants/amounts/dates/account numbers. Geometry mirrors an ICICI savings-account ledger: withdrawal and deposit in separate columns, a running balance, and no printed opening balance — so the first row's direction has to come from which column its amount was printed in. Spans three pages, and page one prints no transaction row at all, so that bootstrap has to work off page one. Page one's last line is the summary balance on purpose: the reader stitches the line immediately above a row into that row's narration (the payer/VPA line a real ledger prints there), and a balance line is the one thing it skips. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/icici_bank.rs.",
+  "issuer_id": "ICICI_BANK",
+  "kind": "bank_account",
+  "signature": {
+    "page_size": [595.0, 842.0],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD.MM.YYYY",
+    "rows_per_page": [0, 2, 2],
+    "columns": [
+      { "role": "serial", "x": 40.0, "align": "left" },
+      { "role": "date", "x": 70.0, "align": "left" },
+      { "role": "description", "x": 140.0, "align": "left" },
+      { "role": "withdrawal", "x": 390.0, "align": "right" },
+      { "role": "deposit", "x": 470.0, "align": "right" },
+      { "role": "balance", "x": 560.0, "align": "right" }
+    ]
+  },
+  "header_lines": [
+    "ICICI Bank Limited",
+    "Statement of Transactions in Savings Account Number 000401234567",
+    "for the period April 1, 2026 to April 30, 2026 Branch Code 0004 IFSC ICIC0000004",
+    "Closing Balance 1,46,300.00"
+  ],
+  "footer_lines": [
+    "Closing Balance 1,46,300.00"
+  ],
+  "rows": [
+    {
+      "serial": "1",
+      "date": "01.04.2026",
+      "description": "UPI/EXAMPLEMERCHANT/Payment",
+      "withdrawal": "5,000.00",
+      "balance": "95,000.00"
+    },
+    {
+      "serial": "2",
+      "date": "16.04.2026",
+      "description": "NEFT/EXAMPLEEMPLOYER/Salary",
+      "deposit": "50,000.00",
+      "balance": "1,45,000.00"
+    },
+    {
+      "serial": "3",
+      "date": "22.04.2026",
+      "description": "UPI/SAMPLECAFE/Refreshment",
+      "withdrawal": "1,200.00",
+      "balance": "1,43,800.00"
+    },
+    {
+      "serial": "4",
+      "date": "28.04.2026",
+      "description": "IMPS/EXAMPLESENDER/Transfer",
+      "deposit": "2,500.00",
+      "balance": "1,46,300.00"
+    }
+  ],
+  "expected": {
+    "issuer_id": "ICICI_BANK",
+    "transactions": [
+      {
+        "date": "2026-04-01",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "description_raw": "UPI/EXAMPLEMERCHANT/Payment"
+      },
+      {
+        "date": "2026-04-16",
+        "amount": "50000.00",
+        "direction": "Credit",
+        "description_raw": "NEFT/EXAMPLEEMPLOYER/Salary"
+      },
+      {
+        "date": "2026-04-22",
+        "amount": "1200.00",
+        "direction": "Debit",
+        "description_raw": "UPI/SAMPLECAFE/Refreshment"
+      },
+      {
+        "date": "2026-04-28",
+        "amount": "2500.00",
+        "direction": "Credit",
+        "description_raw": "IMPS/EXAMPLESENDER/Transfer"
+      }
+    ],
+    "closing_balance": "146300.00",
+    "direction_source": "Row1XPosition",
+    "legacy_max_transactions": 0
+  }
+}

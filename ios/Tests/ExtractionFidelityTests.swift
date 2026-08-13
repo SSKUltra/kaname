@@ -159,4 +159,57 @@ struct ExtractionFidelityTests {
         )
         #expect(Self.rows(statement) == Self.rows(direct))
     }
+
+    /// A geometry vector's rows, written the way the printed page reads them: every cell of
+    /// the row, left to right, single-spaced.
+    private static func printedLines(of fixture: GeometryFixture) -> [String] {
+        fixture.rows.map { row in
+            fixture.signature.columns.compactMap { row[$0.role] }.joined(separator: " ")
+        }
+    }
+
+    private static func render(_ name: String, in directory: TempDirectory) throws -> GeometryFixture {
+        let fixture = try GeometryFixtureLoader.load(name)
+        try GeometryFixtureRenderer.render(fixture, to: directory.file("statement.pdf"))
+        return fixture
+    }
+
+    @Test("A document that merges rows and splits columns at once resolves both in one pass")
+    func resolvesBothHazardsInOnePass() throws {
+        // Eight points of leading under a nine-point font, so the text layer joins adjacent
+        // rows — and drawn column-major, so it splits every row across four lines. Neither
+        // capability may re-open the other's bug.
+        let temp = TempDirectory()
+        let fixture = try Self.render("both_hazards.json", in: temp)
+        let printed = Self.printedLines(of: fixture)
+
+        let extracted = try PDFKitStatementTextExtractor().extract(from: temp.file("statement.pdf"), password: nil)
+        let issuer = try #require(detectIssuer(fullText: extracted.fullText))
+        let statement = try readStatement(
+            issuer: issuer,
+            lines: extracted.lines,
+            fullText: extracted.fullText,
+            lineWords: extracted.lineWords
+        )
+
+        // Every printed row came back as one line, and the parse agrees with parsing those
+        // lines directly — the same equality the round-trip tests above pin.
+        #expect(printed.allSatisfy { extracted.lines.contains($0) })
+        let asPrinted = fixture.headerLines + printed + fixture.footerLines
+        #expect(Self.rows(statement) == Self.rows(try Self.parseDirectly(asPrinted)))
+    }
+
+    @Test("A document the text layer already got right is handed back unchanged")
+    func leavesACorrectlyExtractedDocumentAlone() throws {
+        // Generous leading, one column, nothing to fix. Reshaping must be a no-op here: a
+        // document that already read correctly is the one thing a change like this could
+        // most easily break, and the proof is byte equality with the source lines.
+        let temp = TempDirectory()
+        let url = temp.file("plain.pdf")
+        try StatementTextExtractorTests.writeTextPDF(lines: Self.cardLines, to: url)
+
+        let extracted = try PDFKitStatementTextExtractor().extract(from: url, password: nil)
+
+        #expect(extracted.lines == Self.cardLines)
+    }
 }
