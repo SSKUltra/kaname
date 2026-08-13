@@ -54,8 +54,9 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**Right now: implement `016-statement-import-vertical` — PR A, B, C and D are MERGED; start
-with PR E, the last one.**
+**Right now: `016-statement-import-vertical` is code-complete — PRs A, B, C, D and E are all
+done. What remains is the two manual gates only a person can run (T123 and T129), then the
+next P3 slice.**
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -66,8 +67,8 @@ Read, in order:
 decisions with source-line evidence) → `contracts/` → **`tasks.md`** (136 tasks, the actual
 queue) → `quickstart.md` (build order + smoke test).
 
-**It ships as five PRs, not one** (rationale + task ranges in `tasks.md` § "Recommended PR
-split"). Take the lowest unstarted one — **that is now PR E**:
+**It shipped as five PRs, not one** (rationale + task ranges in `tasks.md` § "Recommended PR
+split"):
 
 | PR | Tasks | What | Status |
 |----|-------|------|--------|
@@ -75,20 +76,51 @@ split"). Take the lowest unstarted one — **that is now PR E**:
 | **B** | T003, T005, T018–T034 | The issuer dispatcher (`detect_issuer` / `read_statement`) | ✅ **merged** (#32) |
 | **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build | ✅ **merged** (#33) |
 | **D** | T070–T097, T137–T139 | Honest failures & account attribution (US2–US4) | ✅ **merged** (#34) |
-| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | ⬅️ **NEXT** |
+| **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | ✅ **done, unmerged** |
 
-**State of `main` after A + B + C + D** (verified `0808a5a`, full gate green):
-`make core-test` = **238 passing / 0 failing**; `make ios-test` = **96 tests / 26 suites**;
-`make lint` = 0 violations; `make import-audit` + `make core-privacy-audit` OK.
-**The vertical is real and honest end to end** — `ios/Sources/Import/` holds
-`PDFKitStatementTextExtractor`, the `ImportService` actor, `ImportViewModel`,
-`ImportSummaryView`, `ImportFailureView`, `PasswordPromptView` and `AccountPickerView`.
+**⬅️ NEXT: the two manual gates, which no agent can run.** Both are on the simulator, both
+are release-blocking:
 
-**PR E starts here** (`tasks.md` Phase 7 → 10): T098–T105 (US5, the integrity verdict on
-screen) → T106–T113 (US6, responsiveness + cancellation) → T114–T129 (US7, the first-run
-front door) → T130–T136 (the full gate). Nothing is blocked; the seams it needs all exist.
+- **T123** — `quickstart.md` §6: largest Dynamic Type, Dark Mode, **Reduce Transparency**,
+  **Increase Contrast**, VoiceOver across every screen in the flow. The automated audit
+  (`ios/UITests/`) covers only the front door; the summary, failure, password and
+  account-picker screens need eyes and ears.
+- **T129** — `quickstart.md` §5: the 4-tap path, force-quit and relaunch, the same-file
+  re-import, then the failure matrix (image-only, password right and wrong, corrupt, `.txt`
+  renamed `.pdf`, a utility bill, cancel mid-parse).
 
-**What PR D settled — don't re-litigate it:**
+**What PR E settled — don't re-litigate it:**
+
+- **The integrity verdict is on screen, in three states.** A reconciling statement confirms
+  itself, a mismatched one still imports every row it read and persists `needs_review`, and a
+  statement with nothing to check against renders **no verdict row at all**. Pinned by
+  `ios/Tests/ImportIntegrityTests.swift` against a real encrypted store.
+  `fixtures/yes/credit_card/mismatched_totals.json` is the deliberately non-reconciling
+  vector — **Yes, not HDFC**, because the HDFC card reader captures no printed totals or
+  balances, so an HDFC card mismatch is unreachable. Only Yes and IOB print totals.
+- **`inFlight` records the document, not just the fact of an import.** The same file asked for
+  twice joins the running import; a *different* file is refused with
+  `ImportFailure.alreadyImporting`. The old code joined unconditionally, so a second statement
+  picked mid-import would have been handed the first one's figures.
+- **The accessibility audit is real and it bites.** `ios/UITests/ImportFrontDoorUITests.swift`
+  runs `performAccessibilityAudit()` on the front door at default and largest text sizes. On
+  its first run it found clipped text and four genuine contrast failures. The rules it
+  established, which apply to **every future screen**:
+  - never `.foregroundStyle(.secondary)` on content text — it does not clear the threshold at
+    any size this app uses;
+  - `LabeledContent` renders its value in that same secondary style, so every figure sets
+    `.primary` explicitly;
+  - a `.glassProminent` button refracting scrolled text fails at accessibility sizes — bottom
+    action bars sit on `.background`;
+  - the app has its own accent (`ios/Sources/Theme.swift`), a deep ink-teal clearing 4.5:1
+    against white in both appearances.
+- **`make import-audit` gained a Liquid Glass guard**: `#available(iOS 26`, any `*Material`,
+  `UIVisualEffectView` or `UIBlurEffect` anywhere under `ios/Sources/` fails the build.
+- **The simulator's app container persists between UI-test runs.** `xcrun simctl uninstall
+  "iPhone 16" in.beaconbrain.kaname` before auditing, or you will audit the accounts screen
+  while believing you audited the empty state.
+
+**What PR D settled — don't re-litigate it either:**
 
 - **The silent empty import is closed, and it was worse than recorded.** PDFKit does merge
   adjacent rows on tight layouts, but the result was not "0 transactions": it parsed into
@@ -123,7 +155,7 @@ front door) → T130–T136 (the full gate). Nothing is blocked; the seams it ne
   eleventh issuer is guarded without touching the script. It fails on any registry id, bank
   code or display name anywhere under `ios/Sources/` — including in a `#Preview`.
 
-> ⚠️ **Still live in PR E:** never call a bare `tuist generate` — always `make ios-gen` /
+> ⚠️ **Still live:** never call a bare `tuist generate` — always `make ios-gen` /
 > `make ios-test`, and run `make core-xcframework` first whenever the FFI surface moves.
 > `make import-audit` is the mechanical SC-004 proof that **zero networking symbols** exist
 > under `ios/Sources/Import/` — run it on every PR that touches that directory. The only
@@ -137,8 +169,9 @@ front door) → T130–T136 (the full gate). Nothing is blocked; the seams it ne
 > Do Swift work in the primary checkout. Adding an `ios/Tuist.swift` "fixes" it but changes
 > root resolution for everyone — don't commit one.
 
-**After 016**, the rest of P3 (transaction list, dashboard, budgets, tags, search, export —
-see the spec's Out of Scope) gets specified slice by slice via `speckit.specify`.
+**After the two manual gates**, the rest of P3 (transaction list, dashboard, budgets, tags,
+search, export — see the spec's Out of Scope) gets specified slice by slice via
+`speckit.specify`.
 
 The older `.scratch/persistence/` and `.scratch/categorization/` queues are **fully
 resolved** — the engine→store wiring and the Keychain key ceremony all shipped. Nothing is
@@ -258,16 +291,26 @@ changes don't need linting/building/testing.
   **Timestamps are explicit inputs** (the core reads no wall-clock); the platform owns the
   Keychain key + file path + NSFileProtection.
 - `common.rs` / `polarity.rs` — `parse_amount`/`parse_date`/`find_last4`/…; `classify`.
-- `ios/Sources/Import/` — the platform vertical (016 PR C + D). `StatementTextExtractor` is the
+- `ios/Sources/Import/` — the platform vertical (016 PR C + D + E). `StatementTextExtractor` is the
   PDFKit seam (a protocol, so the pipeline is provable without a PDF — see
   `ios/Tests/ImportPipelineTests.swift`); `ImportService` is the actor owning the whole
-  pipeline and the in-flight `Task`; `ImportModels.swift` holds **the copy deck** — every
+  pipeline and the in-flight `Task` — which now records **which document** is importing, so a
+  second call for the same file joins it and a second call for a different file is refused
+  with `ImportFailure.alreadyImporting`; `ImportModels.swift` holds **the copy deck** — every
   user-facing sentence for `ImportFailure` and `IntegrityOutcome` lives there, and
   `Issuer.display_name` is the only engine string allowed on screen; `lineRanges(on:)` is the
   glyph-geometry line splitter that keeps PDFKit from merging two statement rows into one
   (proved by `ios/Tests/ExtractionFidelityTests.swift`); `AccountPickerView` is the only place
   an account is ever chosen, and `ImportService.run` returns `ImportResult` so an ambiguous
-  attribution asks instead of guessing.
+  attribution asks instead of guessing. `ImportEmptyStateView` is the first-run front door and
+  `ImportedAccountsView` what replaces it once anything has been imported;
+  `ImportProgressView` is the one floating glass control in the flow.
+- `ios/UITests/` — the `KanameUITests` target running the system's own
+  `performAccessibilityAudit()` against the front door at default and largest accessibility
+  text sizes. **Treat its findings as real** — it caught clipped text and four genuine
+  contrast failures on its first run. Two rules it established: never use
+  `.foregroundStyle(.secondary)` for content text, and set `.primary` explicitly on every
+  `LabeledContent` value, because the system renders it secondary.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
 
 ---
