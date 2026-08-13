@@ -332,17 +332,17 @@ mislead, and it fails silently.
 
 ### Tests for User Story 5 (RED first) ⚠️
 
-- [ ] T098 [P] [US5] RED: create `ios/Tests/ImportIntegrityTests.swift` — a reconciling statement shows the positive confirmation; a non-reconciling one shows the warning, **still imports its transactions**, and persists `needs_review` (FR-019); a statement with no printed totals shows **nothing at all** (FR-017, US5 §3); the unreadable-row count is reported (FR-018).
-- [ ] T099 [P] [US5] Add a synthetic non-reconciling fixture `fixtures/hdfc/credit_card/mismatched_totals.json` whose rows deliberately disagree with its printed totals. Synthetic only (FR-043, SC-011).
+- [x] T098 [P] [US5] RED: create `ios/Tests/ImportIntegrityTests.swift` — a reconciling statement shows the positive confirmation; a non-reconciling one shows the warning, **still imports its transactions**, and persists `needs_review` (FR-019); a statement with no printed totals shows **nothing at all** (FR-017, US5 §3); the unreadable-row count is reported (FR-018).
+- [x] T099 [P] [US5] Add a synthetic non-reconciling fixture `fixtures/yes/credit_card/mismatched_totals.json` whose rows deliberately disagree with its printed totals. Synthetic only (FR-043, SC-011). **Deviation, settled:** this task originally named an HDFC card fixture, but the HDFC card reader captures no printed totals and no opening/closing balances, so an HDFC card statement can only ever reconcile as `nothingToCheck` — a mismatch is unreachable there. Only the Yes and IOB card readers surface printed totals; Yes was chosen as the simpler layout (`Current Purchases … Dr` / `Payment & Credits Received … Cr`). The fixture models a purchase row that never reached the reader — printed 4,750.00 Dr against a read 100.00 — with the credit side still agreeing, so it also pins that one failing side is enough. Proved by `yes_statement_whose_rows_disagree_with_its_printed_totals_needs_review` in `core/crates/kaname-core/tests/parity.rs`.
 
 ### Implementation for User Story 5
 
-- [ ] T100 [US5] Implement the kind-driven check dispatch in `ios/Sources/Import/ImportService.swift`: `issuer.kind == .bankAccount ? checkBalanceChain(parsed) : reconcileStatement(parsed)` — an exhaustive switch on a closed two-variant enum, which is not per-issuer branching (research R4).
-- [ ] T101 [US5] Map `ChainResult` / `ReconcileResult` onto the three-state `IntegrityOutcome` in `ios/Sources/Import/ImportModels.swift`, keeping `ReconcileStatus::None` as `.nothingToCheck` and never collapsing it into a pass or a fail.
-- [ ] T102 [US5] Set `needs_review` in the `ImportRequest` when the integrity check says `NeedsReview` **or** `errored_lines` is non-empty, in `ios/Sources/Import/ImportService.swift` (FR-019).
-- [ ] T103 [US5] Surface `unreadableRows` (= `errored_lines.count`) in `ios/Sources/Import/ImportSummaryView.swift`, so an incomplete import is never presented as a complete one (FR-018).
-- [ ] T104 [US5] Render the integrity verdict in `ios/Sources/Import/ImportSummaryView.swift` as a `Label` — SF Symbol **plus** colour **plus** text on an opaque background, never material or colour alone (FR-046, FR-047), with `.nothingToCheck` rendering no row whatsoever.
-- [ ] T105 [US5] **GATE** `make lint && make ios-test` — T098 GREEN. Targets live in the repo-root `Makefile`.
+- [x] T100 [US5] Implement the kind-driven check dispatch in `ios/Sources/Import/ImportService.swift`: `issuer.kind == .bankAccount ? checkBalanceChain(parsed) : reconcileStatement(parsed)` — an exhaustive switch on a closed two-variant enum, which is not per-issuer branching (research R4).
+- [x] T101 [US5] Map `ChainResult` / `ReconcileResult` onto the three-state `IntegrityOutcome` in `ios/Sources/Import/ImportModels.swift`, keeping `ReconcileStatus::None` as `.nothingToCheck` and never collapsing it into a pass or a fail.
+- [x] T102 [US5] Set `needs_review` in the `ImportRequest` when the integrity check says `NeedsReview` **or** `errored_lines` is non-empty, in `ios/Sources/Import/ImportService.swift` (FR-019).
+- [x] T103 [US5] Surface `unreadableRows` (= `errored_lines.count`) in `ios/Sources/Import/ImportSummaryView.swift`, so an incomplete import is never presented as a complete one (FR-018).
+- [x] T104 [US5] Render the integrity verdict in `ios/Sources/Import/ImportSummaryView.swift` as a `Label` — SF Symbol **plus** colour **plus** text on an opaque background, never material or colour alone (FR-046, FR-047), with `.nothingToCheck` rendering no row whatsoever.
+- [x] T105 [US5] **GATE** `make lint && make ios-test` — T098 GREEN. Targets live in the repo-root `Makefile`.
 
 **Checkpoint**: A person can tell whether an import is trustworthy, in their own language.
 
