@@ -54,13 +54,56 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**Right now: `017-column-major-pdf` is the live queue — spec, plan and `tasks.md` (119 tasks)
-are all written and it is ready to implement, starting at T001. Its detail is further down
-this section (⚠️ "017 jumps the queue"); read that before touching it.**
+**Right now: `017-column-major-pdf` is the live queue. PR A+B (T001–T045) is merged (#36);
+pick up at ⬇️ PR C, T046 — the extraction fix itself.** Its detail is further down this
+section (⚠️ "017 jumps the queue"); read that before touching it.
+
+**⬅️ NEXT: 017 PR C (T046–T069), `specs/017-column-major-pdf/tasks.md` Phase 5** — 🎯 the slice.
+Geometry-first row reconstruction in `ios/Sources/Import/StatementTextExtractor.swift`, plus
+`ios/Tests/GeometryFixtureTests.swift` asserting A1–A7 over `fixtures/geometry/`. Phase 3+4
+(recognition) is merged, so the R16 ordering constraint is satisfied and this is unblocked.
+
+**What 017 PR A+B settled — don't re-litigate it:**
+
+- **A statement is identified by what it prints about itself.** `statement::claim` supplies
+  the **identity region** (the document minus its transaction rows) and the **header region**
+  (its first fifteen identity lines); claims are whitespace-insensitive. Every reader's
+  `claims` fn now receives a `Regions` value, **not** the raw text and **not** the single
+  `&str` the contract specified — a product claim is scoped to the title block (FR-047) and
+  the identity region has already lost its line boundaries to normalization, so one string
+  cannot serve both rules. The FFI surface is unchanged.
+- **The two halves are one change.** Whitespace-insensitivity widens every bare-institution
+  marker at once and `hdfc_bank::CLAIM_ALL` is literally `["HDFC"]`. Never widen matching
+  without the region fence in the same commit. Gate **G7** has three cases and all three go
+  red if the row exclusion is removed — including an *ICICI* ledger naming HDFC in a row,
+  where `HDFC_BANK` sorts first and a false claim actually wins.
+- **Cards are named per product, banks per bank**, ids `<INSTITUTION>_<PRODUCT>_CARD` /
+  `<INSTITUTION>_BANK`, and every entry declares `ClaimEvidence`. **All six card readers still
+  claim at bank granularity** — per-product identification is correct by uniqueness, not
+  evidence. `HDFC_SWIGGY_CARD`'s `ProductProven` describes what its *document* can prove; its
+  markers still accept a bank-level title. Gate **G1** (verified failing) is what forces a
+  real discriminator the moment a second card for one institution is added.
+- **G5 is a closed set, not an absolute.** Three shipped fixtures are already claimed across
+  kinds (a `Federal Bank` card marker matches that bank's ledger) and `kind_rank` resolves all
+  three correctly. They are named in `KNOWN_CROSS_KIND_CLAIMS`; a **fourth** fails the build.
+- **Gate G6 is the standing no-regression proof**: `FIXTURE_ISSUER_BASELINE` in
+  `tests/dispatcher.rs` maps every statement fixture to its issuer, and a companion test walks
+  `fixtures/` so a new vector cannot skip it. Ids may be renamed there; a fixture may never
+  change institution or kind.
+- **`make ios-test` now wipes the simulator app first.** It was red on a clean checkout
+  because a leftover container made the accessibility audit run against the accounts list
+  instead of the front door. Remembering was not a gate; now it is.
 
 `016-statement-import-vertical` is code-complete and fully merged — PRs A, B, C, D and E are
 all on `main`. What remains there is the two manual gates only a person can run (T123 and
 T129); they are release-blocking but they do not block 017.
+
+⚠️ **One finding parked for 016's T123**: the accessibility audit, run by accident against the
+accounts list at the largest text size, reported a contrast failure on a `StaticText '1'` at
+`{32, 724}` — consistent with `LabeledContent` switching to a vertical layout at accessibility
+sizes and dropping the transaction count to the leading edge under the bottom bar. No
+automated test covers that screen (the audit only reaches the front door). Unverified, and out
+of 017's scope.
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -178,7 +221,7 @@ search, export — see the spec's Out of Scope) gets specified slice by slice vi
 `speckit.specify`.
 
 **⚠️ 017 jumps the queue — real statements do not import.** `specs/017-column-major-pdf/`
-(branch `017-column-major-pdf`, **spec + plan + tasks all written — this is the live queue**;
+(branch `017-column-major-pdf`, **the live queue; T001–T045 merged as #36, resume at T046**;
 do not re-run `speckit.specify`/`plan`/`tasks`) exists because running
 thirteen genuine statement PDFs through the shipped pipeline showed the import vertical does
 not work on real documents: **2 recognised no issuer, 8 more were recognised and imported zero
@@ -187,9 +230,10 @@ whose text layer is emitted **column-major**, and `PDFKitStatementTextExtractor.
 can only *add* line breaks, never re-join what the text layer split — the mirror image of the
 merged-row bug 016 PR D fixed. Both must hold at once. The fix is two-sided: a prototype that
 recovered complete rows broke issuer detection on 11 of 13 files, because claim markers are
-matched as literal substrings and several contain spaces. **All clarifications are answered —
-the spec (53 FRs) is planned and broken into 119 tasks.** Four findings there are worth knowing before you
-touch it:
+matched as literal substrings and several contain spaces — **that half is now fixed and merged
+(PR A+B above).** The remaining, unfixed half is the extraction itself: PR C. **All
+clarifications are answered — the spec (53 FRs) is planned and broken into 119 tasks.** Four
+findings there are worth knowing before you touch it:
 
 1. **No file needs a *new* reader.** All 13 belong to issuers already in the registry, so the
    slice is smaller than it looks. (`SBI-bank.pdf` is misleadingly named — it is an **SBI Cashback
