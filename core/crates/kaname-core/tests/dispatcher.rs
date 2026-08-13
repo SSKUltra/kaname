@@ -311,3 +311,70 @@ fn read_statement_forwards_only_the_anchor_row_geometry() {
         Some(DirectionSource::Row1XPosition)
     );
 }
+
+/// The totality guarantee in `contracts/engine-ffi.md` §2: detection returns for *any*
+/// input. The app hands the engine whatever PDFKit produced, so a document nobody
+/// anticipated must end as "not recognised", never as a crashed import.
+#[test]
+fn detect_issuer_never_panics_on_arbitrary_input() {
+    assert_eq!(
+        detect_issuer(String::new()),
+        None,
+        "empty text claims nobody"
+    );
+
+    // Every byte value, control characters and lone-surrogate-shaped bytes included,
+    // repeated past any reader's scan window.
+    let byte_soup: String =
+        String::from_utf8_lossy(&(0..=255u8).cycle().take(64 * 1024).collect::<Vec<u8>>())
+            .into_owned();
+    assert_eq!(detect_issuer(byte_soup.clone()), detect_issuer(byte_soup));
+
+    // Multi-megabyte input: a 200-page statement's text is the realistic upper bound, and
+    // a reader that scans quadratically would be found here rather than by a person.
+    let huge = "Statement of account\nUPI-EXAMPLE-MERCHANT 1,234.56 Dr\n".repeat(40_000);
+    assert!(huge.len() > 2 * 1024 * 1024, "input must be multi-megabyte");
+    let _ = detect_issuer(huge);
+
+    for text in [
+        "\u{0}\u{1}\u{2}",
+        "\u{FEFF}",
+        "🧾💳🏦",
+        "\u{202E}drawkcab",
+        "                                        ",
+        "\n\n\n\n",
+    ] {
+        assert!(
+            detect_issuer(text.to_string()).is_none(),
+            "{text:?} must claim no reader"
+        );
+    }
+}
+
+/// Whatever detection minted, parsing must accept — including with the geometry and the
+/// lines deliberately disagreeing with each other, which is exactly what a merged-line or
+/// mis-indexed extraction looks like.
+#[test]
+fn read_statement_never_panics_on_mismatched_lines_and_geometry() {
+    let fx = load_fixture("icici/bank_account/basic.json");
+    let issuer = detect_issuer(fx.full_text.clone()).expect("issuer");
+
+    let out_of_range_geometry = vec![LineWords {
+        line_index: u32::MAX,
+        words: vec![Word {
+            text: String::new(),
+            x0: f64::NAN,
+            x1: f64::NEG_INFINITY,
+        }],
+    }];
+    assert!(read_statement(
+        issuer.clone(),
+        fx.lines.clone(),
+        fx.full_text.clone(),
+        out_of_range_geometry
+    )
+    .is_ok());
+
+    // No lines at all, with the full text still claiming the issuer.
+    assert!(read_statement(issuer, Vec::new(), fx.full_text, Vec::new()).is_ok());
+}

@@ -48,6 +48,14 @@ struct PDFKitStatementTextExtractor: StatementTextExtractor {
             }
         }
 
+        // The boolean itself is not the signal: a file already inside the app's container is
+        // perfectly readable and still answers `false`. What matters is whether the bytes can
+        // actually be read — a refused grant, a deleted file and a revoked one all land here,
+        // and none of them should be reported as "that file isn't a PDF".
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
+            throw ExtractionFailure.unreadable
+        }
+
         guard let document = PDFDocument(url: url) else { throw ExtractionFailure.notAPDF }
 
         // `isLocked`, not `isEncrypted`: a document with an empty or owner-only password is
@@ -61,25 +69,174 @@ struct PDFKitStatementTextExtractor: StatementTextExtractor {
         }
 
         let pages = (0..<document.pageCount).compactMap { document.page(at: $0) }
-        let pageTexts = pages.map { $0.string ?? "" }
-        let fullText = pageTexts.joined(separator: "\n")
+
+        var lines: [String] = []
+        var lineWords: [LineWords] = []
+        for (pageIndex, page) in pages.enumerated() {
+            let ranges = Self.lineRanges(on: page)
+            // Page 1 only: it is the only page whose geometry the ledger row-1 bootstrap can
+            // need, and it bounds the cost on a 200-page statement. Its line indices are the
+            // first ones in `lines`, so they need no offset.
+            if pageIndex == 0 {
+                lineWords = Self.lineWords(on: page, ranges: ranges)
+            }
+            lines.append(contentsOf: ranges.map(\.text))
+        }
+
+        let fullText = lines.joined(separator: "\n")
         guard fullText.contains(where: { !$0.isWhitespace }) else {
             throw ExtractionFailure.noExtractableText
         }
 
-        return ExtractedText(
-            lines: Self.split(fullText),
-            fullText: fullText,
-            // Page 1 only: it is the only page whose geometry the ledger row-1 bootstrap can
-            // need, and it bounds the cost on a 200-page statement.
-            lineWords: pages.first.map { Self.lineWords(on: $0) } ?? []
-        )
+        return ExtractedText(lines: lines, fullText: fullText, lineWords: lineWords)
+    }
+
+    /// One line of a page: its text, and the UTF-16 range it occupies in the page's string.
+    struct LineRange {
+        let text: String
+        let range: Range<Int>
     }
 
     /// The readers are fixture-locked to plain newline splitting — no trimming, no dropping
-    /// of blank lines, no reshaping of any kind.
+    /// of blank lines, no reshaping of any kind. Used when a page's geometry cannot be
+    /// trusted, and by callers that only have text.
     static func split(_ fullText: String) -> [String] {
         fullText.components(separatedBy: "\n")
+    }
+
+    /// Where the lines of a page actually are.
+    ///
+    /// PDFKit reports the line breaks *it* inferred, and on a tightly-laid-out statement it
+    /// joins adjacent rows into one string. That is not a cosmetic problem: a reader handed
+    /// `"29/04 … 13,628.36 CR 26/05 … 10.20"` matched one row's date to the other's amount
+    /// and imported a single, confidently wrong transaction. So the breaks are re-derived
+    /// from where the glyphs sit on the page — the same thing the web engine's extractor
+    /// does — and PDFKit's own newlines are kept as hard breaks on top.
+    ///
+    /// A page whose character indices and bounds cannot be trusted falls back to PDFKit's
+    /// newlines unchanged: fewer breaks is a parse that reads nothing, which is honest,
+    /// where a wrong break is a number in the wrong row.
+    ///
+    /// Two properties make this safe on real documents. Words are atomic: PDFKit hands back
+    /// a stray, far-off rect for the last glyph or two of a drawn run, and no word is ever
+    /// split across rows, so a word joins a row if *any* of its glyphs sits in it. And a
+    /// row's band only ever grows by glyphs that were already in it, so one stray rect
+    /// cannot stretch the band far enough to swallow the row below.
+    static func lineRanges(on page: PDFPage) -> [LineRange] {
+        guard let text = page.string else { return [] }
+        let units = Array(text.utf16)
+        guard page.numberOfCharacters == units.count else {
+            return Self.fallbackRanges(text)
+        }
+        guard let extents = Self.glyphExtents(on: page, units: units) else {
+            return Self.fallbackRanges(text)
+        }
+
+        var ranges: [LineRange] = []
+        var start = 0
+        var band: ClosedRange<CGFloat>?
+        var index = 0
+
+        while index < units.count {
+            if units[index] == newline {
+                ranges.append(Self.lineRange(units, start..<index))
+                start = index + 1
+                band = nil
+                index += 1
+                continue
+            }
+            guard !isSeparator(units[index]) else {
+                index += 1
+                continue
+            }
+
+            let wordEnd = Self.endOfWord(units, from: index)
+            let word = (index..<wordEnd).compactMap { extents[$0] }
+            let onThisRow = band.map { current in word.filter { Self.sharesARow($0, current) } }
+
+            if let onThisRow, onThisRow.isEmpty, !word.isEmpty {
+                // A row PDFKit merged into the one before it.
+                ranges.append(Self.lineRange(units, start..<index))
+                start = index
+                band = Self.union(word)
+            } else if let onThisRow, let current = band {
+                band = Self.union(onThisRow + [current])
+            } else {
+                band = Self.union(word)
+            }
+
+            index = wordEnd
+        }
+        ranges.append(Self.lineRange(units, start..<units.count))
+
+        return ranges
+    }
+
+    /// The vertical extent of every glyph on a page, or `nil` if the page yielded no usable
+    /// geometry at all.
+    ///
+    /// Glyph *ink* bounds: a comma, a capital and an x-height letter on one row have wildly
+    /// different midpoints, which is why rows are grouped by whether extents overlap rather
+    /// than by how far apart their centres are.
+    private static func glyphExtents(on page: PDFPage, units: [UInt16]) -> [ClosedRange<CGFloat>?]? {
+        var extents = [ClosedRange<CGFloat>?](repeating: nil, count: units.count)
+        var sawGeometry = false
+        for index in units.indices where !isSeparator(units[index]) {
+            let bounds = page.characterBounds(at: index)
+            guard !bounds.isNull, bounds.minY.isFinite, bounds.maxY.isFinite, bounds.height > 0.5
+            else { continue }
+            extents[index] = bounds.minY...bounds.maxY
+            sawGeometry = true
+        }
+        return sawGeometry ? extents : nil
+    }
+
+    private static func endOfWord(_ units: [UInt16], from start: Int) -> Int {
+        var end = start
+        while end < units.count, !isSeparator(units[end]) {
+            end += 1
+        }
+        return end
+    }
+
+    private static func union(_ extents: [ClosedRange<CGFloat>]) -> ClosedRange<CGFloat>? {
+        guard let first = extents.first else { return nil }
+        return extents.dropFirst().reduce(first) {
+            min($0.lowerBound, $1.lowerBound)...max($0.upperBound, $1.upperBound)
+        }
+    }
+
+    /// Does a glyph sit on the row a band describes? It must overlap by a real fraction of
+    /// the shorter of the two — a full stop inside a row's band does, and the row below,
+    /// which at worst grazes it by a fraction of a point, does not.
+    private static func sharesARow(_ extent: ClosedRange<CGFloat>, _ band: ClosedRange<CGFloat>) -> Bool {
+        let overlap = min(extent.upperBound, band.upperBound) - max(extent.lowerBound, band.lowerBound)
+        let shorter = min(extent.upperBound - extent.lowerBound, band.upperBound - band.lowerBound)
+        return overlap > shorter / 4
+    }
+
+    private static func fallbackRanges(_ text: String) -> [LineRange] {
+        var cursor = 0
+        return Self.split(text).map { line in
+            let range = cursor..<(cursor + line.utf16.count)
+            cursor = range.upperBound + 1
+            return LineRange(text: line, range: range)
+        }
+    }
+
+    /// A line's own text. Trailing whitespace is dropped because a break re-derived from
+    /// geometry lands on the space that used to join two rows, and a reader anchored at the
+    /// end of a line would otherwise miss the last figure on it.
+    private static func lineRange(_ units: [UInt16], _ range: Range<Int>) -> LineRange {
+        var end = range.upperBound
+        while end > range.lowerBound, isSeparator(units[end - 1]) {
+            end -= 1
+        }
+        let trimmed = range.lowerBound..<end
+        return LineRange(
+            text: String(decoding: units[trimmed], as: UTF16.self),
+            range: trimmed
+        )
     }
 
     /// Word x-extents for the lines of a page, used only to bootstrap the direction of a
@@ -90,29 +247,18 @@ struct PDFKitStatementTextExtractor: StatementTextExtractor {
     /// or credit. So every index is bounds-checked and any mismatch simply yields no entry:
     /// the engine then reports the row as provisional and the import is flagged for review,
     /// which is honest.
-    static func lineWords(on page: PDFPage) -> [LineWords] {
+    static func lineWords(on page: PDFPage, ranges: [LineRange]) -> [LineWords] {
         guard let text = page.string else { return [] }
         let units = Array(text.utf16)
         guard page.numberOfCharacters == units.count else { return [] }
 
         var result: [LineWords] = []
-        var lineIndex = 0
-        var cursor = 0
-
-        while cursor <= units.count {
-            let lineStart = cursor
-            var lineEnd = cursor
-            while lineEnd < units.count, units[lineEnd] != Self.newline {
-                lineEnd += 1
-            }
-
-            let words = Self.words(in: units[lineStart..<lineEnd], page: page)
+        for (lineIndex, line) in ranges.enumerated() {
+            guard line.range.upperBound <= units.count else { continue }
+            let words = Self.words(in: units[line.range], page: page)
             if !words.isEmpty {
                 result.append(LineWords(lineIndex: UInt32(lineIndex), words: words))
             }
-
-            lineIndex += 1
-            cursor = lineEnd + 1
         }
 
         return result

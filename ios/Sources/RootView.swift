@@ -37,13 +37,13 @@ struct RootView: View {
                 }
             }
         }
-        .alert("Statement password", isPresented: $model.isPromptingForPassword) {
-            SecureField("Password", text: $model.passwordEntry)
-            Button("Unlock") { Task { await model.submitPassword() } }
-            Button("Cancel", role: .cancel) { model.reset() }
-        } message: {
-            Text(model.passwordPromptMessage ?? ImportFailure.passwordRequired.message)
-        }
+        .statementPasswordPrompt(
+            isPresented: $model.isPromptingForPassword,
+            password: $model.passwordEntry,
+            message: model.passwordPromptMessage ?? ImportFailure.passwordRequired.message,
+            onSubmit: { Task { await model.submitPassword() } },
+            onCancel: { model.reset() }
+        )
     }
 
     @ViewBuilder

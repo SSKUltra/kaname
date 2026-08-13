@@ -86,8 +86,28 @@ private struct ImportPipeline: Sendable {
             categorized: Int(outcome.categorized),
             uncategorized: Int(outcome.uncategorized),
             unreadableRows: parsed.erroredLines.count,
+            nothingRecognized: Self.recognisedNothing(parsed, integrity: integrity),
             integrity: integrity
         )
+    }
+
+    /// Did this parse come back empty without the statement itself vouching for that?
+    ///
+    /// A statement really can have no transactions in its period, and that is a success. But
+    /// an extraction that lost the rows looks identical from here, so "no transactions" may
+    /// only be reported as such when the statement's own printed figures agree — which is
+    /// what an `agrees` verdict over zero rows means.
+    ///
+    /// A bank ledger cannot reach that state: with no anchor row the reader records no
+    /// printed balance at all, so a quiet month and a lost extraction are indistinguishable
+    /// and both take the cautious answer. Saying "Kaname couldn't make out any transactions"
+    /// about a genuinely empty month is a small annoyance; saying "you had no spending"
+    /// about a lost one is the thing this slice exists to prevent.
+    private static func recognisedNothing(
+        _ parsed: ParsedStatement,
+        integrity: IntegrityOutcome
+    ) -> Bool {
+        parsed.lines.isEmpty && integrity != .agrees
     }
 
     private func read(

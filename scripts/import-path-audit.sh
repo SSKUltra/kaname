@@ -13,6 +13,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMPORT_DIR="$REPO_ROOT/ios/Sources/Import"
+SOURCES_DIR="$REPO_ROOT/ios/Sources"
+REGISTRY="$REPO_ROOT/core/crates/kaname-core/src/statement/registry.rs"
 
 if [ ! -d "$IMPORT_DIR" ]; then
     echo "import-audit: FAIL — $IMPORT_DIR does not exist" >&2
@@ -48,3 +50,60 @@ fi
 
 file_count="$(find "$IMPORT_DIR" -name '*.swift' | wc -l | tr -d ' ')"
 echo "import-audit: OK (no networking symbol in $file_count file(s) under ios/Sources/Import)"
+
+# ---------------------------------------------------------------------------
+# Bank-literal audit (FR-012 / SC-010) — the app must not know which banks exist.
+#
+# Every issuer identity lives in the Rust registry and reaches the app only as an opaque
+# `Issuer` whose `display_name` is rendered verbatim. If a bank's id, code or name appears
+# in Swift, some screen has started branching on which bank it is, and adding an eleventh
+# issuer would no longer cost zero app lines.
+#
+# The literals are read out of the registry rather than listed here, so an issuer added
+# tomorrow is guarded without touching this script.
+
+if [ ! -f "$REGISTRY" ]; then
+    echo "import-audit: FAIL — cannot read the issuer registry at $REGISTRY" >&2
+    exit 1
+fi
+
+# `id: "…"` and `display_name: "…"` from the registry rows, `BANK_CODE` from the readers
+# the rows point at.
+literals="$(
+    sed -nE 's/^[[:space:]]*(id|display_name):[[:space:]]*"([^"]+)".*$/\2/p' "$REGISTRY"
+    sed -nE 's/^pub const BANK_CODE: &str = "([^"]+)".*$/\1/p' \
+        "$REPO_ROOT"/core/crates/kaname-core/src/statement/*.rs
+)"
+literals="$(printf '%s\n' "$literals" | sort -u)"
+
+if [ -z "$literals" ]; then
+    echo "import-audit: FAIL — no issuer literals parsed from the registry" >&2
+    exit 1
+fi
+
+bank_hits=""
+while IFS= read -r literal; do
+    [ -z "$literal" ] && continue
+    # Word-boundary matched and case-sensitive: a bank code like AU or YES must not fire on
+    # an unrelated word that merely contains it.
+    hit="$(grep -rInE "\\b$(printf '%s' "$literal" | sed 's/[][\.^$*+?(){}|]/\\&/g')\\b" \
+        "$SOURCES_DIR" || true)"
+    if [ -n "$hit" ]; then
+        bank_hits="$bank_hits$literal:
+$hit
+"
+    fi
+done <<EOF
+$literals
+EOF
+
+if [ -n "$bank_hits" ]; then
+    echo "import-audit: FAIL — bank literal(s) under ios/Sources:" >&2
+    printf '%s' "$bank_hits" >&2
+    echo "The app must stay issuer-agnostic: render Issuer.display_name, never a bank name" >&2
+    echo "(FR-012 / SC-010). Adding an eleventh issuer must cost zero app lines." >&2
+    exit 1
+fi
+
+literal_count="$(printf '%s\n' "$literals" | wc -l | tr -d ' ')"
+echo "import-audit: OK (none of $literal_count registry bank literal(s) under ios/Sources)"
