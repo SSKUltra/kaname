@@ -402,6 +402,7 @@ fn import_statement_writes_no_statements_row_when_no_period_and_no_transactions(
         .import_statement(import_request(
             ImportAccountTarget::Existing {
                 id: account_id.clone(),
+                last4: None,
             },
             Vec::new(),
         ))
@@ -416,4 +417,212 @@ fn import_statement_writes_no_statements_row_when_no_period_and_no_transactions(
         Vec::new()
     );
     assert_eq!(store.list_transactions(account_id).unwrap(), Vec::new());
+}
+
+#[test]
+fn import_statement_attaches_to_an_existing_account_by_issuer_and_last4() {
+    let db = TestDb::new("attach-existing");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+
+    let first = store
+        .import_statement(import_request(
+            ImportAccountTarget::New {
+                name: "HDFC Credit Card".to_string(),
+                bank_code: "HDFC".to_string(),
+                is_credit_card: true,
+                last4: Some("1234".to_string()),
+                currency: "INR".to_string(),
+            },
+            vec![import_txn("POS EXAMPLE MERCHANT ONE", None)],
+        ))
+        .expect("first import");
+    assert!(first.account_created);
+
+    // The next month's statement for the same card: the same account, not a second one.
+    let second = store
+        .import_statement(ImportRequest {
+            period_start: Some(date(2026, 8, 1)),
+            period_end: date(2026, 8, 31),
+            ..import_request(
+                ImportAccountTarget::Existing {
+                    id: first.account_id.clone(),
+                    last4: Some("1234".to_string()),
+                },
+                vec![import_txn("POS EXAMPLE MERCHANT TWO", None)],
+            )
+        })
+        .expect("second import");
+
+    assert!(!second.account_created);
+    assert_eq!(second.account_id, first.account_id);
+    assert_eq!(store.list_accounts().expect("accounts").len(), 1);
+    assert_eq!(
+        store
+            .list_statements(first.account_id.clone())
+            .expect("statements")
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn import_statement_learns_a_last4_the_account_did_not_have() {
+    let db = TestDb::new("mint-last4");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+
+    // An account created from a statement that carried no last-4 — the FR-024 case where a
+    // person's sole account for an issuer takes the import.
+    let account_id = store
+        .insert_account(account("HDFC Savings", false, 1))
+        .expect("account");
+    assert_eq!(
+        store.list_accounts().expect("accounts")[0].last4.as_deref(),
+        None
+    );
+
+    store
+        .import_statement(import_request(
+            ImportAccountTarget::Existing {
+                id: account_id.clone(),
+                last4: Some("3425".to_string()),
+            },
+            vec![import_txn("UPI EXAMPLE MERCHANT", None)],
+        ))
+        .expect("import");
+
+    // Now that a statement has named it, later imports can match on it.
+    assert_eq!(
+        store.list_accounts().expect("accounts")[0].last4.as_deref(),
+        Some("3425")
+    );
+}
+
+#[test]
+fn import_statement_creates_the_account_and_reports_account_created() {
+    let db = TestDb::new("create-account");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+
+    let outcome = store
+        .import_statement(import_request(
+            ImportAccountTarget::New {
+                name: "HDFC Credit Card".to_string(),
+                bank_code: "HDFC".to_string(),
+                is_credit_card: true,
+                last4: Some("1234".to_string()),
+                currency: "INR".to_string(),
+            },
+            vec![import_txn("POS EXAMPLE MERCHANT", None)],
+        ))
+        .expect("import");
+
+    // The person is told an account was made for them, rather than finding one appear.
+    assert!(outcome.account_created);
+    let accounts = store.list_accounts().expect("accounts");
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(accounts[0].id, outcome.account_id);
+    assert_eq!(accounts[0].name, "HDFC Credit Card");
+    assert!(accounts[0].is_credit_card);
+    assert_eq!(accounts[0].last4.as_deref(), Some("1234"));
+}
+
+#[test]
+fn importing_the_same_statement_twice_does_not_double_history() {
+    let db = TestDb::new("reimport");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+
+    let rows = || {
+        vec![
+            import_txn("POS EXAMPLE MERCHANT ONE", None),
+            import_txn("UPI EXAMPLE MERCHANT TWO", None),
+        ]
+    };
+
+    let first = store
+        .import_statement(import_request(
+            ImportAccountTarget::New {
+                name: "HDFC Credit Card".to_string(),
+                bank_code: "HDFC".to_string(),
+                is_credit_card: true,
+                last4: Some("1234".to_string()),
+                currency: "INR".to_string(),
+            },
+            rows(),
+        ))
+        .expect("first import");
+
+    let live_total = |account_id: &str| -> Decimal {
+        store
+            .list_transactions(account_id.to_string())
+            .expect("transactions")
+            .iter()
+            .filter(|txn| txn.superseded_by.is_none())
+            .map(|txn| txn.amount)
+            .sum()
+    };
+    let after_one = live_total(&first.account_id);
+
+    // The very same statement, picked a second time by mistake.
+    let second = store
+        .import_statement(import_request(
+            ImportAccountTarget::Existing {
+                id: first.account_id.clone(),
+                last4: Some("1234".to_string()),
+            },
+            rows(),
+        ))
+        .expect("second import");
+
+    // The import is not refused, and the repeats are linked rather than counted twice.
+    assert_eq!(second.transactions_inserted, 2);
+    assert_eq!(second.duplicates_linked, 2);
+    assert_eq!(live_total(&first.account_id), after_one);
+
+    // Nothing was deleted or replaced: the original rows are untouched and still the winners.
+    let all = store
+        .list_transactions(first.account_id.clone())
+        .expect("transactions");
+    assert_eq!(all.len(), 4);
+    let survivors: Vec<_> = all.iter().filter(|t| t.superseded_by.is_none()).collect();
+    assert_eq!(survivors.len(), 2);
+    assert_eq!(
+        store
+            .list_statements(first.account_id.clone())
+            .expect("statements")
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn two_identical_rows_in_one_statement_are_both_kept() {
+    let db = TestDb::new("same-statement-twins");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+
+    // Two coffees at the same place on the same day for the same money. They are two real
+    // transactions, and a re-import guard must never quietly turn them into one.
+    let outcome = store
+        .import_statement(import_request(
+            ImportAccountTarget::New {
+                name: "HDFC Credit Card".to_string(),
+                bank_code: "HDFC".to_string(),
+                is_credit_card: true,
+                last4: Some("1234".to_string()),
+                currency: "INR".to_string(),
+            },
+            vec![
+                import_txn("POS EXAMPLE COFFEE", None),
+                import_txn("POS EXAMPLE COFFEE", None),
+            ],
+        ))
+        .expect("import");
+
+    assert_eq!(outcome.transactions_inserted, 2);
+    assert_eq!(outcome.duplicates_linked, 0);
+    let live = store
+        .list_transactions(outcome.account_id.clone())
+        .expect("transactions")
+        .into_iter()
+        .filter(|txn| txn.superseded_by.is_none())
+        .count();
+    assert_eq!(live, 2);
 }

@@ -7,8 +7,11 @@ import KanameCore
 /// start a second run, and it owns the in-flight `Task` itself, so backgrounding the app — a
 /// view disappearing — never cancels an import in progress.
 actor ImportService {
-    private var inFlight: Task<ImportSummary, Error>?
+    private var inFlight: Task<PipelineOutcome, Error>?
     private let pipeline: ImportPipeline
+    /// The statement waiting on a person to say which account it belongs to. Held only until
+    /// they answer or walk away — nothing has been written for it yet.
+    private var pendingChoice: PendingImport?
 
     init(
         extractor: any StatementTextExtractor,
@@ -30,9 +33,10 @@ actor ImportService {
         url: URL,
         password: String?,
         onStage: @escaping @Sendable (ImportStage) -> Void
-    ) async throws -> ImportSummary {
+    ) async throws -> ImportResult {
         if let existing = inFlight {
-            return try await existing.value
+            let outcome = try await existing.value
+            return outcome.result
         }
 
         // An unstructured task, deliberately: it does not inherit the caller's cancellation,
@@ -42,14 +46,38 @@ actor ImportService {
         }
         inFlight = task
         defer { inFlight = nil }
-        return try await task.value
+        let outcome = try await task.value
+        pendingChoice = outcome.pending
+        return outcome.result
+    }
+
+    /// Finish the import the person was asked about, against the account they picked or named.
+    func resolveAccount(_ decision: AccountDecision) throws -> ImportSummary {
+        guard let pending = pendingChoice else { throw ImportFailure.cancelled }
+        pendingChoice = nil
+        return try pipeline.finish(pending, decision: decision)
     }
 
     /// Stop the running import. Every checkpoint sits before the single write, so a
     /// cancelled import leaves the store byte-identical.
     func cancel() {
         inFlight?.cancel()
+        pendingChoice = nil
     }
+}
+
+/// A parse waiting on an account decision. Everything needed to finish the import without
+/// reading the file — or asking for its password — a second time.
+struct PendingImport: Sendable {
+    let issuer: Issuer
+    let parsed: ParsedStatement
+    let integrity: IntegrityOutcome
+}
+
+/// What one pipeline run produced: what to show, and what it is still waiting on.
+private struct PipelineOutcome: Sendable {
+    let result: ImportResult
+    let pending: PendingImport?
 }
 
 /// The stages themselves, as a plain value so each one stays small and separately readable.
@@ -59,25 +87,57 @@ private struct ImportPipeline: Sendable {
     let store: Store
     let now: @Sendable () -> Date
 
-    func run(
+    fileprivate func run(
         url: URL,
         password: String?,
         onStage: @Sendable (ImportStage) -> Void
-    ) throws -> ImportSummary {
+    ) throws -> PipelineOutcome {
         let text = try read(url: url, password: password, onStage: onStage)
         let (issuer, parsed) = try parse(text, onStage: onStage)
 
         try Self.checkCancellation()
         onStage(.checking)
         let integrity = IntegrityOutcome(statement: parsed, kind: issuer.kind)
+        let pending = PendingImport(issuer: issuer, parsed: parsed, integrity: integrity)
 
         try Self.checkCancellation()
-        onStage(.saving)
-        let outcome = try persist(parsed, issuer: issuer, integrity: integrity)
+        switch try resolveAccount(parsed, issuer: issuer) {
+        case .resolved(let target):
+            onStage(.saving)
+            let summary = try persist(pending, target: target, onStage: onStage)
+            return PipelineOutcome(result: .finished(summary), pending: nil)
+        case .ask(let choice):
+            // Nothing is written on this path: the question comes before the only write.
+            return PipelineOutcome(result: .needsAccount(choice), pending: pending)
+        }
+    }
+
+    /// Finish an import whose account the person has now chosen.
+    fileprivate func finish(
+        _ pending: PendingImport,
+        decision: AccountDecision
+    ) throws -> ImportSummary {
+        let target: ImportAccountTarget
+        switch decision {
+        case .existing(let id):
+            target = .existing(id: id, last4: pending.parsed.cardLast4)
+        case .new(let name):
+            target = Self.newAccount(named: name, issuer: pending.issuer, parsed: pending.parsed)
+        }
+        return try persist(pending, target: target) { _ in }
+    }
+
+    private func persist(
+        _ pending: PendingImport,
+        target: ImportAccountTarget,
+        onStage: @Sendable (ImportStage) -> Void
+    ) throws -> ImportSummary {
+        let parsed = pending.parsed
+        let outcome = try store(parsed, issuer: pending.issuer, target: target, integrity: pending.integrity)
 
         onStage(.categorizing)
         return ImportSummary(
-            issuerDisplayName: issuer.displayName,
+            issuerDisplayName: pending.issuer.displayName,
             last4: parsed.cardLast4,
             accountIsNew: outcome.accountCreated,
             period: Self.period(from: parsed),
@@ -86,8 +146,8 @@ private struct ImportPipeline: Sendable {
             categorized: Int(outcome.categorized),
             uncategorized: Int(outcome.uncategorized),
             unreadableRows: parsed.erroredLines.count,
-            nothingRecognized: Self.recognisedNothing(parsed, integrity: integrity),
-            integrity: integrity
+            nothingRecognized: Self.recognisedNothing(parsed, integrity: pending.integrity),
+            integrity: pending.integrity
         )
     }
 
@@ -150,12 +210,12 @@ private struct ImportPipeline: Sendable {
         }
     }
 
-    private func persist(
+    private func store(
         _ parsed: ParsedStatement,
         issuer: Issuer,
+        target: ImportAccountTarget,
         integrity: IntegrityOutcome
     ) throws -> ImportOutcome {
-        let target = try resolveAccount(parsed, issuer: issuer)
         do {
             return try store.importStatement(
                 request: Self.request(
@@ -171,9 +231,24 @@ private struct ImportPipeline: Sendable {
         }
     }
 
+    /// Either the account this statement plainly belongs to, or the question to put to the
+    /// person. There is no third option: Kaname never picks between two accounts itself.
+    private enum AccountResolution {
+        case resolved(ImportAccountTarget)
+        case ask(AccountChoice)
+    }
+
     /// Which account this statement belongs to, decided by comparing values the engine
     /// supplied. There is no bank name and no bank list here — and so no per-issuer branch.
-    private func resolveAccount(_ parsed: ParsedStatement, issuer: Issuer) throws -> ImportAccountTarget {
+    ///
+    /// The matrix (FR-021, FR-022, FR-024), in order:
+    ///
+    /// - the statement's last-4 matches exactly one account → attach to it;
+    /// - it matches none, but exactly one account for this issuer never learned its own
+    ///   last-4 → attach, and the store fills that blank in;
+    /// - the statement has a last-4 and no account for this issuer at all → create one;
+    /// - anything else — no last-4 to go on, or more than one account it could be — → ask.
+    private func resolveAccount(_ parsed: ParsedStatement, issuer: Issuer) throws -> AccountResolution {
         let accounts: [StoredAccount]
         do {
             accounts = try store.listAccounts()
@@ -181,18 +256,47 @@ private struct ImportPipeline: Sendable {
             throw ImportFailure.storageUnavailable
         }
 
-        let candidates = accounts.filter {
-            $0.bankCode == issuer.bankCode
-                && $0.isCreditCard == (issuer.kind == .creditCard)
-                && $0.last4 == parsed.cardLast4
+        let forIssuer = accounts.filter {
+            $0.bankCode == issuer.bankCode && $0.isCreditCard == (issuer.kind == .creditCard)
         }
 
-        if candidates.count == 1, let existing = candidates.first {
-            return .existing(id: existing.id)
+        if let last4 = parsed.cardLast4 {
+            let byLast4 = forIssuer.filter { $0.last4 == last4 }
+            if byLast4.count == 1, let match = byLast4.first {
+                return .resolved(.existing(id: match.id, last4: last4))
+            }
+            if byLast4.isEmpty {
+                let unnamed = forIssuer.filter { $0.last4 == nil }
+                if unnamed.count == 1, let match = unnamed.first {
+                    return .resolved(.existing(id: match.id, last4: last4))
+                }
+                if unnamed.isEmpty {
+                    return .resolved(Self.newAccount(named: issuer.displayName, issuer: issuer, parsed: parsed))
+                }
+            }
+        } else if forIssuer.count == 1, let only = forIssuer.first {
+            return .resolved(.existing(id: only.id, last4: nil))
         }
 
-        return .new(
-            name: issuer.displayName,
+        return .ask(
+            AccountChoice(
+                issuerDisplayName: issuer.displayName,
+                last4: parsed.cardLast4,
+                candidates: forIssuer.map {
+                    AccountCandidate(id: $0.id, name: $0.name, last4: $0.last4)
+                },
+                suggestedName: issuer.displayName
+            )
+        )
+    }
+
+    private static func newAccount(
+        named name: String,
+        issuer: Issuer,
+        parsed: ParsedStatement
+    ) -> ImportAccountTarget {
+        .new(
+            name: name,
             bankCode: issuer.bankCode,
             isCreditCard: issuer.kind == .creditCard,
             last4: parsed.cardLast4,
@@ -263,42 +367,4 @@ private struct ImportPipeline: Sendable {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
-}
-
-extension ImportFailure {
-    /// Maps an extraction error at the actor's boundary. Anything unrecognised is reported as
-    /// an unreadable file rather than leaking its own description.
-    fileprivate init(extraction error: Error) {
-        switch error {
-        case ExtractionFailure.notAPDF: self = .notAPDF
-        case ExtractionFailure.passwordRequired: self = .passwordRequired
-        case ExtractionFailure.wrongPassword: self = .wrongPassword
-        case ExtractionFailure.noExtractableText: self = .noExtractableText
-        default: self = .unreadable
-        }
-    }
-}
-
-extension IntegrityOutcome {
-    /// The engine's verdict, kept in three states. A statement carrying nothing to check
-    /// against reports neither a pass nor a fail.
-    fileprivate init(statement: ParsedStatement, kind: StatementKind) {
-        switch kind {
-        case .bankAccount:
-            let result = checkBalanceChain(statement: statement)
-            // `reason` is set only for the empty statement — the engine's own way of saying
-            // there was nothing to walk.
-            if result.reason != nil {
-                self = .nothingToCheck
-            } else {
-                self = result.status == .reconciled ? .agrees : .needsReview
-            }
-        case .creditCard:
-            switch reconcileStatement(statement: statement).status {
-            case .some(.reconciled): self = .agrees
-            case .some(.needsReview): self = .needsReview
-            case .none: self = .nothingToCheck
-            }
-        }
-    }
 }

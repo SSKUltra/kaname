@@ -12,6 +12,9 @@ final class ImportViewModel {
         case running(ImportStage)
         case finished(ImportSummary)
         case failed(ImportFailure)
+        /// Waiting on the person to say which account this statement belongs to. Nothing has
+        /// been written yet, and nothing will be until they answer.
+        case askingForAccount(AccountChoice)
     }
 
     private(set) var phase: Phase = .idle
@@ -64,6 +67,25 @@ final class ImportViewModel {
         return nil
     }
 
+    var accountChoice: AccountChoice? {
+        if case .askingForAccount(let choice) = phase { return choice }
+        return nil
+    }
+
+    /// Finish an import against the account the person just picked or named.
+    func chooseAccount(_ decision: AccountDecision) async {
+        guard let service else { return }
+        phase = .running(.saving)
+        do {
+            phase = .finished(try await service.resolveAccount(decision))
+        } catch let failure as ImportFailure {
+            phase = .failed(failure)
+        } catch {
+            phase = .failed(.storageUnavailable)
+        }
+        pendingURL = nil
+    }
+
     func importStatement(at url: URL) async {
         pendingURL = url
         await run(url: url, password: nil)
@@ -98,7 +120,7 @@ final class ImportViewModel {
         phase = .running(.reading)
         do {
             let service = try resolveService()
-            let summary = try await service.run(url: url, password: password) { stage in
+            let result = try await service.run(url: url, password: password) { stage in
                 Task { @MainActor [weak self] in
                     // A stage arriving after the import finished must not reopen progress.
                     guard let self, self.isRunning else { return }
@@ -106,7 +128,10 @@ final class ImportViewModel {
                 }
             }
             pendingURL = nil
-            phase = .finished(summary)
+            switch result {
+            case .finished(let summary): phase = .finished(summary)
+            case .needsAccount(let choice): phase = .askingForAccount(choice)
+            }
         } catch ImportFailure.passwordRequired {
             promptForPassword(message: nil)
         } catch ImportFailure.wrongPassword {

@@ -1,4 +1,5 @@
 import Foundation
+import KanameCore
 
 /// The stages the import pipeline moves through, in order. Each boundary is a
 /// cancellation checkpoint, so the person can back out of any slow stage before the
@@ -56,6 +57,43 @@ extension ImportSummary {
             + "can't read yet.",
         isWarning: true
     )
+}
+
+/// What an account looks like to the person choosing one.
+struct AccountCandidate: Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let last4: String?
+}
+
+/// The import stopped to ask which account this statement belongs to, because more than one
+/// answer was possible — or none was. Nothing has been written at this point.
+struct AccountChoice: Equatable, Sendable {
+    /// Engine-supplied, rendered verbatim, so the person can see what Kaname thinks it read.
+    let issuerDisplayName: String
+    let last4: String?
+    let candidates: [AccountCandidate]
+    /// The name to offer for a brand-new account — the issuer's own, which is the only name
+    /// Kaname has for it.
+    let suggestedName: String
+}
+
+/// What the person decided when asked.
+enum AccountDecision: Equatable, Sendable {
+    case existing(id: String)
+    case new(name: String)
+}
+
+/// Where an import ended: with a summary, or with a question only a person can answer.
+enum ImportResult: Sendable {
+    case finished(ImportSummary)
+    case needsAccount(AccountChoice)
+
+    /// The summary, when the import ran all the way through.
+    var summary: ImportSummary? {
+        if case .finished(let summary) = self { return summary }
+        return nil
+    }
 }
 
 /// Every way an import can end without writing anything.
@@ -156,6 +194,44 @@ extension IntegrityOutcome {
             )
         case .nothingToCheck:
             return nil
+        }
+    }
+}
+
+extension ImportFailure {
+    /// Maps an extraction error at the actor's boundary. Anything unrecognised is reported as
+    /// an unreadable file rather than leaking its own description.
+    init(extraction error: Error) {
+        switch error {
+        case ExtractionFailure.notAPDF: self = .notAPDF
+        case ExtractionFailure.passwordRequired: self = .passwordRequired
+        case ExtractionFailure.wrongPassword: self = .wrongPassword
+        case ExtractionFailure.noExtractableText: self = .noExtractableText
+        default: self = .unreadable
+        }
+    }
+}
+
+extension IntegrityOutcome {
+    /// The engine's verdict, kept in three states. A statement carrying nothing to check
+    /// against reports neither a pass nor a fail.
+    init(statement: ParsedStatement, kind: StatementKind) {
+        switch kind {
+        case .bankAccount:
+            let result = checkBalanceChain(statement: statement)
+            // `reason` is set only for the empty statement — the engine's own way of saying
+            // there was nothing to walk.
+            if result.reason != nil {
+                self = .nothingToCheck
+            } else {
+                self = result.status == .reconciled ? .agrees : .needsReview
+            }
+        case .creditCard:
+            switch reconcileStatement(statement: statement).status {
+            case .some(.reconciled): self = .agrees
+            case .some(.needsReview): self = .needsReview
+            case .none: self = .nothingToCheck
+            }
         }
     }
 }
