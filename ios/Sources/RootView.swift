@@ -5,10 +5,6 @@ import UniformTypeIdentifiers
 /// Root screen: the minimal real import flow — one action, the system document picker, and
 /// the summary of what landed. US7 replaces this with the full first-run empty state.
 struct RootView: View {
-    /// Human-readable engine build, sourced live from `kaname-core` via UniFFI — the
-    /// single source of truth for the version (never hardcoded in the app).
-    var versionLabel: String { "Engine v\(engineVersion())" }
-
     @State private var model = ImportViewModel()
     @State private var isPickingFile = false
 
@@ -17,6 +13,7 @@ struct RootView: View {
             content
                 .navigationTitle("Kaname")
                 .safeAreaInset(edge: .bottom) { bottomBar }
+                .task { await model.refreshAccounts() }
         }
         .fileImporter(
             isPresented: $isPickingFile,
@@ -63,35 +60,33 @@ struct RootView: View {
                 model.reset()
                 isPickingFile = true
             }
+        } else if model.accounts.isEmpty {
+            // A fresh install: the front door explains itself, and its own button is the one
+            // tap that opens the picker — so the bottom bar adds nothing here.
+            ImportEmptyStateView { isPickingFile = true }
         } else {
-            ContentUnavailableView(
-                "Kaname",
-                systemImage: "key.fill",
-                description: Text("The key to your money. On-device, private by design.")
-            )
+            ImportedAccountsView(accounts: model.accounts)
         }
     }
 
     @ViewBuilder
     private var bottomBar: some View {
-        VStack(spacing: 8) {
-            if model.isRunning {
-                ImportProgressView(stage: model.stage) {
-                    Task { await model.cancel() }
-                }
-            } else if model.failure == nil {
-                Button("Import a statement") { isPickingFile = true }
-                    .buttonStyle(.glassProminent)
+        if model.isRunning {
+            ImportProgressView(stage: model.stage) {
+                Task { await model.cancel() }
             }
-            // Show the engine version only when present — never fabricate one.
-            if !engineVersion().isEmpty {
-                Text(versionLabel)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Engine version \(engineVersion())")
-            }
+            .padding(.bottom, 8)
+        } else if model.failure == nil && !model.accounts.isEmpty {
+            // Import stays one tap away once there is data to come back to; the empty state
+            // carries its own action, and two prominent buttons would be one too many. The
+            // bar is opaque for the same reason it is on the empty state: a glass label over
+            // a scrolling list of rows is where contrast goes.
+            Button("Import a statement") { isPickingFile = true }
+                .buttonStyle(.glassProminent)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(.background)
         }
-        .padding(.bottom, 8)
     }
 
     private var showingSummary: Binding<Bool> {

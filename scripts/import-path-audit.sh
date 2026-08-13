@@ -107,3 +107,37 @@ fi
 
 literal_count="$(printf '%s\n' "$literals" | wc -l | tr -d ' ')"
 echo "import-audit: OK (none of $literal_count registry bank literal(s) under ios/Sources)"
+
+# ---------------------------------------------------------------------------
+# Liquid Glass audit (FR-047) — the app's deployment target is iOS 26 precisely so that
+# Liquid Glass is unconditional. An availability gate, a material fallback, or a
+# hand-rolled blur all mean someone has started maintaining a second visual language for
+# an OS this app cannot run on.
+
+GLASS_DENYLIST=(
+    '#available\(iOS 26'
+    '#unavailable\(iOS 26'
+    '\.ultraThinMaterial'
+    '\.thinMaterial'
+    '\.regularMaterial'
+    '\.thickMaterial'
+    '\.ultraThickMaterial'
+    'UIVisualEffectView'
+    'UIBlurEffect'
+    'NSVisualEffectView'
+)
+
+glass_pattern="$(printf '%s|' "${GLASS_DENYLIST[@]}")"
+glass_pattern="(${glass_pattern%|})"
+
+glass_hits="$(grep -rInE "$glass_pattern" "$SOURCES_DIR" || true)"
+
+if [ -n "$glass_hits" ]; then
+    echo "import-audit: FAIL — availability gate, material fallback or hand-rolled blur:" >&2
+    echo "$glass_hits" >&2
+    echo "The deployment target is iOS 26, so Liquid Glass is unconditional: use" >&2
+    echo ".glassEffect / GlassEffectContainer / .buttonStyle(.glass) and never a fallback." >&2
+    exit 1
+fi
+
+echo "import-audit: OK (no availability gate or material fallback under ios/Sources)"

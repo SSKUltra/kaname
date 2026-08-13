@@ -66,6 +66,16 @@ struct AccountCandidate: Identifiable, Equatable, Sendable {
     let last4: String?
 }
 
+/// An account the person already has, as the front door shows it: enough to recognise it,
+/// and enough to see that the data really is there.
+struct ImportedAccount: Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let last4: String?
+    let isCreditCard: Bool
+    let transactionCount: Int
+}
+
 /// The import stopped to ask which account this statement belongs to, because more than one
 /// answer was possible — or none was. Nothing has been written at this point.
 struct AccountChoice: Equatable, Sendable {

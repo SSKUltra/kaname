@@ -51,4 +51,4 @@ import-audit:
 
 # --- Everything ---
 lint: core-lint
-	cd ios && swiftlint --strict && swift-format lint --recursive --strict Sources Tests
+	cd ios && swiftlint --strict && swift-format lint --recursive --strict Sources Tests UITests

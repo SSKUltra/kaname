@@ -56,5 +56,16 @@ let project = Project(
                 .target(name: "KanameCore"),
             ]
         ),
+        .target(
+            name: "KanameUITests",
+            destinations: .iOS,
+            product: .uiTests,
+            bundleId: "in.beaconbrain.kaname.uitests",
+            deploymentTargets: .iOS("26.0"),
+            sources: ["UITests/**"],
+            dependencies: [
+                .target(name: "Kaname")
+            ]
+        ),
     ]
 )

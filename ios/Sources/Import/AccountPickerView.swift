@@ -17,9 +17,11 @@ struct AccountPickerView: View {
         NavigationStack {
             List {
                 Section {
+                    // Not `.secondary`: the system's secondary label sits on the wrong side
+                    // of the contrast threshold, and this sentence is the whole reason the
+                    // question is being asked.
                     Text(Self.explanation(for: choice))
                         .font(.callout)
-                        .foregroundStyle(.secondary)
                 }
 
                 if !choice.candidates.isEmpty {
@@ -31,6 +33,7 @@ struct AccountPickerView: View {
                                 LabeledContent {
                                     Text(candidate.last4.map { "•••• \($0)" } ?? "")
                                         .monospacedDigit()
+                                        .foregroundStyle(.primary)
                                 } label: {
                                     Text(candidate.name)
                                 }

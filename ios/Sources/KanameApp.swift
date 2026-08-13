@@ -7,6 +7,7 @@ struct KanameApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .tint(.kanameAccent)
         }
     }
 }

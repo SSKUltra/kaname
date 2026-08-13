@@ -18,7 +18,9 @@ struct KanameSmokeTests {
     func versionLabelComesFromEngine() {
         let version = engineVersion()
         #expect(!version.isEmpty)
-        #expect(RootView().versionLabel == "Engine v\(version)")
+        // Shown on the first-run screen, spelled out in full so VoiceOver reads exactly what
+        // is on screen.
+        #expect(ImportEmptyStateView(onImport: {}).versionLabel == "Engine version \(version)")
     }
 
     @Test("core ↔ Swift round-trip returns exactly what the engine computed")

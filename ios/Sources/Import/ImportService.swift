@@ -68,6 +68,12 @@ actor ImportService {
         inFlight?.task.cancel()
         pendingChoice = nil
     }
+
+    /// What the person has imported so far, for the front door. Reads the same store the
+    /// pipeline writes to, so there is one owner of the database and one place it is opened.
+    func importedAccounts() throws -> [ImportedAccount] {
+        try pipeline.importedAccounts()
+    }
 }
 
 /// A parse waiting on an account decision. Everything needed to finish the import without
@@ -113,6 +119,24 @@ private struct ImportPipeline: Sendable {
         case .ask(let choice):
             // Nothing is written on this path: the question comes before the only write.
             return PipelineOutcome(result: .needsAccount(choice), pending: pending)
+        }
+    }
+
+    /// Every account the store holds, with the weight of what is in it. The count is the
+    /// evidence: an account with no transactions behind it would be a claim, not a fact.
+    fileprivate func importedAccounts() throws -> [ImportedAccount] {
+        do {
+            return try store.listAccounts().map { account in
+                ImportedAccount(
+                    id: account.id,
+                    name: account.name,
+                    last4: account.last4,
+                    isCreditCard: account.isCreditCard,
+                    transactionCount: try store.listTransactions(accountId: account.id).count
+                )
+            }
+        } catch {
+            throw ImportFailure.storageUnavailable
         }
     }
 

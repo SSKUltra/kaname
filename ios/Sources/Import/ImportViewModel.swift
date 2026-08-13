@@ -19,6 +19,10 @@ final class ImportViewModel {
 
     private(set) var phase: Phase = .idle
 
+    /// What the person has imported so far. Empty means a genuinely fresh install, which is
+    /// the one thing the front door needs to know.
+    private(set) var accounts: [ImportedAccount] = []
+
     /// Bound to the password prompt's `SecureField`. Cleared the moment the prompt goes away,
     /// so a statement password is never held beyond the unlock attempt that needs it.
     var passwordEntry: String = ""
@@ -78,12 +82,21 @@ final class ImportViewModel {
         phase = .running(.saving)
         do {
             phase = .finished(try await service.resolveAccount(decision))
+            await refreshAccounts()
         } catch let failure as ImportFailure {
             phase = .failed(failure)
         } catch {
             phase = .failed(.storageUnavailable)
         }
         pendingURL = nil
+    }
+
+    /// Reload what the person has imported. A store that will not open leaves the list alone
+    /// rather than emptying it: telling someone their accounts are gone would be a lie, and
+    /// the failure they can act on is the one the import itself reports.
+    func refreshAccounts() async {
+        guard let service = try? resolveService() else { return }
+        accounts = (try? await service.importedAccounts()) ?? accounts
     }
 
     func importStatement(at url: URL) async {
@@ -129,7 +142,9 @@ final class ImportViewModel {
             }
             pendingURL = nil
             switch result {
-            case .finished(let summary): phase = .finished(summary)
+            case .finished(let summary):
+                phase = .finished(summary)
+                await refreshAccounts()
             case .needsAccount(let choice): phase = .askingForAccount(choice)
             }
         } catch ImportFailure.passwordRequired {

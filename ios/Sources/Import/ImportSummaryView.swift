@@ -14,8 +14,13 @@ struct ImportSummaryView: View {
                 Section {
                     accountRow
                     if let period = summary.period {
-                        LabeledContent("Period", value: Self.periodText(period))
-                            .monospacedDigit()
+                        LabeledContent {
+                            Text(Self.periodText(period))
+                                .monospacedDigit()
+                                .foregroundStyle(.primary)
+                        } label: {
+                            Text("Period")
+                        }
                     }
                 }
 
@@ -75,13 +80,15 @@ struct ImportSummaryView: View {
         LabeledContent {
             Text(summary.last4.map { "•••• \($0)" } ?? "")
                 .monospacedDigit()
+                .foregroundStyle(.primary)
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(summary.issuerDisplayName)
                 if summary.accountIsNew {
+                    // Not `.secondary`: grey at footnote size does not hold contrast, and the
+                    // smaller font already reads as subordinate.
                     Text("New account")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -89,9 +96,17 @@ struct ImportSummaryView: View {
     }
 
     private func figure(_ label: String, _ count: Int) -> some View {
-        LabeledContent(label, value: count.formatted())
-            .monospacedDigit()
-            .accessibilityLabel("\(label): \(count)")
+        LabeledContent {
+            // Explicitly primary: `LabeledContent` renders its value in a secondary style,
+            // which does not hold contrast for a figure (FR-045, FR-046).
+            Text(count.formatted())
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+        } label: {
+            Text(label)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(count)")
     }
 
     private static func periodText(_ period: DateInterval) -> String {
