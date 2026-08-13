@@ -41,6 +41,12 @@ ios-gen: core-xcframework
 	cd ios && tuist generate --no-open
 
 ios-test: ios-gen
+	@# The simulator keeps the app's container between runs, so a statement imported by an
+	@# earlier run leaves an account behind — and the front door then shows the accounts
+	@# list instead of the empty state. The accessibility audit dutifully passes or fails
+	@# against the wrong screen. Boot and wipe first so the gate audits what it says it does.
+	@xcrun simctl bootstatus "iPhone 16" -b >/dev/null 2>&1 || true
+	@xcrun simctl uninstall "iPhone 16" in.beaconbrain.kaname >/dev/null 2>&1 || true
 	cd ios && xcodebuild -workspace Kaname.xcworkspace -scheme Kaname \
 		-destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' test
 
