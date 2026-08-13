@@ -47,14 +47,15 @@ truth instead of copying them:
 Orientation in one line: the deterministic engine (10 readers + balance-chain, reconcile,
 dedup, coverage, transfer, categorize), the UniFFI bridge, and the SQLCipher encrypted store
 are all in and fully wired together — **P2 is done; P3 (the SwiftUI app) is now the work**,
-and the app itself is still the placeholder `ios/Sources/RootView.swift` (§3).
+and the app's first real screen — the statement-import flow in `ios/Sources/Import/` plus
+`RootView` — has landed with 016 PR C (§3).
 
 ---
 
 ## 3. What's next
 
-**Right now: implement `016-statement-import-vertical` — PR A and PR B are MERGED; start
-with PR C, the 🎯 MVP vertical.**
+**Right now: implement `016-statement-import-vertical` — PR A, B and C are MERGED; start
+with PR D.**
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -66,35 +67,39 @@ decisions with source-line evidence) → `contracts/` → **`tasks.md`** (136 ta
 queue) → `quickstart.md` (build order + smoke test).
 
 **It ships as five PRs, not one** (rationale + task ranges in `tasks.md` § "Recommended PR
-split"). Take the lowest unstarted one — **that is now PR C**:
+split"). Take the lowest unstarted one — **that is now PR D**:
 
 | PR | Tasks | What | Status |
 |----|-------|------|--------|
 | **A** | T001, T006–T017, T035–T046 | Store hardening: the ⚠️ deadlock refactor, schema v6, atomic `import_statement` | ✅ **merged** (#31) |
 | **B** | T003, T005, T018–T034 | The issuer dispatcher (`detect_issuer` / `read_statement`) | ✅ **merged** (#32) |
-| **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build | ⬅️ **NEXT** (T002 done) |
-| **D** | T070–T097 | Honest failures & account attribution (US2–US4) | |
+| **C** | T002, T004, T047–T069 | 🎯 The MVP vertical — first demoable build | ✅ **merged** (#33) |
+| **D** | T070–T097 | Honest failures & account attribution (US2–US4) | ⬅️ **NEXT** |
 | **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | |
 
-**State of `main` after A + B** (verified `5b6562d`, full gate green):
-`make core-test` = **221 passing / 0 failing**; `make ios-test` = 56 tests / 20 suites.
-The engine half of this slice is **done** — schema is at **v6** (`accounts.last4`),
-`Store::import_statement` is atomic (one transaction, `*_in` helpers, full rollback), and
-`detect_issuer` / `read_statement` are exported over UniFFI. What remains in PR C is almost
-entirely **Swift**: PDFKit extraction → the `ImportService` actor → the summary sheet,
-replacing the placeholder `ios/Sources/RootView.swift`.
+**State of `main` after A + B + C** (verified `ee0f9a7`, full gate green):
+`make core-test` = **221 passing / 0 failing**; `make ios-test` = **61 tests / 21 suites**;
+`make lint` = 0 violations / 32 files; `make import-audit` + `make core-privacy-audit` OK.
+**The MVP vertical is live** — the app is no longer a placeholder: `ios/Sources/Import/`
+holds `PDFKitStatementTextExtractor`, the `ImportService` actor, `ImportViewModel`,
+`ImportSummaryView` and `ImportFailureView`, and `RootView` is the real
+pick → progress → summary flow.
 
-**PR C starts here** (`tasks.md` Phase 2F → 2.5 → 3):
-T004 (link PDFKit in `ios/Project.swift`) → T047–T052 (the `ios/Sources/Import/` seams,
-types only) → **T053–T055 the design-contract gate** (Liquid Glass application points, the
-copy deck, the state-machine trace — settle these *before* building UI) → T056–T057 RED →
-T058–T066 implementation → T067–T069 gates. T001/T002/T003/T005 are already ticked.
+**PR D starts here** (`tasks.md` Phase 4 → 6): T070–T071 RED → T072–T078 (US2, the
+issuer-agnostic guarantees) → T079–T090 (US3, honest failures) → T091–T097 (US4, the FR-024
+account-attribution matrix + `AccountPickerView`). Note that US1 deliberately implements only
+the unambiguous account cases — exactly one candidate attaches, zero creates — so **T093 is
+where the `nil`-last-4 and ≥2-candidate branches finally get their human decision**; until
+then the code must never silently guess.
 
-> ⚠️ **Still live in PR C:** never call a bare `tuist generate` — always `make ios-gen` /
+> ⚠️ **Still live in PR D:** never call a bare `tuist generate` — always `make ios-gen` /
 > `make ios-test`, and run `make core-xcframework` first whenever the FFI surface moves.
-> T057 adds `scripts/import-path-audit.sh` + a `make import-audit` target: it is the
-> mechanical SC-004 proof that **zero networking symbols** exist under `ios/Sources/Import/`.
-> The only engine-supplied string allowed on screen is `Issuer.display_name` (FR-033/FR-034).
+> `make import-audit` is the mechanical SC-004 proof that **zero networking symbols** exist
+> under `ios/Sources/Import/` — run it on every PR that touches that directory. The only
+> engine-supplied string allowed on screen is `Issuer.display_name` (FR-033/FR-034); the copy
+> deck for every failure and integrity state lives in `ios/Sources/Import/ImportModels.swift`.
+> The T053/T055 design-gate outcomes (Liquid Glass application points, the four settled
+> state-machine edges) are recorded in `tasks.md` § Phase 2.5 — read them before adding UI.
 
 > ⚠️ **Worktree gotcha (learned the hard way):** Tuist cannot resolve its root inside a
 > `git worktree` (there `.git` is a *file*, not a directory), so `make ios-gen` fails there.
@@ -129,6 +134,7 @@ export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"   # cargo is NOT on the d
 make core-lint          # cargo fmt --check + clippy -D warnings
 make core-test          # cargo test (unit + parity + store)
 make core-privacy-audit # no networking crate / no openssl in the shipped graph
+make import-audit       # no networking symbol under ios/Sources/Import (Swift half of the same gate)
 make lint               # swiftlint --strict + swift-format lint + core-lint
 make ios-gen            # tuist generate (depends on core-xcframework)
 make ios-test           # simulator build + Swift Testing (sim named "iPhone 16")
@@ -221,6 +227,12 @@ changes don't need linting/building/testing.
   **Timestamps are explicit inputs** (the core reads no wall-clock); the platform owns the
   Keychain key + file path + NSFileProtection.
 - `common.rs` / `polarity.rs` — `parse_amount`/`parse_date`/`find_last4`/…; `classify`.
+- `ios/Sources/Import/` — the platform vertical (016 PR C). `StatementTextExtractor` is the
+  PDFKit seam (a protocol, so the pipeline is provable without a PDF — see
+  `ios/Tests/ImportPipelineTests.swift`); `ImportService` is the actor owning the whole
+  pipeline and the in-flight `Task`; `ImportModels.swift` holds **the copy deck** — every
+  user-facing sentence for `ImportFailure` and `IntegrityOutcome` lives there, and
+  `Issuer.display_name` is the only engine string allowed on screen.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
 
 ---
