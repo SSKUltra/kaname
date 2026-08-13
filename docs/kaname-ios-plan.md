@@ -167,6 +167,11 @@ Approach: **fixtures-driven, incremental by bank** — port the top banks first,
 - **P1 — Rust core skeleton.** cargo workspace + UniFFI + XCFramework wired into the iOS app; encrypted SQLite; data model; a "core ↔ Swift" round-trip test.
 - **P2 — Engine port.** Top-5 bank/card parsers + T1/T2 + dedup + balance-chain + reconciliation; PDFKit→Rust text bridge; golden-fixture parity **green**.
 - **P3 — Core SwiftUI app.** Onboarding → import → transaction list → categorize → dashboard (Swift Charts) → budgets → tags → search → export; latest-HIG polish.
+  **Under way.** The statement-import vertical (`016-statement-import-vertical`) has landed:
+  the first-run front door, the PDFKit → engine → encrypted-store pipeline, honest failures,
+  account attribution, the integrity verdict in plain language, and a cancellable import —
+  with a `KanameUITests` accessibility audit gating the front door. The transaction list,
+  dashboard, budgets, tags, search and export are specified slice by slice from here.
 - **P4 — Account + entitlement + purchase.** Web (Razorpay) + StoreKit 2 IAP; account-based cross-platform entitlement; server-side receipt validation; gated premium hooks.
 - **P5 — Expand + ship.** Remaining parsers; WidgetKit; App Intents; accessibility pass; TestFlight → App Store.
 - **P6 — Premium on iOS (later).** Cross-device E2E sync, managed AI, AA one-click, broker/CAS sync, split hosting → then **Android** via the shared Rust core.

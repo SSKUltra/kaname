@@ -400,19 +400,19 @@ mislead, and it fails silently.
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T124 [P] Create `ios/Tests/ImportMessageAuditTests.swift` asserting that no user-facing string in the flow contains an error code, a reader identifier, a `bank_code`, or `StoreError` / `ReaderError` text — the only engine-supplied string permitted on screen is `Issuer.display_name` (SC-007, FR-034).
-- [ ] T125 [P] Update `.scratch/HANDOFF.md` §7 "Key reusable seams" with `detect_issuer`, `read_statement`, `first_anchor_index`, `Store::import_statement`, the `*_in` helpers and schema **v6** (the section still says v3).
-- [ ] T126 [P] Update the P3 status line in `docs/kaname-ios-plan.md` to record that the import vertical has landed.
-- [ ] T127 [P] Fix the `update-agent-context.sh` artefact in `.github/copilot-instructions.md`: `sed -i '' 's/iOS 18 targe$/iOS 18 target/g; s/iOS 18 targe /iOS 18 target /g' .github/copilot-instructions.md` (`.scratch/HANDOFF.md` §6).
-- [ ] T128 Audit `fixtures/` and `ios/Tests/` and confirm every fixture added or edited by this slice is synthetic, that no PDF binary was committed, and that no real account identifier appears anywhere (Constitution I, FR-043, SC-011).
+- [x] T124 [P] Create `ios/Tests/ImportMessageAuditTests.swift` asserting that no user-facing string in the flow contains an error code, a reader identifier, a `bank_code`, or `StoreError` / `ReaderError` text — the only engine-supplied string permitted on screen is `Issuer.display_name` (SC-007, FR-034).
+- [x] T125 [P] Update `.scratch/HANDOFF.md` §7 "Key reusable seams" with `detect_issuer`, `read_statement`, `first_anchor_index`, `Store::import_statement`, the `*_in` helpers and schema **v6** (the section still says v3).
+- [x] T126 [P] Update the P3 status line in `docs/kaname-ios-plan.md` to record that the import vertical has landed.
+- [x] T127 [P] Fix the `update-agent-context.sh` artefact in `.github/copilot-instructions.md`: `sed -i '' 's/iOS 18 targe$/iOS 18 target/g; s/iOS 18 targe /iOS 18 target /g' .github/copilot-instructions.md` (`.scratch/HANDOFF.md` §6). **Nothing to fix:** the artefact is not present — every line in `.github/copilot-instructions.md` already reads "iOS 18 target". Verified, not assumed.
+- [x] T128 Audit `fixtures/` and `ios/Tests/` and confirm every fixture added or edited by this slice is synthetic, that no PDF binary was committed, and that no real account identifier appears anywhere (Constitution I, FR-043, SC-011).
 - [ ] T129 Run the manual smoke test in `specs/016-statement-import-vertical/quickstart.md` §5: the 4-tap path, force-quit and relaunch, the same-file re-import, then the full failure matrix (image-only, password right and wrong, corrupt, `.txt` renamed `.pdf`, a utility bill, cancel mid-parse).
-- [ ] T130 **FULL GATE** `make core-lint` (`Makefile`).
-- [ ] T131 **FULL GATE** `make core-test` (`Makefile`).
-- [ ] T132 **FULL GATE** `make core-privacy-audit` (`Makefile`).
-- [ ] T133 **FULL GATE** `make lint` (`Makefile`).
-- [ ] T134 **FULL GATE** `make ios-gen` (`Makefile`) — depends on `core-xcframework`; never a bare `tuist generate`.
-- [ ] T135 **FULL GATE** `make ios-test` (`Makefile`).
-- [ ] T136 **FULL GATE** `make import-audit` (`Makefile`) — no networking symbol, no bank literal, no `#available`/`.ultraThinMaterial` under `ios/Sources/`.
+- [x] T130 **FULL GATE** `make core-lint` (`Makefile`).
+- [x] T131 **FULL GATE** `make core-test` (`Makefile`).
+- [x] T132 **FULL GATE** `make core-privacy-audit` (`Makefile`).
+- [x] T133 **FULL GATE** `make lint` (`Makefile`).
+- [x] T134 **FULL GATE** `make ios-gen` (`Makefile`) — depends on `core-xcframework`; never a bare `tuist generate`.
+- [x] T135 **FULL GATE** `make ios-test` (`Makefile`).
+- [x] T136 **FULL GATE** `make import-audit` (`Makefile`) — no networking symbol, no bank literal, no `#available`/`.ultraThinMaterial` under `ios/Sources/`.
 
 ---
 
