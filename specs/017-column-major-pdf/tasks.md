@@ -117,29 +117,29 @@ same PR as T023–T028 (the widening).
 
 ### Tests for User Story 2 (write FIRST, confirm RED) ⚠️
 
-- [ ] T008 [P] [US2] Unit tests for C1 whitespace-insensitive comparison in `core/crates/kaname-core/src/statement/claim.rs` (`#[cfg(test)]`): `"Statement of Transactions"`, `"Statement  of Transactions"` and `"StatementofTransactions"` are the same marker; ASCII-lowercasing only; no punctuation stripping, no stemming; normalization applied identically to haystack and marker
-- [ ] T009 [P] [US2] Unit tests for C2 `identity_region` in `core/crates/kaname-core/src/statement/claim.rs`: a line is row-like (and excluded) iff it contains a date matching `\d{2}/\d{2}/\d{4}`, `\d{2}/\d{2}/\d{2}` or `\d{2}-[A-Za-z]{3}-\d{4}` **and** an amount matching `[\d,]+\.\d{2}`; a header line carrying a date but no amount survives; a total line carrying an amount but no date survives
-- [ ] T010 [P] [US2] Unit tests for C2 `header_region` in `core/crates/kaname-core/src/statement/claim.rs`: the first 15 non-excluded lines only; a marker on line 16 does not match; output is normalized per C1
-- [ ] T011 [P] [US2] Purity/determinism tests for `claim.rs` (FR-015): identical input yields identical output across repeated calls; no clock, locale or I/O reachable from either function
-- [ ] T012 [P] [US2] **Gate G7 — cross-bank false claim (FR-014)** in `core/crates/kaname-core/tests/dispatcher.rs`: a synthetic AU-shaped ledger whose transaction descriptions contain the literal `HDFC` inside a UPI narration resolves to `AU_BANK`, **not** `HDFC_BANK`; this models the measured AU/HDFC hazard and must be RED before T024
-- [ ] T013 [P] [US2] **Gate G7 (second case) — identify by title, not by spend (FR-047)** in `core/crates/kaname-core/tests/dispatcher.rs`: a synthetic HDFC card statement whose descriptions repeat `Swiggy` ~40 times but whose title line does **not** name the product must not be product-claimed off the transaction rows; the title-line case must be
-- [ ] T014 [P] [US2] Whitespace-tolerance regression in `core/crates/kaname-core/tests/dispatcher.rs`: the shipped HDFC ledger markers `WithdrawalAmt` and `Statementof account` match whether or not their spaces are present, in both spellings (research R7 — these literals lost their spaces to a *different* extractor)
-- [ ] T015 [P] [US2] No-new-claim test (FR-014) in `core/crates/kaname-core/tests/dispatcher.rs`: a document no issuer claimed before the widening is still unclaimed after it; `detect_issuer` returns `None` and never panics on arbitrary input
-- [ ] T016 [P] [US2] Header-split recognition test in `core/crates/kaname-core/tests/dispatcher.rs`: a header phrase printed as two columns and rejoined with a single space still resolves to the same issuer (US2 scenario 3)
+- [x] T008 [P] [US2] Unit tests for C1 whitespace-insensitive comparison in `core/crates/kaname-core/src/statement/claim.rs` (`#[cfg(test)]`): `"Statement of Transactions"`, `"Statement  of Transactions"` and `"StatementofTransactions"` are the same marker; ASCII-lowercasing only; no punctuation stripping, no stemming; normalization applied identically to haystack and marker
+- [x] T009 [P] [US2] Unit tests for C2 `identity_region` in `core/crates/kaname-core/src/statement/claim.rs`: a line is row-like (and excluded) iff it contains a date matching `\d{2}/\d{2}/\d{4}`, `\d{2}/\d{2}/\d{2}` or `\d{2}-[A-Za-z]{3}-\d{4}` **and** an amount matching `[\d,]+\.\d{2}`; a header line carrying a date but no amount survives; a total line carrying an amount but no date survives
+- [x] T010 [P] [US2] Unit tests for C2 `header_region` in `core/crates/kaname-core/src/statement/claim.rs`: the first 15 non-excluded lines only; a marker on line 16 does not match; output is normalized per C1
+- [x] T011 [P] [US2] Purity/determinism tests for `claim.rs` (FR-015): identical input yields identical output across repeated calls; no clock, locale or I/O reachable from either function
+- [x] T012 [P] [US2] **Gate G7 — cross-bank false claim (FR-014)** in `core/crates/kaname-core/tests/dispatcher.rs`: a synthetic AU-shaped ledger whose transaction descriptions contain the literal `HDFC` inside a UPI narration resolves to `AU_BANK`, **not** `HDFC_BANK`; this models the measured AU/HDFC hazard and must be RED before T024
+- [x] T013 [P] [US2] **Gate G7 (second case) — identify by title, not by spend (FR-047)** in `core/crates/kaname-core/tests/dispatcher.rs`: a synthetic HDFC card statement whose descriptions repeat `Swiggy` ~40 times but whose title line does **not** name the product must not be product-claimed off the transaction rows; the title-line case must be
+- [x] T014 [P] [US2] Whitespace-tolerance regression in `core/crates/kaname-core/tests/dispatcher.rs`: the shipped HDFC ledger markers `WithdrawalAmt` and `Statementof account` match whether or not their spaces are present, in both spellings (research R7 — these literals lost their spaces to a *different* extractor)
+- [x] T015 [P] [US2] No-new-claim test (FR-014) in `core/crates/kaname-core/tests/dispatcher.rs`: a document no issuer claimed before the widening is still unclaimed after it; `detect_issuer` returns `None` and never panics on arbitrary input
+- [x] T016 [P] [US2] Header-split recognition test in `core/crates/kaname-core/tests/dispatcher.rs`: a header phrase printed as two columns and rejoined with a single space still resolves to the same issuer (US2 scenario 3)
 
 ### Implementation for User Story 2 (PR A)
 
-- [ ] T017 [US2] Implement `normalize_for_claim(&str) -> String` in `core/crates/kaname-core/src/statement/claim.rs` — lowercase then remove every Unicode whitespace character; pure, deterministic, one allocation per normalized marker (C1)
-- [ ] T018 [US2] Implement `claim_contains(haystack_normalized: &str, marker: &str) -> bool` in `core/crates/kaname-core/src/statement/claim.rs` (C1)
-- [ ] T019 [US2] Implement `identity_region(full_text: &str) -> String` in `core/crates/kaname-core/src/statement/claim.rs` — split into lines, drop row-like lines per T009's rule, normalize per C1 (C2)
-- [ ] T020 [US2] Implement `header_region(full_text: &str) -> String` in `core/crates/kaname-core/src/statement/claim.rs` — the first 15 identity lines, normalized (C2, FR-044/FR-047)
-- [ ] T021 [US2] Route `line_reader::claims` in `core/crates/kaname-core/src/statement/line_reader.rs` through `claim::claim_contains`, receiving the identity region instead of raw `full_text`
-- [ ] T022 [US2] Route `ledger_reader::claims_ledger` in `core/crates/kaname-core/src/statement/ledger_reader.rs` through the same path
-- [ ] T023 [US2] Route `hdfc::hdfc_claims` in `core/crates/kaname-core/src/statement/hdfc.rs` through the shared claim path, matching its product title against `header_region` rather than the whole document (FR-047)
-- [ ] T024 [US2] Compute the identity region **once per `detect_issuer` call** in `core/crates/kaname-core/src/statement/registry.rs` and pass it to every `claims` fn; keep the FFI signature `detect_issuer(full_text) -> Option<Issuer>` unchanged (C6)
-- [ ] T025 [US2] Confirm T008–T016 are now GREEN and that gate G6 (T005) still passes with **identical** per-fixture issuer resolution: `cd core && cargo test --test dispatcher` over `core/crates/kaname-core/tests/dispatcher.rs` (FR-013, SC-004)
-- [ ] T026 [US2] Verify no reader's parsing behaviour changed: `core/crates/kaname-core/tests/parity.rs` passes with **unmodified expectations** (FR-029, FR-043)
-- [ ] T027 [US2] Run the engine gate for PR A: `make core-lint && make core-test && make core-privacy-audit`
+- [x] T017 [US2] Implement `normalize_for_claim(&str) -> String` in `core/crates/kaname-core/src/statement/claim.rs` — lowercase then remove every Unicode whitespace character; pure, deterministic, one allocation per normalized marker (C1)
+- [x] T018 [US2] Implement `claim_contains(haystack_normalized: &str, marker: &str) -> bool` in `core/crates/kaname-core/src/statement/claim.rs` (C1)
+- [x] T019 [US2] Implement `identity_region(full_text: &str) -> String` in `core/crates/kaname-core/src/statement/claim.rs` — split into lines, drop row-like lines per T009's rule, normalize per C1 (C2)
+- [x] T020 [US2] Implement `header_region(full_text: &str) -> String` in `core/crates/kaname-core/src/statement/claim.rs` — the first 15 identity lines, normalized (C2, FR-044/FR-047)
+- [x] T021 [US2] Route `line_reader::claims` in `core/crates/kaname-core/src/statement/line_reader.rs` through `claim::claim_contains`, receiving the identity region instead of raw `full_text`
+- [x] T022 [US2] Route `ledger_reader::claims_ledger` in `core/crates/kaname-core/src/statement/ledger_reader.rs` through the same path
+- [x] T023 [US2] Route `hdfc::hdfc_claims` in `core/crates/kaname-core/src/statement/hdfc.rs` through the shared claim path, matching its product title against `header_region` rather than the whole document (FR-047)
+- [x] T024 [US2] Compute the identity region **once per `detect_issuer` call** in `core/crates/kaname-core/src/statement/registry.rs` and pass it to every `claims` fn; keep the FFI signature `detect_issuer(full_text) -> Option<Issuer>` unchanged (C6)
+- [x] T025 [US2] Confirm T008–T016 are now GREEN and that gate G6 (T005) still passes with **identical** per-fixture issuer resolution: `cd core && cargo test --test dispatcher` over `core/crates/kaname-core/tests/dispatcher.rs` (FR-013, SC-004)
+- [x] T026 [US2] Verify no reader's parsing behaviour changed: `core/crates/kaname-core/tests/parity.rs` passes with **unmodified expectations** (FR-029, FR-043)
+- [x] T027 [US2] Run the engine gate for PR A: `make core-lint && make core-test && make core-privacy-audit`
 - [ ] T028 [US2] Open PR A containing exactly: `claim.rs`, `line_reader.rs`, `ledger_reader.rs`, `hdfc.rs`, `registry.rs`, and gates G6/G7 — **the widening and its fence in one PR** (non-negotiable #2)
 
 **Checkpoint**: Recognition is whitespace-insensitive and identity-scoped; every previously
