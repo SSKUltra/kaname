@@ -4,6 +4,20 @@ use crate::statement::claim::Regions;
 use crate::statement::{au_bank, federal, federal_bank, hdfc, hdfc_bank, icici, icici_bank, iob};
 use crate::statement::{ledger_reader, line_reader, sbi, yes};
 
+/// How strongly a reader's claim identifies what it claims.
+///
+/// A card is registered per **card product**, but most statements only ever name their
+/// issuing bank — so most entries are correct today by *uniqueness*, not by evidence. Saying
+/// so out loud is what lets the registry refuse a second card for an institution whose first
+/// one cannot prove which product it is (FR-050, FR-051).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ClaimEvidence {
+    /// The statement names the product in its own title block.
+    ProductProven,
+    /// The statement names only its institution; the product name is a display label.
+    BankLevel,
+}
+
 /// One reader registered with the dispatcher.
 #[derive(Debug)]
 pub struct ReaderEntry {
@@ -11,6 +25,10 @@ pub struct ReaderEntry {
     pub display_name: &'static str,
     pub bank_code: &'static str,
     pub kind: StatementKind,
+    /// What the claim actually proves. Ranked after `kind`, so a product-level claim beats a
+    /// bank-level one for the same institution and kind — and the three doubly-claimed
+    /// ledger fixtures are untouched.
+    pub evidence: ClaimEvidence,
     /// Receives the document's identity and header regions, never its raw text
     /// (`statement::claim`).
     pub claims: fn(&Regions) -> bool,
@@ -23,6 +41,7 @@ const REGISTRY: &[ReaderEntry] = &[
         display_name: "AU Small Finance Bank Account",
         bank_code: au_bank::BANK_CODE,
         kind: StatementKind::BankAccount,
+        evidence: ClaimEvidence::BankLevel,
         claims: au_bank_claims,
         read: read_au_bank,
     },
@@ -31,6 +50,7 @@ const REGISTRY: &[ReaderEntry] = &[
         display_name: "Federal Bank Account",
         bank_code: federal_bank::BANK_CODE,
         kind: StatementKind::BankAccount,
+        evidence: ClaimEvidence::BankLevel,
         claims: federal_bank_claims,
         read: read_federal_bank,
     },
@@ -39,6 +59,7 @@ const REGISTRY: &[ReaderEntry] = &[
         display_name: "HDFC Bank Account",
         bank_code: hdfc_bank::BANK_CODE,
         kind: StatementKind::BankAccount,
+        evidence: ClaimEvidence::BankLevel,
         claims: hdfc_bank_claims,
         read: read_hdfc_bank,
     },
@@ -47,54 +68,61 @@ const REGISTRY: &[ReaderEntry] = &[
         display_name: "ICICI Bank Account",
         bank_code: icici_bank::BANK_CODE,
         kind: StatementKind::BankAccount,
+        evidence: ClaimEvidence::BankLevel,
         claims: icici_bank_claims,
         read: read_icici_bank,
     },
     ReaderEntry {
-        id: "FEDERAL_CARD",
+        id: "FEDERAL_SCAPIA_CARD",
         display_name: "Scapia Credit Card",
         bank_code: federal::BANK_CODE,
         kind: StatementKind::CreditCard,
+        evidence: ClaimEvidence::BankLevel,
         claims: federal_card_claims,
         read: read_federal_card,
     },
     ReaderEntry {
-        id: "HDFC_CARD",
-        display_name: "HDFC Bank Credit Card",
+        id: "HDFC_SWIGGY_CARD",
+        display_name: "HDFC Swiggy Credit Card",
         bank_code: hdfc::BANK_CODE,
         kind: StatementKind::CreditCard,
+        evidence: ClaimEvidence::ProductProven,
         claims: hdfc_card_claims,
         read: read_hdfc_card,
     },
     ReaderEntry {
-        id: "ICICI_CARD",
-        display_name: "ICICI Bank Credit Card",
+        id: "ICICI_AMAZONPAY_CARD",
+        display_name: "ICICI Amazon Pay Credit Card",
         bank_code: icici::BANK_CODE,
         kind: StatementKind::CreditCard,
+        evidence: ClaimEvidence::BankLevel,
         claims: icici_card_claims,
         read: read_icici_card,
     },
     ReaderEntry {
-        id: "IOB_CARD",
-        display_name: "Indian Overseas Bank Credit Card",
+        id: "IOB_RUPAY_CARD",
+        display_name: "IOB RuPay Credit Card",
         bank_code: iob::BANK_CODE,
         kind: StatementKind::CreditCard,
+        evidence: ClaimEvidence::BankLevel,
         claims: iob_card_claims,
         read: read_iob_card,
     },
     ReaderEntry {
-        id: "SBI_CARD",
-        display_name: "SBI Card",
+        id: "SBI_CASHBACK_CARD",
+        display_name: "SBI Cashback Credit Card",
         bank_code: sbi::BANK_CODE,
         kind: StatementKind::CreditCard,
+        evidence: ClaimEvidence::BankLevel,
         claims: sbi_card_claims,
         read: read_sbi_card,
     },
     ReaderEntry {
-        id: "YES_CARD",
+        id: "YES_KIWI_CARD",
         display_name: "Kiwi (YES Bank) Credit Card",
         bank_code: yes::BANK_CODE,
         kind: StatementKind::CreditCard,
+        evidence: ClaimEvidence::BankLevel,
         claims: yes_card_claims,
         read: read_yes_card,
     },
@@ -102,6 +130,14 @@ const REGISTRY: &[ReaderEntry] = &[
 
 pub fn entries() -> &'static [ReaderEntry] {
     REGISTRY
+}
+
+/// Specificity: a claim that proves its product outranks one that only names a bank.
+pub fn evidence_rank(evidence: ClaimEvidence) -> u8 {
+    match evidence {
+        ClaimEvidence::ProductProven => 0,
+        ClaimEvidence::BankLevel => 1,
+    }
 }
 
 pub fn kind_rank(kind: StatementKind) -> u8 {
@@ -127,7 +163,13 @@ pub fn claimants(full_text: &str) -> Vec<&'static ReaderEntry> {
 pub fn detect_issuer(full_text: &str) -> Option<Issuer> {
     claimants(full_text)
         .into_iter()
-        .min_by_key(|entry| (kind_rank(entry.kind), entry.id))
+        .min_by_key(|entry| {
+            (
+                kind_rank(entry.kind),
+                evidence_rank(entry.evidence),
+                entry.id,
+            )
+        })
         .map(to_issuer)
 }
 

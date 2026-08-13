@@ -80,7 +80,8 @@ signature is committable alongside it.
 This was validated end-to-end before amending: a signature derived from a real Yes/Kiwi card
 statement (35 column positions, 21.3pt row spacing, date shape `99/99/9999`) was rendered into
 a synthetic statement carrying four fabricated transactions. Run through the shipped pipeline,
-it reproduced the production bug exactly — `detect_issuer` returned `YES_CARD`, the printed
+it reproduced the production bug exactly — `detect_issuer` returned `YES_KIWI_CARD`
+(then named `YES_CARD`), the printed
 totals were recovered (3050.00 Dr / 5000.00 Cr), and the reader returned **0 of the 4 printed
 transactions**, because the amount column arrived on its own text lines.
 

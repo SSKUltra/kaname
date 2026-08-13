@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use kaname_core::statement::{
     au_bank, claim, federal, federal_bank, hdfc, hdfc_bank, icici, icici_bank, iob, registry, sbi,
@@ -28,6 +28,209 @@ fn load_fixture(rel_path: &str) -> Fixture {
     );
     let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
     serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"))
+}
+
+/// **Gate G1** (FR-050, FR-051): a bank-level claim is only honest while its institution has
+/// exactly one card.
+///
+/// Every card reader shipped today claims at bank granularity — `["ICICI Bank"]`,
+/// `["SBI Card", …]`, `["YES BANK"]` — so per-product identification is currently correct by
+/// *uniqueness*, not by evidence. The rename must not be allowed to disguise that. Adding an
+/// `HDFC_INFINIA_CARD` beside `HDFC_SWIGGY_CARD` fails here until both can prove which
+/// product they are.
+#[test]
+fn two_cards_from_one_institution_must_both_prove_their_product() {
+    let mut cards_per_institution: HashMap<&str, Vec<&registry::ReaderEntry>> = HashMap::new();
+    for entry in registry::entries() {
+        if entry.kind == StatementKind::CreditCard {
+            cards_per_institution
+                .entry(entry.bank_code)
+                .or_default()
+                .push(entry);
+        }
+    }
+
+    for (bank_code, cards) in cards_per_institution {
+        if cards.len() < 2 {
+            continue;
+        }
+        for card in cards {
+            assert_eq!(
+                card.evidence,
+                registry::ClaimEvidence::ProductProven,
+                "{bank_code} has {} card entries, so {} must identify its product from the \
+                 document rather than rely on being the only one",
+                cards_per_institution_len(bank_code),
+                card.id
+            );
+        }
+    }
+}
+
+fn cards_per_institution_len(bank_code: &str) -> usize {
+    registry::entries()
+        .iter()
+        .filter(|e| e.kind == StatementKind::CreditCard && e.bank_code == bank_code)
+        .count()
+}
+
+/// **Gate G2** (FR-048): two product-proven cards claiming one document is a loud failure,
+/// never a silent tie-break.
+#[test]
+fn no_fixture_is_claimed_by_two_product_proven_cards() {
+    for (rel_path, _) in FIXTURE_ISSUER_BASELINE {
+        let fx = load_fixture(rel_path);
+        let proven: Vec<&str> = registry::claimants(&fx.full_text)
+            .iter()
+            .filter(|e| {
+                e.kind == StatementKind::CreditCard
+                    && e.evidence == registry::ClaimEvidence::ProductProven
+            })
+            .map(|e| e.id)
+            .collect();
+        assert!(
+            proven.len() <= 1,
+            "{rel_path} is claimed as a proven product by {proven:?}"
+        );
+    }
+}
+
+/// **Gate G3** (FR-052): one naming convention, and the institution prefix *is* the
+/// `bank_code`. It is what makes G1's "two cards share an institution" check visible at a
+/// glance.
+#[test]
+fn every_registry_id_follows_the_naming_convention() {
+    for entry in registry::entries() {
+        let expected_prefix = match entry.kind {
+            StatementKind::BankAccount => format!("{}_BANK", entry.bank_code),
+            StatementKind::CreditCard => format!("{}_", entry.bank_code),
+        };
+        match entry.kind {
+            StatementKind::BankAccount => assert_eq!(
+                entry.id, expected_prefix,
+                "a bank account is named <INSTITUTION>_BANK"
+            ),
+            StatementKind::CreditCard => {
+                assert!(
+                    entry.id.starts_with(&expected_prefix) && entry.id.ends_with("_CARD"),
+                    "{} is not <INSTITUTION>_<PRODUCT>_CARD for {}",
+                    entry.id,
+                    entry.bank_code
+                );
+                let product = entry
+                    .id
+                    .trim_start_matches(&expected_prefix)
+                    .trim_end_matches("_CARD");
+                assert!(!product.is_empty(), "{} names no product", entry.id);
+            }
+        }
+        assert!(
+            entry
+                .id
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'),
+            "{} is not upper snake case",
+            entry.id
+        );
+    }
+}
+
+/// **Gate G4** (FR-046, FR-053): `bank_code` answers "which institution", never "which
+/// product" or "which kind". `sbi.rs` shipped `"SBI_CARD"` in that field; this is what keeps
+/// it from coming back.
+#[test]
+fn no_bank_code_carries_a_product_or_a_kind() {
+    for entry in registry::entries() {
+        for forbidden in ["_CARD", "_BANK", "CARD", "BANK"] {
+            assert!(
+                !entry.bank_code.contains(forbidden),
+                "{} has bank_code {:?}, which names something other than an institution",
+                entry.id,
+                entry.bank_code
+            );
+        }
+    }
+}
+
+/// **Gate G5** (FR-016): a reader claiming a document of the other kind is a defect — with
+/// three shipped exceptions, and no more.
+///
+/// A card marker like `Federal Bank` matches that bank's *ledger* too. `kind_rank` resolves
+/// all three correctly today, so this is noise rather than a wrong answer; what must not
+/// happen is the set quietly growing. Naming it is what turns "we know about these" into a
+/// gate.
+///
+/// A **test**, deliberately never a runtime rule: research R10 found no evidence of a reader
+/// mis-claiming across kinds in a way that changes an answer, and a runtime guard risks a
+/// reader declining a statement of its own kind — a worse failure than the one it prevents.
+const KNOWN_CROSS_KIND_CLAIMS: &[(&str, &str)] = &[
+    ("federal/bank_account/classic.json", "FEDERAL_SCAPIA_CARD"),
+    ("federal/bank_account/fi.json", "FEDERAL_SCAPIA_CARD"),
+    ("icici/bank_account/basic.json", "ICICI_AMAZONPAY_CARD"),
+];
+
+#[test]
+fn no_reader_claims_a_document_of_the_other_kind() {
+    let mut found = Vec::new();
+    for (rel_path, _) in FIXTURE_ISSUER_BASELINE {
+        let fixture_kind = if rel_path.contains("bank_account") {
+            StatementKind::BankAccount
+        } else {
+            StatementKind::CreditCard
+        };
+        let fx = load_fixture(rel_path);
+
+        // Whatever else claims it, the answer the person is given must be of the right kind.
+        let resolved =
+            detect_issuer(fx.full_text.clone()).unwrap_or_else(|| panic!("{rel_path}: no issuer"));
+        assert_eq!(
+            resolved.kind, fixture_kind,
+            "{rel_path} resolved to the wrong kind"
+        );
+
+        for entry in registry::claimants(&fx.full_text) {
+            if entry.kind != fixture_kind {
+                found.push((*rel_path, entry.id));
+            }
+        }
+    }
+
+    found.sort_unstable();
+    let mut known = KNOWN_CROSS_KIND_CLAIMS.to_vec();
+    known.sort_unstable();
+    assert_eq!(
+        found, known,
+        "the set of cross-kind claims changed; a new one is a defect, and a removed one is \
+         progress worth recording here"
+    );
+}
+
+/// FR-048: candidates order by `(kind_rank, evidence_rank, id)`.
+///
+/// `evidence_rank` is inserted **after** `kind_rank` precisely so the three doubly-claimed
+/// golden fixtures keep resolving to the ledger — the specificity rule replaces an
+/// alphabetical accident between cards, and changes nothing between kinds (FR-013).
+#[test]
+fn a_proven_product_outranks_a_bank_level_claim_but_never_outranks_a_ledger() {
+    assert!(
+        registry::evidence_rank(registry::ClaimEvidence::ProductProven)
+            < registry::evidence_rank(registry::ClaimEvidence::BankLevel)
+    );
+    assert!(
+        registry::kind_rank(StatementKind::BankAccount)
+            < registry::kind_rank(StatementKind::CreditCard)
+    );
+
+    // The ordering key a ledger presents beats every card's, whatever either can prove.
+    let ledger_key = (
+        registry::kind_rank(StatementKind::BankAccount),
+        registry::evidence_rank(registry::ClaimEvidence::BankLevel),
+    );
+    let proven_card_key = (
+        registry::kind_rank(StatementKind::CreditCard),
+        registry::evidence_rank(registry::ClaimEvidence::ProductProven),
+    );
+    assert!(ledger_key < proven_card_key);
 }
 
 #[test]
@@ -76,15 +279,27 @@ fn registry_bank_code_matches_the_backing_reader_constant() {
             StatementKind::BankAccount,
         ),
         (
-            "FEDERAL_CARD",
+            "FEDERAL_SCAPIA_CARD",
             federal::BANK_CODE,
             StatementKind::CreditCard,
         ),
-        ("HDFC_CARD", hdfc::BANK_CODE, StatementKind::CreditCard),
-        ("ICICI_CARD", icici::BANK_CODE, StatementKind::CreditCard),
-        ("IOB_CARD", iob::BANK_CODE, StatementKind::CreditCard),
-        ("SBI_CARD", sbi::BANK_CODE, StatementKind::CreditCard),
-        ("YES_CARD", yes::BANK_CODE, StatementKind::CreditCard),
+        (
+            "HDFC_SWIGGY_CARD",
+            hdfc::BANK_CODE,
+            StatementKind::CreditCard,
+        ),
+        (
+            "ICICI_AMAZONPAY_CARD",
+            icici::BANK_CODE,
+            StatementKind::CreditCard,
+        ),
+        ("IOB_RUPAY_CARD", iob::BANK_CODE, StatementKind::CreditCard),
+        (
+            "SBI_CASHBACK_CARD",
+            sbi::BANK_CODE,
+            StatementKind::CreditCard,
+        ),
+        ("YES_KIWI_CARD", yes::BANK_CODE, StatementKind::CreditCard),
     ];
     for (id, bank_code, kind) in expected {
         let entry = registry::entries()
@@ -193,7 +408,7 @@ fn a_brand_repeated_in_the_spending_does_not_identify_the_card() {
     for text in [spending_only, titled.join("\n")] {
         assert_eq!(
             detect_issuer(text).map(|i| i.id).as_deref(),
-            Some("HDFC_CARD")
+            Some("HDFC_SWIGGY_CARD")
         );
     }
 }
@@ -276,17 +491,17 @@ const FIXTURE_ISSUER_BASELINE: &[(&str, &str)] = &[
     ("au/bank_account/savings.json", "AU_BANK"),
     ("federal/bank_account/classic.json", "FEDERAL_BANK"),
     ("federal/bank_account/fi.json", "FEDERAL_BANK"),
-    ("federal/credit_card/basic.json", "FEDERAL_CARD"),
+    ("federal/credit_card/basic.json", "FEDERAL_SCAPIA_CARD"),
     ("hdfc/bank_account/compact.json", "HDFC_BANK"),
     ("hdfc/bank_account/detailed.json", "HDFC_BANK"),
-    ("hdfc/credit_card/monthly.json", "HDFC_CARD"),
-    ("hdfc/credit_card/year_end.json", "HDFC_CARD"),
+    ("hdfc/credit_card/monthly.json", "HDFC_SWIGGY_CARD"),
+    ("hdfc/credit_card/year_end.json", "HDFC_SWIGGY_CARD"),
     ("icici/bank_account/basic.json", "ICICI_BANK"),
-    ("icici/credit_card/basic.json", "ICICI_CARD"),
-    ("iob/credit_card/basic.json", "IOB_CARD"),
-    ("sbi_card/credit_card/basic.json", "SBI_CARD"),
-    ("yes/credit_card/basic.json", "YES_CARD"),
-    ("yes/credit_card/mismatched_totals.json", "YES_CARD"),
+    ("icici/credit_card/basic.json", "ICICI_AMAZONPAY_CARD"),
+    ("iob/credit_card/basic.json", "IOB_RUPAY_CARD"),
+    ("sbi_card/credit_card/basic.json", "SBI_CASHBACK_CARD"),
+    ("yes/credit_card/basic.json", "YES_KIWI_CARD"),
+    ("yes/credit_card/mismatched_totals.json", "YES_KIWI_CARD"),
 ];
 
 #[test]
@@ -396,7 +611,7 @@ fn assert_dispatch_matches_legacy(
 fn read_statement_matches_icici_card_reader_byte_for_byte() {
     assert_dispatch_matches_legacy(
         "icici/credit_card/basic.json",
-        "ICICI_CARD",
+        "ICICI_AMAZONPAY_CARD",
         read_icici_statement,
     );
 }
@@ -407,7 +622,7 @@ fn read_statement_matches_hdfc_card_reader_byte_for_byte() {
         "hdfc/credit_card/year_end.json",
         "hdfc/credit_card/monthly.json",
     ] {
-        assert_dispatch_matches_legacy(rel_path, "HDFC_CARD", |lines, text| {
+        assert_dispatch_matches_legacy(rel_path, "HDFC_SWIGGY_CARD", |lines, text| {
             read_hdfc_statement(lines, text)
         });
     }
@@ -417,30 +632,34 @@ fn read_statement_matches_hdfc_card_reader_byte_for_byte() {
 fn read_statement_matches_sbi_card_reader_byte_for_byte() {
     assert_dispatch_matches_legacy(
         "sbi_card/credit_card/basic.json",
-        "SBI_CARD",
+        "SBI_CASHBACK_CARD",
         read_sbi_statement,
     );
 }
 
 #[test]
 fn read_statement_matches_yes_card_reader_byte_for_byte() {
-    assert_dispatch_matches_legacy("yes/credit_card/basic.json", "YES_CARD", |lines, text| {
-        read_yes_statement(lines, text)
-    });
+    assert_dispatch_matches_legacy(
+        "yes/credit_card/basic.json",
+        "YES_KIWI_CARD",
+        read_yes_statement,
+    );
 }
 
 #[test]
 fn read_statement_matches_iob_card_reader_byte_for_byte() {
-    assert_dispatch_matches_legacy("iob/credit_card/basic.json", "IOB_CARD", |lines, text| {
-        read_iob_statement(lines, text)
-    });
+    assert_dispatch_matches_legacy(
+        "iob/credit_card/basic.json",
+        "IOB_RUPAY_CARD",
+        read_iob_statement,
+    );
 }
 
 #[test]
 fn read_statement_matches_federal_card_reader_byte_for_byte() {
     assert_dispatch_matches_legacy(
         "federal/credit_card/basic.json",
-        "FEDERAL_CARD",
+        "FEDERAL_SCAPIA_CARD",
         read_federal_statement,
     );
 }

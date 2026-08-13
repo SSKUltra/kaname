@@ -201,8 +201,9 @@ touch it:
    `IOB_RUPAY_CARD`, `YES_KIWI_CARD`, `FEDERAL_SCAPIA_CARD`); the four bank entries are
    **untouched** — the two HDFC and two Federal savings layouts are template versions of one
    product, not four products. The full future-state table is in the spec under **Q1**.
-   ⚠️ Defect to fix while there: `sbi.rs` sets `BANK_CODE = "SBI_CARD"`, a product value in a
-   field that holds a bare institution everywhere else; it becomes `"SBI"` (FR-053).
+   ⚠️ Defect fixed in PR B: `sbi.rs` set `BANK_CODE = "SBI_CARD"`, a product value in a
+   field that holds a bare institution everywhere else; it is now `"SBI"` (FR-053), and gate
+   G4 fails the build if a product or kind token reappears in any `bank_code`.
 3. **Matching a literal anywhere in a document is not identification.** One reference statement
    names six of its issuer's *other* card products in marketing copy; the HDFC card statement
    contains `Swiggy` ~40× **inside merchant descriptions**; an AU statement contains `HDFC` inside

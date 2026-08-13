@@ -15,7 +15,7 @@ use crate::statement::common::{find_last4, parse_date};
 use crate::statement::line_reader::LineReaderConfig;
 use crate::statement::polarity::classify;
 
-pub const BANK_CODE: &str = "SBI_CARD";
+pub const BANK_CODE: &str = "SBI";
 
 static ROW_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(?P<date>\d{2} [A-Za-z]{3} \d{2})\s+(?P<desc>.+?)\s+(?P<amount>[\d,]+\.\d{2})\s+(?P<dir>[CD])$")

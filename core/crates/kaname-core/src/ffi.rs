@@ -229,7 +229,7 @@ pub fn read_sbi_statement(lines: Vec<String>, full_text: String) -> ParsedStatem
 /// Whether `full_text` is recognizably an SBI Card statement; `false` for other issuers.
 #[uniffi::export]
 pub fn sbi_claims(full_text: String) -> bool {
-    claims(&SbiReader, &Regions::of(&full_text), "SBI_CARD")
+    claims(&SbiReader, &Regions::of(&full_text), "SBI")
 }
 
 /// Parse a Yes Bank (Kiwi) credit-card statement from already-extracted text. Same

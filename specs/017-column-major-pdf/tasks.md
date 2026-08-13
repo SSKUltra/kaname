@@ -140,7 +140,7 @@ same PR as T023–T028 (the widening).
 - [x] T025 [US2] Confirm T008–T016 are now GREEN and that gate G6 (T005) still passes with **identical** per-fixture issuer resolution: `cd core && cargo test --test dispatcher` over `core/crates/kaname-core/tests/dispatcher.rs` (FR-013, SC-004)
 - [x] T026 [US2] Verify no reader's parsing behaviour changed: `core/crates/kaname-core/tests/parity.rs` passes with **unmodified expectations** (FR-029, FR-043)
 - [x] T027 [US2] Run the engine gate for PR A: `make core-lint && make core-test && make core-privacy-audit`
-- [ ] T028 [US2] Open PR A containing exactly: `claim.rs`, `line_reader.rs`, `ledger_reader.rs`, `hdfc.rs`, `registry.rs`, and gates G6/G7 — **the widening and its fence in one PR** (non-negotiable #2)
+- [x] T028 [US2] Open PR A containing exactly: `claim.rs`, `line_reader.rs`, `ledger_reader.rs`, `hdfc.rs`, `registry.rs`, and gates G6/G7 — **the widening and its fence in one PR** (non-negotiable #2)
 
 **Checkpoint**: Recognition is whitespace-insensitive and identity-scoped; every previously
 recognised document still resolves to the same issuer; the cross-bank false claim is fenced. `main`
@@ -163,26 +163,26 @@ Phase 5 once PR A is in, but must land before Phase 9's fixtures, which referenc
 
 ### Tests for User Story 2 registry work (write FIRST, confirm RED) ⚠️
 
-- [ ] T029 [P] [US2] **Gate G1** in `core/crates/kaname-core/tests/dispatcher.rs`: for every `bank_code` with ≥ 2 `CreditCard` entries, every one of them must be `ProductProven`; include a compile-time-shaped table so adding an `HDFC_INFINIA_CARD` beside `HDFC_SWIGGY_CARD` fails the build (FR-051)
-- [ ] T030 [P] [US2] **Gate G2** in `core/crates/kaname-core/tests/dispatcher.rs`: no fixture under `fixtures/` is claimed by two `ProductProven` card entries (FR-048)
-- [ ] T031 [P] [US2] **Gate G3** in `core/crates/kaname-core/tests/dispatcher.rs`: every registry id matches `^[A-Z0-9]+_BANK$` or `^[A-Z0-9]+_[A-Z0-9]+_CARD$`, and its institution prefix equals its `bank_code` (FR-052)
-- [ ] T032 [P] [US2] **Gate G4** in `core/crates/kaname-core/tests/dispatcher.rs`: no `bank_code` contains `_CARD`, `_BANK` or any product token (FR-046, FR-053)
-- [ ] T033 [P] [US2] **Gate G5** in `core/crates/kaname-core/tests/dispatcher.rs`: no `CreditCard` entry claims a bank-account golden fixture and no `BankAccount` entry claims a credit-card one — **test-only, never a runtime rule** (FR-016, research R10)
-- [ ] T034 [P] [US2] Specificity-ordering test in `core/crates/kaname-core/tests/dispatcher.rs`: candidates order by `(kind_rank, evidence_rank, id)`; assert explicitly that `fixtures/federal/bank_account/classic.json`, `fixtures/federal/bank_account/fi.json` and `fixtures/icici/bank_account/basic.json` still resolve to the **ledger** (FR-013 — `evidence_rank` is inserted *after* `kind_rank` precisely so these three are untouched)
+- [x] T029 [P] [US2] **Gate G1** in `core/crates/kaname-core/tests/dispatcher.rs`: for every `bank_code` with ≥ 2 `CreditCard` entries, every one of them must be `ProductProven`; include a compile-time-shaped table so adding an `HDFC_INFINIA_CARD` beside `HDFC_SWIGGY_CARD` fails the build (FR-051)
+- [x] T030 [P] [US2] **Gate G2** in `core/crates/kaname-core/tests/dispatcher.rs`: no fixture under `fixtures/` is claimed by two `ProductProven` card entries (FR-048)
+- [x] T031 [P] [US2] **Gate G3** in `core/crates/kaname-core/tests/dispatcher.rs`: every registry id matches `^[A-Z0-9]+_BANK$` or `^[A-Z0-9]+_[A-Z0-9]+_CARD$`, and its institution prefix equals its `bank_code` (FR-052)
+- [x] T032 [P] [US2] **Gate G4** in `core/crates/kaname-core/tests/dispatcher.rs`: no `bank_code` contains `_CARD`, `_BANK` or any product token (FR-046, FR-053)
+- [x] T033 [P] [US2] **Gate G5** in `core/crates/kaname-core/tests/dispatcher.rs`: no `CreditCard` entry claims a bank-account golden fixture and no `BankAccount` entry claims a credit-card one — **test-only, never a runtime rule** (FR-016, research R10)
+- [x] T034 [P] [US2] Specificity-ordering test in `core/crates/kaname-core/tests/dispatcher.rs`: candidates order by `(kind_rank, evidence_rank, id)`; assert explicitly that `fixtures/federal/bank_account/classic.json`, `fixtures/federal/bank_account/fi.json` and `fixtures/icici/bank_account/basic.json` still resolve to the **ledger** (FR-013 — `evidence_rank` is inserted *after* `kind_rank` precisely so these three are untouched)
 
 ### Implementation for User Story 2 registry work (PR B)
 
-- [ ] T035 [US2] Add `pub enum ClaimEvidence { ProductProven, BankLevel }` and `fn evidence_rank(ClaimEvidence) -> u8` to `core/crates/kaname-core/src/statement/registry.rs` (C3)
-- [ ] T036 [US2] Add the `evidence` field to `ReaderEntry` in `core/crates/kaname-core/src/statement/registry.rs` and populate all ten entries per `data-model.md` § *Registry after this slice* — only `HDFC_SWIGGY_CARD` is `ProductProven` (FR-050, FR-045)
-- [ ] T037 [US2] Apply the six card renames in `core/crates/kaname-core/src/statement/registry.rs`: `FEDERAL_CARD`→`FEDERAL_SCAPIA_CARD`, `HDFC_CARD`→`HDFC_SWIGGY_CARD` ("HDFC Swiggy Credit Card"), `ICICI_CARD`→`ICICI_AMAZONPAY_CARD` ("ICICI Amazon Pay Credit Card"), `IOB_CARD`→`IOB_RUPAY_CARD` ("IOB RuPay Credit Card"), `SBI_CARD`→`SBI_CASHBACK_CARD` ("SBI Cashback Credit Card"), `YES_CARD`→`YES_KIWI_CARD` (FR-041, FR-043, FR-052)
-- [ ] T038 [US2] Fix `BANK_CODE` in `core/crates/kaname-core/src/statement/sbi.rs`: `"SBI_CARD"` → `"SBI"` (FR-053)
-- [ ] T039 [US2] Update the matching literal at `core/crates/kaname-core/src/ffi.rs:231` (`claims(&SbiReader, &full_text, "SBI_CARD")`) to `"SBI"` so the legacy FFI claim path agrees with the registry
-- [ ] T040 [US2] Change `detect_issuer`'s `min_by_key` in `core/crates/kaname-core/src/statement/registry.rs` from `(kind_rank, id)` to `(kind_rank, evidence_rank, id)` (FR-048)
-- [ ] T041 [US2] Update asserted ids in `core/crates/kaname-core/tests/dispatcher.rs` (including the `registry_bank_code_matches_the_backing_reader_constant` table) — ids change, **expectations do not** (FR-029)
-- [ ] T042 [US2] Update asserted ids in `core/crates/kaname-core/tests/parity.rs` — ids only; every parsed result stays byte-for-byte identical (FR-029, SC-005)
-- [ ] T043 [P] [US2] Update the id references in `docs/adr/0004-unknown-bank-ingestion.md` and `.scratch/HANDOFF.md` to the renamed entries
-- [ ] T044 [US2] Confirm `scripts/import-path-audit.sh` still passes — its bank-literal check reads literals out of the registry and must need no change (contract C4)
-- [ ] T045 [US2] Run the engine gate for PR B: `make core-lint && make core-test && make core-privacy-audit && make import-audit`
+- [x] T035 [US2] Add `pub enum ClaimEvidence { ProductProven, BankLevel }` and `fn evidence_rank(ClaimEvidence) -> u8` to `core/crates/kaname-core/src/statement/registry.rs` (C3)
+- [x] T036 [US2] Add the `evidence` field to `ReaderEntry` in `core/crates/kaname-core/src/statement/registry.rs` and populate all ten entries per `data-model.md` § *Registry after this slice* — only `HDFC_SWIGGY_CARD` is `ProductProven` (FR-050, FR-045)
+- [x] T037 [US2] Apply the six card renames in `core/crates/kaname-core/src/statement/registry.rs`: `FEDERAL_CARD`→`FEDERAL_SCAPIA_CARD`, `HDFC_CARD`→`HDFC_SWIGGY_CARD` ("HDFC Swiggy Credit Card"), `ICICI_CARD`→`ICICI_AMAZONPAY_CARD` ("ICICI Amazon Pay Credit Card"), `IOB_CARD`→`IOB_RUPAY_CARD` ("IOB RuPay Credit Card"), `SBI_CARD`→`SBI_CASHBACK_CARD` ("SBI Cashback Credit Card"), `YES_CARD`→`YES_KIWI_CARD` (FR-041, FR-043, FR-052)
+- [x] T038 [US2] Fix `BANK_CODE` in `core/crates/kaname-core/src/statement/sbi.rs`: `"SBI_CARD"` → `"SBI"` (FR-053)
+- [x] T039 [US2] Update the matching literal at `core/crates/kaname-core/src/ffi.rs:231` (`claims(&SbiReader, &full_text, "SBI_CARD")`) to `"SBI"` so the legacy FFI claim path agrees with the registry
+- [x] T040 [US2] Change `detect_issuer`'s `min_by_key` in `core/crates/kaname-core/src/statement/registry.rs` from `(kind_rank, id)` to `(kind_rank, evidence_rank, id)` (FR-048)
+- [x] T041 [US2] Update asserted ids in `core/crates/kaname-core/tests/dispatcher.rs` (including the `registry_bank_code_matches_the_backing_reader_constant` table) — ids change, **expectations do not** (FR-029)
+- [x] T042 [US2] Update asserted ids in `core/crates/kaname-core/tests/parity.rs` — ids only; every parsed result stays byte-for-byte identical (FR-029, SC-005)
+- [x] T043 [P] [US2] Update the id references in `docs/adr/0004-unknown-bank-ingestion.md` and `.scratch/HANDOFF.md` to the renamed entries
+- [x] T044 [US2] Confirm `scripts/import-path-audit.sh` still passes — its bank-literal check reads literals out of the registry and must need no change (contract C4)
+- [x] T045 [US2] Run the engine gate for PR B: `make core-lint && make core-test && make core-privacy-audit && make import-audit`
 
 **Checkpoint**: The registry names products, `bank_code` is the bare institution everywhere, G1–G5
 are enforced mechanically, and no reader parses anything differently.
