@@ -178,3 +178,24 @@ sheet, Phase 2 in-app submit), the following hold:
 - Slice 017 is still a prerequisite: a signature derived from fragmented column-major text
   would record a broken layout, and showing a person a faithful-looking artefact built from a
   layout we read wrongly would make the transparency guarantee hollow.
+
+---
+
+## Amendment (2026-08-13, slice 017): `issuer_id` is not yet persisted
+
+Slice 017 renamed the registry's entries so a card is named by its **product** and a bank by
+its **bank** (`<INSTITUTION>_<PRODUCT>_CARD` / `<INSTITUTION>_BANK`). The id a statement was
+recognised as is **deliberately not written to the store** — the schema stays at v6 and an
+account still carries only its bank code.
+
+**Why deferred.** Nothing in this slice reads a persisted `issuer_id`: recognition happens on
+every import, from the document itself. Adding a column would have meant a v7 migration inside
+a slice whose subject is extraction, and a migration is the one thing that cannot be revised
+once a person's database has run it.
+
+**Why it must land before first release.** Once a real database exists, back-filling the id of
+a statement already imported means re-recognising a document that is no longer on the device.
+The window in which this is free closes at first release, and it must land inside it.
+
+Recorded in `specs/017-column-major-pdf/research.md` R9.
+

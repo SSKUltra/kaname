@@ -1,0 +1,94 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date and account number is fabricated. An AU Small Finance Bank statement whose transfers name a rival institution in every row, modelled on a measured case where that rival's reader claimed the document and read it with the wrong reader. A statement is what it says it is at the top; what a person spent their money at says nothing about who issued it. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/au_bank.rs.",
+  "issuer_id": "AU_BANK",
+  "kind": "bank_account",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD MMM YYYY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "valuedate",
+        "x": 120.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 200.0,
+        "align": "left"
+      },
+      {
+        "role": "withdrawal",
+        "x": 380.0,
+        "align": "right"
+      },
+      {
+        "role": "deposit",
+        "x": 450.0,
+        "align": "right"
+      },
+      {
+        "role": "balance",
+        "x": 520.0,
+        "align": "right"
+      }
+    ]
+  },
+  "header_lines": [
+    "ACCOUNT STATEMENT www.aubank.in",
+    "Account Number : 1234567890120042 Account Type : AU Lite Savings Account",
+    "Statement Date : 22 Jun 2026 Opening Balance(₹) : 11,570.79",
+    "Statement Period : 01 Mar 2026 to 31 May 2026 Closing Balance(₹) : 16,570.79"
+  ],
+  "footer_lines": [
+    "Closing Balance(₹) : 16,570.79"
+  ],
+  "rows": [
+    {
+      "date": "01 Mar 2026",
+      "valuedate": "01 Mar 2026",
+      "description": "UPI/DR/000001/HDFC BANK",
+      "withdrawal": "5,000.00",
+      "deposit": "-",
+      "balance": "6,570.79"
+    },
+    {
+      "date": "02 Mar 2026",
+      "valuedate": "02 Mar 2026",
+      "description": "NEFT/CR/000002/HDFC LTD",
+      "withdrawal": "-",
+      "deposit": "10,000.00",
+      "balance": "16,570.79"
+    }
+  ],
+  "expected": {
+    "issuer_id": "AU_BANK",
+    "transactions": [
+      {
+        "date": "2026-03-01",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "description_raw": "UPI/DR/000001/HDFC BANK"
+      },
+      {
+        "date": "2026-03-02",
+        "amount": "10000.00",
+        "direction": "Credit",
+        "description_raw": "NEFT/CR/000002/HDFC LTD"
+      }
+    ],
+    "closing_balance": "16570.79",
+    "direction_source": "OpeningBalance",
+    "legacy_max_transactions": 0
+  }
+}

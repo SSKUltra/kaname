@@ -398,6 +398,96 @@ commit.
 
 ---
 
+## R17 — MEASURED, supersedes R1/R2: PDFKit's glyph bounds are indexed over glyphs, not over `string`
+
+**Decision.** Take a word's **horizontal** extent from `PDFSelection.bounds(for:)` over the word's
+range, and its **vertical** extent from `characterBounds(at:)` — read at an index corrected by the
+number of line breaks PDFKit *inserted* before it, and reduced to the row most of the word's glyphs
+agree on. Where the two sources disagree about where the words are, keep the selection box for both
+axes. Implemented in `ios/Sources/Import/WordGeometry.swift`, which is the only file that knows any
+of this.
+
+**Rationale — this was measured on a rendered column-major document, and it invalidates the
+E-Algorithm's step 2 as originally written.**
+
+1. **`characterBounds(at:)` is indexed over the page's glyphs; `page.string` additionally carries
+   the line breaks PDFKit inserted between the runs it decided were separate lines.** A break
+   occupies an index in `string` and stands for no glyph, so a word's glyphs sit as many places
+   *earlier* in `characterBounds`'s indexing as there are breaks before it. `numberOfCharacters ==
+   string.utf16.count` still holds, so the existing guard does not catch it. Uncorrected, every word
+   after the first line reports another word's position, and the drift grows down the page — on a
+   column-major statement, whose text layer emits one short line per printed *cell*, it reaches tens
+   of characters within a few rows and a row's date is read at another row's amount. The correction
+   is a prefix count of `U+000A` and nothing more.
+2. **Individual glyph rects are sometimes nonsense**: the last glyph or two of a drawn run comes
+   back hundreds of points wide, at a negative origin, or attributed to the row below. Unioning a
+   word's glyph extents therefore gives it an extent spanning two printed rows, and the row below is
+   swallowed. Taking the row *most* of the word's glyphs agree on — earliest cluster on an even
+   split, since the corruption is at the end of a run — is robust to it, and the same strays are why
+   x is not taken from glyphs at all.
+3. **`PDFSelection.bounds(for:)` needs no correction and no consensus** — it resolves the range
+   through the text layer itself — but it is no finer than the line PDFKit thinks the range belongs
+   to. On the tight-leading document from slice 016 it thinks two printed rows are one line and
+   reports both rows' words with the same doubled box, which is precisely the case reshaping exists
+   to split. So it cannot be the only source either.
+
+Agreement between the two is decided by the **median** disagreement in `xMin` over the page's words,
+not by an average or a worst case: where PDFKit has merged two rows it also reports a word's box a
+couple of points off, and a handful of those must not condemn a page whose indices are sound.
+
+**Consequences for the contract.** `contracts/extraction-seam.md` step 2 is amended to match. The
+obligations E1–E12 are unchanged — this is how the positions are *obtained*, not what they mean.
+FR-036's row bands, the zoning of R4, the bounded band of R3 and the single-space join of R5 all sit
+on top of it unchanged.
+
+**Alternatives rejected.**
+
+- *Selection bounds alone.* Rejected: cannot split a merged row, so it re-opens the slice-016 bug
+  (`ExtractionFidelityTests` goes red with its expectations untouched — the one thing FR-028 forbids).
+- *Glyph bounds alone, uncorrected.* Rejected: this is what the algorithm originally said, and it
+  reads a column-major page as scrambled rows — measurably worse than reading nothing.
+- *Reconstructing the draw order from the content stream (`CGPDFScanner`).* Rejected for this slice:
+  it means owning font encodings and `ToUnicode` CMaps to get from glyph codes back to characters —
+  a PDF text extractor in its own right — when a prefix count of inserted breaks resolves the same
+  problem. Recorded here in case a document is ever found that the correction cannot reconcile.
+
+---
+
+## R18 — MEASURED, amends R4: a gap is a gutter only if no printed row crosses it
+
+**Decision.** Keep zoning, keep the `4 ×` median-space width test, and add a second condition that
+must also hold: **no row band may have words on both sides of the gap**. Bands are formed once over
+the whole page, the surviving gutters are used to zone, and bands are re-formed within each zone.
+Implemented in `PrintedRows.gutters(_:atLeast:uncrossedBy:)`.
+
+**Rationale.** R4 already knew the hazard — "a transaction table's own column gaps are full-height
+gutters, and cutting there would re-create the column-major bug we are fixing" — and answered it by
+restricting cuts to gutters that run the width of the whole page. That answer holds only while
+something else on the page spans those columns. It does not hold on a **continuation page**: page
+two of a ledger prints transaction rows and nothing else, so the gaps between its serial, date,
+withdrawal, deposit and balance columns are empty from the top of the page to the bottom, and every
+one of them qualifies. Zoning there puts every amount on a line of its own — the exact failure the
+slice exists to fix, re-created on every page after the first.
+
+This was found by building `fixtures/geometry/icici_bank.json` (three pages, rows on pages two and
+three) and is now pinned by it.
+
+The added condition is the definition doing the work rather than a proxy for it: two side-by-side
+panels are two panels **because** nothing printed runs across the space between them, and a table's
+columns are one table **because** its rows do. It needs no page-width fraction, no tuning constant,
+and it costs one extra banding pass.
+
+**Alternatives rejected.**
+
+- *Require the gutter to be some fraction of the page width.* Rejected: the widest column gap in the
+  ICICI ledger vector is 40 pt and a plausible threshold is ~47 pt — a margin far too thin to trust
+  a person's money to, and it would vary with page size and font.
+- *Drop zoning entirely and rely on the readers' anchored row regexes* (R4's second line of defence).
+  Rejected: it gives up the spec's side-by-side-panels edge case for nothing, now that the crossing
+  test is available and cheap.
+
+---
+
 ## Open items summary
 
 | Item | Status | Blocks |

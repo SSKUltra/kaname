@@ -1,0 +1,71 @@
+{
+  "_comment": "Synthetic. Fabricated merchants/amounts/dates/card numbers. This vector carries BOTH hazards at once: an 8-point row pitch under a 9-point font, tight enough that the platform's text layer joins adjacent rows into one string, AND a column-major draw order that splits every row across four of them. One pass has to split what was merged and join what was split. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/yes.rs.",
+  "issuer_id": "YES_KIWI_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [595.0, 842.0],
+    "font_size": 9.0,
+    "row_pitch": 8.0,
+    "first_row_y": 520.0,
+    "date_format": "DD/MM/YYYY",
+    "columns": [
+      { "role": "date", "x": 40.0, "align": "left" },
+      { "role": "description", "x": 96.0, "align": "left" },
+      { "role": "amount", "x": 500.0, "align": "right" },
+      { "role": "direction", "x": 515.0, "align": "left" }
+    ]
+  },
+  "header_lines": [
+    "YES BANK KLICK",
+    "Statement for YES BANK Card Number 3561XXXXXXXX4021",
+    "Statement Period: 17/06/2026 To 16/07/2026 Payment Due Date: 05/08/2026 Total Amount Due: Rs. 612.75"
+  ],
+  "footer_lines": [
+    "Current Purchases / Cash Advance & Other Charges : Rs. 612.75 Dr",
+    "Payment & Credits Received : Rs. 1,500.00 Cr"
+  ],
+  "rows": [
+    {
+      "date": "18/06/2026",
+      "description": "UPI_SAMPLE GROCERS IND - Ref No: RT1001 Grocery Stores",
+      "amount": "412.75",
+      "direction": "Dr"
+    },
+    {
+      "date": "21/06/2026",
+      "description": "UPI_EXAMPLE PHARMACY IND - Ref No: RT1002 Drug Stores",
+      "amount": "200.00",
+      "direction": "Dr"
+    },
+    {
+      "date": "02/07/2026",
+      "description": "PAYMENT RECEIVED BBPS - Ref No: RT1003",
+      "amount": "1,500.00",
+      "direction": "Cr"
+    }
+  ],
+  "expected": {
+    "issuer_id": "YES_KIWI_CARD",
+    "transactions": [
+      {
+        "date": "2026-06-18",
+        "amount": "412.75",
+        "direction": "Debit",
+        "description_raw": "UPI_SAMPLE GROCERS IND - Ref No: RT1001 Grocery Stores"
+      },
+      {
+        "date": "2026-06-21",
+        "amount": "200.00",
+        "direction": "Debit",
+        "description_raw": "UPI_EXAMPLE PHARMACY IND - Ref No: RT1002 Drug Stores"
+      },
+      {
+        "date": "2026-07-02",
+        "amount": "1500.00",
+        "direction": "Credit",
+        "description_raw": "PAYMENT RECEIVED BBPS - Ref No: RT1003"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}

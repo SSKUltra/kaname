@@ -1,0 +1,99 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date, account number and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time — the shape that made real statements report no spending. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/federal_bank.rs.",
+  "issuer_id": "FEDERAL_BANK",
+  "kind": "bank_account",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD-MMM-YYYY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "valuedate",
+        "x": 120.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 200.0,
+        "align": "left"
+      },
+      {
+        "role": "serial",
+        "x": 330.0,
+        "align": "left"
+      },
+      {
+        "role": "amount",
+        "x": 430.0,
+        "align": "right"
+      },
+      {
+        "role": "balance",
+        "x": 510.0,
+        "align": "right"
+      },
+      {
+        "role": "drcr",
+        "x": 520.0,
+        "align": "left"
+      }
+    ]
+  },
+  "header_lines": [
+    "The Federal Bank Ltd.",
+    "Statement of Account for the period 2026-04-01 to 2026-04-30",
+    "Account Number : 99990100001234 Type of Account : Savings Account",
+    "Date Value Date Particulars Tran Type Tran ID Withdrawals Deposits Balance DR/CR",
+    "Opening Balance 1,00,000.00 Cr"
+  ],
+  "footer_lines": [],
+  "rows": [
+    {
+      "date": "08-APR-2026",
+      "valuedate": "08-APR-2026",
+      "description": "TO ECM/600000001 TFR",
+      "serial": "S10000001",
+      "amount": "5,000.00",
+      "balance": "95,000.00",
+      "drcr": "Cr"
+    },
+    {
+      "date": "11-APR-2026",
+      "valuedate": "11-APR-2026",
+      "description": "UPI IN/600000002 TFR",
+      "serial": "S10000002",
+      "amount": "50,000.00",
+      "balance": "1,45,000.00",
+      "drcr": "Cr"
+    }
+  ],
+  "expected": {
+    "issuer_id": "FEDERAL_BANK",
+    "transactions": [
+      {
+        "date": "2026-04-08",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "description_raw": "TO ECM/600000001 TFR"
+      },
+      {
+        "date": "2026-04-11",
+        "amount": "50000.00",
+        "direction": "Credit",
+        "description_raw": "UPI IN/600000002 TFR"
+      }
+    ],
+    "direction_source": "OpeningBalance",
+    "legacy_max_transactions": 0
+  }
+}

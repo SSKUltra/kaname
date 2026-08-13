@@ -54,14 +54,40 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**Right now: `017-column-major-pdf` is the live queue. PR A+B (T001–T045) is merged (#36);
-pick up at ⬇️ PR C, T046 — the extraction fix itself.** Its detail is further down this
-section (⚠️ "017 jumps the queue"); read that before touching it.
+**`017-column-major-pdf` is code-complete — all 119 tasks, every gate green, including the
+human reference pass (T116).** PR A+B is merged (#36); PR C–E is in the working tree awaiting
+review. **Nothing in 017 is open**, R15/T119 included.
 
-**⬅️ NEXT: 017 PR C (T046–T069), `specs/017-column-major-pdf/tasks.md` Phase 5** — 🎯 the slice.
-Geometry-first row reconstruction in `ios/Sources/Import/StatementTextExtractor.swift`, plus
-`ios/Tests/GeometryFixtureTests.swift` asserting A1–A7 over `fixtures/geometry/`. Phase 3+4
-(recognition) is merged, so the R16 ordering constraint is satisfied and this is unblocked.
+**What the reference pass measured** (13 real statements, on the holder's machine, counts
+only): statements reading **zero** transactions **10 → 0**; **unrecognised 2 → 0**. Re-run it
+any time with `make reference-check DIR=…`, and `make reference-shapes DIR=…` to describe a
+document that reads nothing — the latter prints each line with every value replaced (digits →
+`9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
+statement leaving the machine.
+
+**⬅️ NEXT: pick the next slice.** P3 (the SwiftUI app) continues — the import vertical and the
+front door have landed; the accounts/transactions screens have not. 016's two manual gates
+(T123, T129) are still open and release-blocking.
+
+**What 017 settled — don't re-litigate it:**
+
+- **A line is a printed row, rebuilt from geometry.** See §7's extraction seam entry. The PDF
+  text layer's newlines have no authority in either direction.
+- **PDFKit gets word positions wrong in three separate ways**, and `WordGeometry.swift` is the
+  only place that knows it (`research.md` R17). Its indices are over *glyphs* while `string`
+  carries inserted line breaks; individual glyph rects come back nonsense at the end of a run;
+  and `PDFSelection.bounds(for:)` is right but no finer than PDFKit's own line. Read that file's
+  doc comment before touching extraction — every one of the three was found the hard way.
+- **A gap is a gutter only if no printed row crosses it** (R18). The page-wide test alone cuts
+  a ledger's continuation page along its own column gaps, because such a page prints rows and
+  nothing else.
+- **A block printed level with a row cannot be told from a column of that row.** It is joined,
+  never invented as a row; the readers' anchored patterns then decline the polluted line, so a
+  figure is lost rather than fabricated. Pinned in `PrintedRowsTests`.
+- **Readers were widened for recognition in PR A, but their *rows* stayed brittle.** Scapia
+  recognised its statement and matched none of its rows, because the pattern allowed exactly
+  one character between a row's date and time and the page prints `date · time` spaced. Worth
+  suspecting in any reader whose reference statement happens to print the spacing it expects.
 
 **What 017 PR A+B settled — don't re-litigate it:**
 
@@ -407,11 +433,30 @@ changes don't need linting/building/testing.
   (23 builtins: code + name + `Classification`), `prepare_merchants`/`prepare_rules`.
 - `statement/registry.rs` — the ten-entry issuer registry (private `REGISTRY`, no bank list is
   ever exported — FR-012). `detect_issuer(full_text) -> Option<Issuer>` picks the minimum under
-  `(kind_rank, id)` with **ledger before card**, so the 3 doubly-claimed fixtures resolve to the
-  bank reader (pinned by `tests/dispatcher.rs`). `read_statement(issuer, lines, full_text,
-  line_words)` is the single parse front door — cards ignore `line_words`; ledgers get only the
-  anchor row's geometry via `ledger_reader::first_anchor_index`. The ten legacy
-  `read_<bank>_statement` exports still exist and are unchanged.
+  `(kind_rank, evidence_rank, id)` with **ledger before card** and a product-proven claim ahead
+  of a bank-level one (pinned by `tests/dispatcher.rs`). Ids name **cards by product** and
+  **banks by bank** — `<INSTITUTION>_<PRODUCT>_CARD` / `<INSTITUTION>_BANK`. Claims are matched
+  whitespace-insensitively against the **identity region** (the document minus its transaction
+  rows), and a product claim only against the **header region** — so a co-brand's name repeated
+  in a person's own spending cannot identify the statement (`statement/claim.rs`).
+  `read_statement(issuer, lines, full_text, line_words)` is the single parse front door — cards
+  ignore `line_words`; ledgers get only the anchor row's geometry via
+  `ledger_reader::first_anchor_index`. The ten legacy `read_<bank>_statement` exports still
+  exist and are unchanged.
+- **`ios/Sources/Import/PrintedRows.swift` + `WordGeometry.swift` — extraction is geometry-first
+  (017).** `ExtractedText.lines` is now **one printed row per element**, not the text layer's
+  newlines: PDFKit's breaks have no authority, and reconstruction both *splits* rows it merged
+  (tight leading) and *joins* rows it split (a column-major statement, which reported no
+  spending at all). `lineWords` is emitted for **every** line of **every** page, not page 1
+  only, so a ledger whose first row is on page 2 still bootstraps its direction from the
+  amount's printed column. `PDFKitStatementTextExtractor.split(_:)` is **frozen** — it models
+  the pre-017 extraction and `GeometryFixtureTests` parses through it to prove every geometry
+  vector fails against the old path. ⚠️ Getting a word's position out of PDFKit is not
+  one-line: `characterBounds(at:)` is indexed over *glyphs* while `string` carries the line
+  breaks PDFKit inserted, individual glyph rects come back nonsense at the end of a run, and
+  `PDFSelection.bounds(for:)` is right but no finer than PDFKit's own line. All three are
+  handled in `WordGeometry` and nowhere else — read its doc comment before touching it
+  (`specs/017-column-major-pdf/research.md` R17/R18).
 - `store.rs` — `Store::open(path, key)` (SQLCipher, forward-only `PRAGMA user_version`
   migrations to **schema v6**, `StoreError` typed errors, wrong-key fail-closed);
   `insert_account`/`insert_transaction`/`list_*`; the categorization facts

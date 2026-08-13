@@ -204,31 +204,31 @@ reproduces the measured 11-of-13 regression.
 
 ### Tests for User Story 1 (write FIRST, confirm RED) ⚠️
 
-- [ ] T046 [P] [US1] Create the column-major renderer `ios/Tests/GeometryFixtureRenderer.swift`: decode the `fixtures/geometry/*.json` schema (signature, columns, header_lines, footer_lines, rows, expected) and draw it with `UIGraphicsPDFRenderer` to a temporary file — **column-major (R1)**: every cell of column 1 top-to-bottom, then column 2, and so on; cell at `x = column.x`, `y = first_row_y - index * row_pitch`; header/footer drawn as ordinary single-column lines (R2, R3); the file is deleted after the test (R4)
-- [ ] T047 [P] [US1] Add the pilot vector `fixtures/geometry/yes_kiwi_card.json` — the validated reference case from research R12 (35 column positions, 21.3 pt row pitch, `DD/MM/YYYY`), `issuer_id: "YES_KIWI_CARD"`, four rows with at least one debit and one credit, header literals taken from `yes.rs`'s own published claim markers, everything else fabricated, `expected.legacy_max_transactions: 0`
-- [ ] T048 [US1] Create `ios/Tests/GeometryFixtureTests.swift` asserting A1–A7 for every file in `fixtures/geometry/`: A1 `detectIssuer` returns `expected.issuer_id`; A2 parsed transactions equal `expected.transactions` exactly; A3 count ≤ printed `rows`; A4 **non-vacuity** — parsing `PDFKitStatementTextExtractor.split(fullText)` of the same document yields at most `legacy_max_transactions`, which must be strictly less than `expected.transactions.count`; A5 double import is byte-identical; A6 ≥1 debit and ≥1 credit with every direction matching; A7 no non-whitespace character lost
-- [ ] T049 [US1] **Confirm RED**: run `ios/Tests/GeometryFixtureTests.swift` against the unmodified `ios/Sources/Import/StatementTextExtractor.swift` and record that the pilot vector reads **0 of 4** rows — this is the reported bug reproduced under test (quickstart § *Smoke test* step 2, FR-037)
-- [ ] T050 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E6 losslessness invariant: the multiset of non-whitespace characters across `lines` equals that of the page strings (FR-007)
-- [ ] T051 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E7 determinism invariant: extracting the same file twice yields byte-identical `lines` **and** `lineWords` (FR-009, SC-007)
-- [ ] T052 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the band-cap test: a band's union may not exceed `2.0 ×` the page's median word height, so a wide table on tight leading cannot swallow the row above or below (research R3, spec Edge Cases)
-- [ ] T053 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E8 per-page fallback test: a page whose geometry cannot be trusted falls back to the text layer's newline split **for that page only** and contributes no `lineWords`, while its sibling pages still reconstruct (FR-010, research R6)
-- [ ] T054 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E9 index-consistency test: `LineWords.lineIndex` indexes `lines`, and the listed words are exactly that line's words, in the same order, with the x-extents at which they were printed (FR-011)
-- [ ] T055 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the all-page `lineWords` test: a multi-page document emits `lineWords` for lines on pages 2+, not page 1 only (FR-008, research R11)
-- [ ] T056 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the zoning test: two side-by-side panels separated by a full-height gutter do not produce interleaved nonsense rows (research R4, spec Edge Cases)
+- [x] T046 [P] [US1] Create the column-major renderer `ios/Tests/GeometryFixtureRenderer.swift`: decode the `fixtures/geometry/*.json` schema (signature, columns, header_lines, footer_lines, rows, expected) and draw it with `UIGraphicsPDFRenderer` to a temporary file — **column-major (R1)**: every cell of column 1 top-to-bottom, then column 2, and so on; cell at `x = column.x`, `y = first_row_y - index * row_pitch`; header/footer drawn as ordinary single-column lines (R2, R3); the file is deleted after the test (R4)
+- [x] T047 [P] [US1] Add the pilot vector `fixtures/geometry/yes_kiwi_card.json` — the validated reference case from research R12 (35 column positions, 21.3 pt row pitch, `DD/MM/YYYY`), `issuer_id: "YES_KIWI_CARD"`, four rows with at least one debit and one credit, header literals taken from `yes.rs`'s own published claim markers, everything else fabricated, `expected.legacy_max_transactions: 0`
+- [x] T048 [US1] Create `ios/Tests/GeometryFixtureTests.swift` asserting A1–A7 for every file in `fixtures/geometry/`: A1 `detectIssuer` returns `expected.issuer_id`; A2 parsed transactions equal `expected.transactions` exactly; A3 count ≤ printed `rows`; A4 **non-vacuity** — parsing `PDFKitStatementTextExtractor.split(fullText)` of the same document yields at most `legacy_max_transactions`, which must be strictly less than `expected.transactions.count`; A5 double import is byte-identical; A6 ≥1 debit and ≥1 credit with every direction matching; A7 no non-whitespace character lost
+- [x] T049 [US1] **Confirm RED**: run `ios/Tests/GeometryFixtureTests.swift` against the unmodified `ios/Sources/Import/StatementTextExtractor.swift` and record that the pilot vector reads **0 of 4** rows — this is the reported bug reproduced under test (quickstart § *Smoke test* step 2, FR-037)
+- [x] T050 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E6 losslessness invariant: the multiset of non-whitespace characters across `lines` equals that of the page strings (FR-007)
+- [x] T051 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E7 determinism invariant: extracting the same file twice yields byte-identical `lines` **and** `lineWords` (FR-009, SC-007)
+- [x] T052 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the band-cap test: a band's union may not exceed `2.0 ×` the page's median word height, so a wide table on tight leading cannot swallow the row above or below (research R3, spec Edge Cases)
+- [x] T053 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E8 per-page fallback test: a page whose geometry cannot be trusted falls back to the text layer's newline split **for that page only** and contributes no `lineWords`, while its sibling pages still reconstruct (FR-010, research R6)
+- [x] T054 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the E9 index-consistency test: `LineWords.lineIndex` indexes `lines`, and the listed words are exactly that line's words, in the same order, with the x-extents at which they were printed (FR-011)
+- [x] T055 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the all-page `lineWords` test: a multi-page document emits `lineWords` for lines on pages 2+, not page 1 only (FR-008, research R11)
+- [x] T056 [P] [US1] Extend `ios/Tests/StatementTextExtractorTests.swift` with the zoning test: two side-by-side panels separated by a full-height gutter do not produce interleaved nonsense rows (research R4, spec Edge Cases)
 
 ### Implementation for User Story 1 (PR C)
 
-- [ ] T057 [US1] Add the `PositionedWord` value (`text`, `range`, `xMin`, `xMax`, `yExtent`) to `ios/Sources/Import/StatementTextExtractor.swift` and build it per page: split the page string into maximal non-separator UTF-16 runs (`unit <= 0x20 || unit == 0x00A0`), taking `xMin`/`xMax` from the first/last usable glyph bounds and `yExtent` from the union of usable ink extents; a glyph is usable iff `!isNull && minY.isFinite && maxY.isFinite && height > 0.5` (the shipped guard, unchanged) — contract E-Algorithm step 2, data-model § `PositionedWord`
-- [ ] T058 [US1] Add the `Zone` value and gutter detection to `ios/Sources/Import/StatementTextExtractor.swift`: project every word's `[xMin, xMax]` onto the x-axis; a maximal x-interval no word overlaps and at least `4 ×` the page's median space width wide is a gutter; gutters partition the page into zones emitted left-to-right; zones must **partition** the words — every word in exactly one zone (E-Algorithm step 3, research R4)
-- [ ] T059 [US1] Add the `RowBand` value and the band sweep to `ios/Sources/Import/StatementTextExtractor.swift`: within a zone, sort words by `(-yMax, xMin, utf16Start)` and sweep — a word joins the current band iff it overlaps by more than a quarter of the shorter height (the shipped `sharesARow`) **and** the resulting union does not exceed `2.0 ×` the page's median word height; otherwise it opens a new band (E-Algorithm step 4, FR-003, FR-006)
-- [ ] T060 [US1] Handle orphans in `ios/Sources/Import/StatementTextExtractor.swift`: a word with no usable `yExtent` joins the band of the nearest **preceding word in text order** and is never dropped (E-Algorithm step 6, FR-007)
-- [ ] T061 [US1] Emit lines in `ios/Sources/Import/StatementTextExtractor.swift`: per band, sort members by `(xMin, utf16Start)` and join with exactly one `U+0020`, trimming trailing separators; bands ordered by descending `extent.upperBound`, then ascending first-member `xMin`, then ascending `range.lowerBound` — a **total** order (E1, E4, FR-005, FR-009, research R5)
-- [ ] T062 [US1] Emit `lineWords` for **every** reconstructed line of **every** page in `ios/Sources/Import/StatementTextExtractor.swift`, replacing the page-1-only behaviour; pages in geometry fallback contribute none (FR-008, FR-011, research R11)
-- [ ] T063 [US1] Implement the per-page trust guard in `ios/Sources/Import/StatementTextExtractor.swift`: `page.string` non-nil, `page.numberOfCharacters == page.string.utf16.count`, and at least one glyph yielding usable bounds — otherwise fall back to the newline split **for that page only**, silently (E8, FR-010, FR-034 — the extractor deliberately reports nothing about why a page fell back)
-- [ ] T064 [US1] Keep `PDFKitStatementTextExtractor.split(_:)` in `ios/Sources/Import/StatementTextExtractor.swift` intact and reachable after the rewrite (T006's pin) — assertion A4 depends on it forever
-- [ ] T065 [US1] Confirm T048's `ios/Tests/GeometryFixtureTests.swift` is now **GREEN** for the pilot vector, with A4 still proving the legacy path reads strictly fewer (FR-037, SC-011)
-- [ ] T066 [US1] Confirm `ios/Tests/ExtractionFidelityTests.swift` passes with **unmodified expectations** — the slice-016 tight-layout merge case must still resolve (FR-028, SC-005)
-- [ ] T067 [US1] Run the full gate for PR C: `make core-lint && make core-test && make lint && make ios-test && make import-audit`
+- [x] T057 [US1] Add the `PositionedWord` value (`text`, `range`, `xMin`, `xMax`, `yExtent`) to `ios/Sources/Import/StatementTextExtractor.swift` and build it per page: split the page string into maximal non-separator UTF-16 runs (`unit <= 0x20 || unit == 0x00A0`), taking `xMin`/`xMax` from the first/last usable glyph bounds and `yExtent` from the union of usable ink extents; a glyph is usable iff `!isNull && minY.isFinite && maxY.isFinite && height > 0.5` (the shipped guard, unchanged) — contract E-Algorithm step 2, data-model § `PositionedWord`
+- [x] T058 [US1] Add the `Zone` value and gutter detection to `ios/Sources/Import/StatementTextExtractor.swift`: project every word's `[xMin, xMax]` onto the x-axis; a maximal x-interval no word overlaps and at least `4 ×` the page's median space width wide is a gutter; gutters partition the page into zones emitted left-to-right; zones must **partition** the words — every word in exactly one zone (E-Algorithm step 3, research R4)
+- [x] T059 [US1] Add the `RowBand` value and the band sweep to `ios/Sources/Import/StatementTextExtractor.swift`: within a zone, sort words by `(-yMax, xMin, utf16Start)` and sweep — a word joins the current band iff it overlaps by more than a quarter of the shorter height (the shipped `sharesARow`) **and** the resulting union does not exceed `2.0 ×` the page's median word height; otherwise it opens a new band (E-Algorithm step 4, FR-003, FR-006)
+- [x] T060 [US1] Handle orphans in `ios/Sources/Import/StatementTextExtractor.swift`: a word with no usable `yExtent` joins the band of the nearest **preceding word in text order** and is never dropped (E-Algorithm step 6, FR-007)
+- [x] T061 [US1] Emit lines in `ios/Sources/Import/StatementTextExtractor.swift`: per band, sort members by `(xMin, utf16Start)` and join with exactly one `U+0020`, trimming trailing separators; bands ordered by descending `extent.upperBound`, then ascending first-member `xMin`, then ascending `range.lowerBound` — a **total** order (E1, E4, FR-005, FR-009, research R5)
+- [x] T062 [US1] Emit `lineWords` for **every** reconstructed line of **every** page in `ios/Sources/Import/StatementTextExtractor.swift`, replacing the page-1-only behaviour; pages in geometry fallback contribute none (FR-008, FR-011, research R11)
+- [x] T063 [US1] Implement the per-page trust guard in `ios/Sources/Import/StatementTextExtractor.swift`: `page.string` non-nil, `page.numberOfCharacters == page.string.utf16.count`, and at least one glyph yielding usable bounds — otherwise fall back to the newline split **for that page only**, silently (E8, FR-010, FR-034 — the extractor deliberately reports nothing about why a page fell back)
+- [x] T064 [US1] Keep `PDFKitStatementTextExtractor.split(_:)` in `ios/Sources/Import/StatementTextExtractor.swift` intact and reachable after the rewrite (T006's pin) — assertion A4 depends on it forever
+- [x] T065 [US1] Confirm T048's `ios/Tests/GeometryFixtureTests.swift` is now **GREEN** for the pilot vector, with A4 still proving the legacy path reads strictly fewer (FR-037, SC-011)
+- [x] T066 [US1] Confirm `ios/Tests/ExtractionFidelityTests.swift` passes with **unmodified expectations** — the slice-016 tight-layout merge case must still resolve (FR-028, SC-005)
+- [x] T067 [US1] Run the full gate for PR C: `make core-lint && make core-test && make lint && make ios-test && make import-audit`
 
 **Checkpoint**: A column-major statement imports every transaction it prints. The pilot vector went
 from 0 of 4 to 4 of 4, and the legacy path still reads 0 — the fixture is provably non-vacuous.
@@ -250,19 +250,19 @@ declared expectation.
 
 ### Tests for User Story 3 (write FIRST, confirm RED) ⚠️
 
-- [ ] T068 [P] [US3] Direction-marker placement test in `ios/Tests/GeometryFixtureTests.swift`: for a card vector whose `direction` column sits to the right of `amount`, the reconstructed line places the `Dr`/`Cr` marker in the same position relative to the amount as it was printed (FR-020, US3 scenario 1)
-- [ ] T069 [P] [US3] Ledger direction test in `ios/Tests/GeometryFixtureTests.swift`: for a bank-account vector, the amount and balance land in the correct columns and the derived direction matches the printed ledger (FR-019, US3 scenario 2)
-- [ ] T070 [P] [US3] Row-1 bootstrap test in `ios/Tests/GeometryFixtureTests.swift`: for a multi-page ledger vector whose first anchor row is **not** on page 1, the reported word positions still describe where the figures were printed, so the withdrawal-vs-deposit column bootstrap remains correct rather than degrading to `Row1Provisional` (FR-011, US3 scenario 3, research R11)
-- [ ] T071 [P] [US3] Column-separability test in `ios/Tests/StatementTextExtractorTests.swift`: two adjacent columns pushed together by reshaping remain two values separated by a single space and are never concatenated into one unsplittable token (FR-005, US3 scenario 4)
-- [ ] T072 [P] [US3] Blank-column test in `ios/Tests/GeometryFixtureTests.swift`: a ledger row printing only one of the withdrawal/deposit columns must not shift the remaining values into the wrong slots (spec Edge Cases)
-- [ ] T073 [P] [US3] Amount-shape test in `ios/Tests/StatementTextExtractorTests.swift`: amounts printed with a currency symbol, in parentheses, or with a trailing minus are not mistaken for a column boundary and are not split into two tokens (spec Edge Cases)
+- [x] T068 [P] [US3] Direction-marker placement test in `ios/Tests/GeometryFixtureTests.swift`: for a card vector whose `direction` column sits to the right of `amount`, the reconstructed line places the `Dr`/`Cr` marker in the same position relative to the amount as it was printed (FR-020, US3 scenario 1)
+- [x] T069 [P] [US3] Ledger direction test in `ios/Tests/GeometryFixtureTests.swift`: for a bank-account vector, the amount and balance land in the correct columns and the derived direction matches the printed ledger (FR-019, US3 scenario 2)
+- [x] T070 [P] [US3] Row-1 bootstrap test in `ios/Tests/GeometryFixtureTests.swift`: for a multi-page ledger vector whose first anchor row is **not** on page 1, the reported word positions still describe where the figures were printed, so the withdrawal-vs-deposit column bootstrap remains correct rather than degrading to `Row1Provisional` (FR-011, US3 scenario 3, research R11)
+- [x] T071 [P] [US3] Column-separability test in `ios/Tests/StatementTextExtractorTests.swift`: two adjacent columns pushed together by reshaping remain two values separated by a single space and are never concatenated into one unsplittable token (FR-005, US3 scenario 4)
+- [x] T072 [P] [US3] Blank-column test in `ios/Tests/GeometryFixtureTests.swift`: a ledger row printing only one of the withdrawal/deposit columns must not shift the remaining values into the wrong slots (spec Edge Cases)
+- [x] T073 [P] [US3] Amount-shape test in `ios/Tests/StatementTextExtractorTests.swift`: amounts printed with a currency symbol, in parentheses, or with a trailing minus are not mistaken for a column boundary and are not split into two tokens (spec Edge Cases)
 
 ### Implementation for User Story 3
 
-- [ ] T074 [US3] Fix any column-slot or marker-placement defect T068–T073 expose in `ios/Sources/Import/StatementTextExtractor.swift`'s band ordering or join rule — **no issuer-specific knowledge may enter the extractor** (contract § Non-obligations); if a defect is genuinely reader-side, fix it in the reader and record why
-- [ ] T075 [US3] Assert the engine's integrity checks run over the newly readable rows and report their verdicts as they do today: extend `ios/Tests/ImportIntegrityTests.swift` with a geometry-rendered document so the bank balance chain and the credit-card reconciliation against printed totals are exercised end-to-end (FR-023)
-- [ ] T076 [US3] Byte-identical re-import test in `ios/Tests/GeometryFixtureTests.swift` (assertion A5): importing the same rendered document twice yields identical lines *and* identical transactions, with money exact `Decimal` at every hop (FR-021, SC-007)
-- [ ] T077 [US3] Run the gate: `make core-test && make lint && make ios-test`
+- [x] T074 [US3] Fix any column-slot or marker-placement defect T068–T073 expose in `ios/Sources/Import/StatementTextExtractor.swift`'s band ordering or join rule — **no issuer-specific knowledge may enter the extractor** (contract § Non-obligations); if a defect is genuinely reader-side, fix it in the reader and record why
+- [x] T075 [US3] Assert the engine's integrity checks run over the newly readable rows and report their verdicts as they do today: extend `ios/Tests/ImportIntegrityTests.swift` with a geometry-rendered document so the bank balance chain and the credit-card reconciliation against printed totals are exercised end-to-end (FR-023)
+- [x] T076 [US3] Byte-identical re-import test in `ios/Tests/GeometryFixtureTests.swift` (assertion A5): importing the same rendered document twice yields identical lines *and* identical transactions, with money exact `Decimal` at every hop (FR-021, SC-007)
+- [x] T077 [US3] Run the gate: `make core-test && make lint && make ios-test`
 
 **Checkpoint**: No direction is inverted; no value lands in the wrong column; money is exact and
 re-import is byte-identical.
@@ -281,17 +281,17 @@ exhibiting both hazards at once and confirm both are resolved in one pass.
 
 ### Tests for User Story 4 (write FIRST, confirm RED) ⚠️
 
-- [ ] T078 [P] [US4] Add `fixtures/geometry/both_hazards.json`: a `row_pitch` tight enough that the text layer *merges* adjacent rows **and** a column-major draw order, so one document carries both hazards (R5, FR-030); declare `legacy_max_transactions` strictly below the expected count
-- [ ] T079 [US4] Extend `ios/Tests/ExtractionFidelityTests.swift` with the both-hazards document — **adding** a case, leaving every existing expectation untouched (FR-028, FR-030, T007's pin)
-- [ ] T080 [P] [US4] Unchanged-document test in `ios/Tests/ExtractionFidelityTests.swift`: a single-column document that already extracted correctly still produces exactly the transactions it produced before — reshaping never alters a document that was already read correctly (US4 scenario 3)
-- [ ] T081 [P] [US4] Over-join test in `ios/Tests/GeometryFixtureTests.swift` (assertion A3): no vector produces **more** transactions than it prints; an address block printed beside a summary box at the same height must not be fused into a fake row (FR-006, SC-003, spec Edge Cases)
-- [ ] T082 [P] [US4] Wrapped-narration test in `ios/Tests/GeometryFixtureTests.swift`: a description too long for its column continues on the next visual row and must stay **two** lines, so the ledger's existing narration stitching keeps working (spec Edge Cases)
-- [ ] T083 [P] [US4] Repeating header/footer test in `ios/Tests/GeometryFixtureTests.swift`: a page header or footer sharing a band with the first or last row is not absorbed into a transaction (spec Edge Cases)
+- [x] T078 [P] [US4] Add `fixtures/geometry/both_hazards.json`: a `row_pitch` tight enough that the text layer *merges* adjacent rows **and** a column-major draw order, so one document carries both hazards (R5, FR-030); declare `legacy_max_transactions` strictly below the expected count
+- [x] T079 [US4] Extend `ios/Tests/ExtractionFidelityTests.swift` with the both-hazards document — **adding** a case, leaving every existing expectation untouched (FR-028, FR-030, T007's pin)
+- [x] T080 [P] [US4] Unchanged-document test in `ios/Tests/ExtractionFidelityTests.swift`: a single-column document that already extracted correctly still produces exactly the transactions it produced before — reshaping never alters a document that was already read correctly (US4 scenario 3)
+- [x] T081 [P] [US4] Over-join test in `ios/Tests/GeometryFixtureTests.swift` (assertion A3): no vector produces **more** transactions than it prints; an address block printed beside a summary box at the same height must not be fused into a fake row (FR-006, SC-003, spec Edge Cases)
+- [x] T082 [P] [US4] Wrapped-narration test in `ios/Tests/GeometryFixtureTests.swift`: a description too long for its column continues on the next visual row and must stay **two** lines, so the ledger's existing narration stitching keeps working (spec Edge Cases)
+- [x] T083 [P] [US4] Repeating header/footer test in `ios/Tests/GeometryFixtureTests.swift`: a page header or footer sharing a band with the first or last row is not absorbed into a transaction (spec Edge Cases)
 
 ### Implementation for User Story 4
 
-- [ ] T084 [US4] Resolve any defect T078–T083 expose in the band sweep or zoning in `ios/Sources/Import/StatementTextExtractor.swift`, keeping the outcome deterministic where horizontal and vertical grouping disagree (spec Edge Cases — "must not silently prefer the wrong one")
-- [ ] T085 [US4] Run the gate and confirm the slice-016 parity proof still passes unmodified: `make core-test && make lint && make ios-test`
+- [x] T084 [US4] Resolve any defect T078–T083 expose in the band sweep or zoning in `ios/Sources/Import/StatementTextExtractor.swift`, keeping the outcome deterministic where horizontal and vertical grouping disagree (spec Edge Cases — "must not silently prefer the wrong one")
+- [x] T085 [US4] Run the gate and confirm the slice-016 parity proof still passes unmodified: `make core-test && make lint && make ios-test`
 
 **Checkpoint**: Both hazards resolve in one pass; the slice-016 fix is not re-opened.
 
@@ -311,17 +311,17 @@ its own plain-language outcome and imports nothing silently.
 
 ### Tests for User Story 5 (write FIRST, confirm RED) ⚠️
 
-- [ ] T086 [P] [US5] Untrusted-geometry test in `ios/Tests/ImportPipelineTests.swift`: a document whose character positions disagree with its text (ligatures / unusual encodings) falls back safely and yields either a correct import or an honest failure — never a confidently wrong transaction (FR-010, US5 scenario 1)
-- [ ] T087 [P] [US5] Nothing-recognised test in `ios/Tests/ImportPipelineTests.swift`: a recognised issuer from which no transaction can be read reports "nothing could be recognised" **unless** the statement's own printed figures confirm it is genuinely empty (FR-024, preserved from slice 016)
-- [ ] T088 [P] [US5] Genuinely-empty test in `ios/Tests/ImportPipelineTests.swift`: a statement legitimately containing zero transactions is still reportable as a **successful** zero-transaction import and does not become "nothing recognised" as a side effect of reshaping (FR-031, spec Edge Cases)
-- [ ] T089 [P] [US5] Unclaimed-document test in `ios/Tests/ImportPipelineTests.swift`: nothing is written to the store and the person is told the format is not recognised yet (FR-025, FR-027)
-- [ ] T090 [P] [US5] Store-untouched test in `ios/Tests/ImportStoreIntegrityTests.swift`: every failure path on this slice leaves the encrypted store exactly as it was (FR-027, US5 scenario 5)
-- [ ] T091 [US5] Message-audit test in `ios/Tests/ImportMessageAuditTests.swift`: **zero** user-visible messages are added or changed by this slice, and none contains a reader name, an error code or raw error text (FR-026, SC-012)
+- [x] T086 [P] [US5] Untrusted-geometry test in `ios/Tests/ImportPipelineTests.swift`: a document whose character positions disagree with its text (ligatures / unusual encodings) falls back safely and yields either a correct import or an honest failure — never a confidently wrong transaction (FR-010, US5 scenario 1)
+- [x] T087 [P] [US5] Nothing-recognised test in `ios/Tests/ImportPipelineTests.swift`: a recognised issuer from which no transaction can be read reports "nothing could be recognised" **unless** the statement's own printed figures confirm it is genuinely empty (FR-024, preserved from slice 016)
+- [x] T088 [P] [US5] Genuinely-empty test in `ios/Tests/ImportPipelineTests.swift`: a statement legitimately containing zero transactions is still reportable as a **successful** zero-transaction import and does not become "nothing recognised" as a side effect of reshaping (FR-031, spec Edge Cases)
+- [x] T089 [P] [US5] Unclaimed-document test in `ios/Tests/ImportPipelineTests.swift`: nothing is written to the store and the person is told the format is not recognised yet (FR-025, FR-027)
+- [x] T090 [P] [US5] Store-untouched test in `ios/Tests/ImportStoreIntegrityTests.swift`: every failure path on this slice leaves the encrypted store exactly as it was (FR-027, US5 scenario 5)
+- [x] T091 [US5] Message-audit test in `ios/Tests/ImportMessageAuditTests.swift`: **zero** user-visible messages are added or changed by this slice, and none contains a reader name, an error code or raw error text (FR-026, SC-012)
 
 ### Implementation for User Story 5
 
-- [ ] T092 [US5] Fix any honest-failure regression T086–T091 expose in `ios/Sources/Import/ImportService.swift`, **without adding a new user-visible message** — SC-012 holds by construction and must keep holding
-- [ ] T093 [US5] Run the gate: `make lint && make ios-test && make import-audit`
+- [x] T092 [US5] Fix any honest-failure regression T086–T091 expose in `ios/Sources/Import/ImportService.swift`, **without adding a new user-visible message** — SC-012 holds by construction and must keep holding
+- [x] T093 [US5] Run the gate: `make lint && make ios-test && make import-audit`
 
 **Checkpoint**: Every failure is still honest, still silent about internals, and still leaves the
 store untouched.
@@ -342,24 +342,24 @@ assert against).
 
 ### Fixture vectors (all [P] — different files, all asserted by the T048 harness) ⚠️
 
-- [ ] T094 [P] [US6] `fixtures/geometry/au_bank.json` — bank_account, `DD/MM/YYYY`, ledger roles (date/description/reference/withdrawal/deposit/balance), declares printed opening and closing balances; header literals from `au_bank.rs`'s published `CLAIM_ALL`/`CLAIM_ANY` only (the C5 header phrase is added later by T119 if it arrives)
-- [ ] T095 [P] [US6] `fixtures/geometry/federal_bank.json` — bank_account, `DD/MM/YYYY`
-- [ ] T096 [P] [US6] `fixtures/geometry/hdfc_bank.json` — bank_account, `DD/MM/YY`; header deliberately exercises the `WithdrawalAmt` / `Statementof account` whitespace tolerance from Phase 3
-- [ ] T097 [P] [US6] `fixtures/geometry/icici_bank.json` — bank_account, `DD/MM/YYYY`, **multi-page** so it proves FR-008 beyond page 1
-- [ ] T098 [P] [US6] `fixtures/geometry/federal_scapia_card.json` — credit_card, `DD/MM/YYYY`
-- [ ] T099 [P] [US6] `fixtures/geometry/hdfc_swiggy_card.json` — credit_card, `DD-MMM-YYYY`; the title line names the product and the descriptions repeat `Swiggy`, so it must identify by title and not by spend (FR-047, the `ProductProven` case)
-- [ ] T100 [P] [US6] `fixtures/geometry/icici_amazonpay_card.json` — credit_card, `DD/MM/YYYY`
-- [ ] T101 [P] [US6] `fixtures/geometry/iob_rupay_card.json` — credit_card, `DD-MMM-YYYY`, drawn so that **no** emitted text-layer line carries a date (US1 scenario 4)
-- [ ] T102 [P] [US6] `fixtures/geometry/sbi_cashback_card.json` — credit_card, `DD/MM/YYYY`; descriptions name rival SBI products, so the product must not be read from the rows (FR-044)
-- [ ] T103 [P] [US6] `fixtures/geometry/cross_bank_false_claim.json` — a statement for issuer X whose transaction descriptions name institution Y, modelled on the measured AU/HDFC case; must resolve to X (FR-014, the geometry counterpart of gate G7)
+- [x] T094 [P] [US6] `fixtures/geometry/au_bank.json` — bank_account, `DD/MM/YYYY`, ledger roles (date/description/reference/withdrawal/deposit/balance), declares printed opening and closing balances; header literals from `au_bank.rs`'s published `CLAIM_ALL`/`CLAIM_ANY` only (the C5 header phrase is added later by T119 if it arrives)
+- [x] T095 [P] [US6] `fixtures/geometry/federal_bank.json` — bank_account, `DD/MM/YYYY`
+- [x] T096 [P] [US6] `fixtures/geometry/hdfc_bank.json` — bank_account, `DD/MM/YY`; header deliberately exercises the `WithdrawalAmt` / `Statementof account` whitespace tolerance from Phase 3
+- [x] T097 [P] [US6] `fixtures/geometry/icici_bank.json` — bank_account, `DD/MM/YYYY`, **multi-page** so it proves FR-008 beyond page 1
+- [x] T098 [P] [US6] `fixtures/geometry/federal_scapia_card.json` — credit_card, `DD/MM/YYYY`
+- [x] T099 [P] [US6] `fixtures/geometry/hdfc_swiggy_card.json` — credit_card, `DD-MMM-YYYY`; the title line names the product and the descriptions repeat `Swiggy`, so it must identify by title and not by spend (FR-047, the `ProductProven` case)
+- [x] T100 [P] [US6] `fixtures/geometry/icici_amazonpay_card.json` — credit_card, `DD/MM/YYYY`
+- [x] T101 [P] [US6] `fixtures/geometry/iob_rupay_card.json` — credit_card, `DD-MMM-YYYY`, drawn so that **no** emitted text-layer line carries a date (US1 scenario 4)
+- [x] T102 [P] [US6] `fixtures/geometry/sbi_cashback_card.json` — credit_card, `DD/MM/YYYY`; descriptions name rival SBI products, so the product must not be read from the rows (FR-044)
+- [x] T103 [P] [US6] `fixtures/geometry/cross_bank_false_claim.json` — a statement for issuer X whose transaction descriptions name institution Y, modelled on the measured AU/HDFC case; must resolve to X (FR-014, the geometry counterpart of gate G7)
 
 ### Evidence gates and privacy review
 
-- [ ] T104 [US6] Confirm every vector in `fixtures/geometry/` added by T094–T103 declares `legacy_max_transactions` **strictly less** than `expected.transactions.count`, and that A4 in `ios/Tests/GeometryFixtureTests.swift` fails loudly if it does not — a vector that passes against the pre-slice extractor is deleted or fixed, never kept (FR-037, SC-011)
-- [ ] T105 [US6] Confirm coverage per FR-038 with a test in `ios/Tests/GeometryFixtureTests.swift` that fails if any of the ten registry ids has no vector, if either statement kind is missing, or if either of `DD-MMM-YYYY` / `DD/MM/YYYY` is unrepresented
-- [ ] T106 [US6] Extend the same coverage test in `ios/Tests/GeometryFixtureTests.swift` to fail if any `fixtures/geometry/*.json` declares fewer than one debit or fewer than one credit (assertion A6, SC-006)
-- [ ] T107 [US6] **Privacy review of every file added by this slice** (SC-010, FR-039): read each `fixtures/geometry/*.json` — including `_comment` fields — and each new Swift/Rust file, and confirm no merchant, amount, date, account number or card number can be traced to a real statement; card numbers are masked with invented last-four (P5); header literals are the readers' own published claim markers (P2); record the review in the PR description
-- [ ] T108 [US6] Run the full gate for PR D: `make core-lint && make core-test && make lint && make ios-test && make core-privacy-audit && make import-audit`
+- [x] T104 [US6] Confirm every vector in `fixtures/geometry/` added by T094–T103 declares `legacy_max_transactions` **strictly less** than `expected.transactions.count`, and that A4 in `ios/Tests/GeometryFixtureTests.swift` fails loudly if it does not — a vector that passes against the pre-slice extractor is deleted or fixed, never kept (FR-037, SC-011)
+- [x] T105 [US6] Confirm coverage per FR-038 with a test in `ios/Tests/GeometryFixtureTests.swift` that fails if any of the ten registry ids has no vector, if either statement kind is missing, or if either of `DD-MMM-YYYY` / `DD/MM/YYYY` is unrepresented
+- [x] T106 [US6] Extend the same coverage test in `ios/Tests/GeometryFixtureTests.swift` to fail if any `fixtures/geometry/*.json` declares fewer than one debit or fewer than one credit (assertion A6, SC-006)
+- [x] T107 [US6] **Privacy review of every file added by this slice** (SC-010, FR-039): read each `fixtures/geometry/*.json` — including `_comment` fields — and each new Swift/Rust file, and confirm no merchant, amount, date, account number or card number can be traced to a real statement; card numbers are masked with invented last-four (P5); header literals are the readers' own published claim markers (P2); record the review in the PR description
+- [x] T108 [US6] Run the full gate for PR D: `make core-lint && make core-test && make lint && make ios-test && make core-privacy-audit && make import-audit`
 
 **Checkpoint**: All ten issuers, both kinds, both date formats, both hazards and the cross-bank case
 are pinned by synthetic vectors that provably fail against the pre-slice extraction.
@@ -371,20 +371,20 @@ are pinned by synthetic vectors that provably fail against the pre-slice extract
 **Purpose**: Close the success criteria that neither CI nor a fixture can close: the human-run
 reference pass, performance and cancellation, and the documentation trail.
 
-- [ ] T109 [P] Add `ios/Tests/ReferenceSetVerification.swift`: a suite **skipped by default**, running only when `KANAME_REFERENCE_DIR` is set; for each PDF in that directory it runs the real extractor and the real dispatcher and prints exactly two facts — the issuer display name and the transaction count. It writes **nothing**: not to the repository, not to the store, not to a file, not to a log, not to the network, and it never prints a line of statement text, a merchant, an amount, a date or an account number (FR-040, FR-034, research R13)
-- [ ] T110 Add a `reference-check` target to the repo-root `Makefile` (`make reference-check DIR=…`) that sets `KANAME_REFERENCE_DIR` and runs only `ReferenceSetVerification`; add it to `.PHONY`
-- [ ] T111 [P] Extend `ios/Tests/ImportCancellationTests.swift` with the E12 obligation: a 40+-page rendered document extracts off the main thread with `Task.checkCancelled()` between pages and honours cancellation within **2 s** (FR-035, SC-008, research R14)
-- [ ] T112 [P] Add a per-page cost assertion in `ios/Tests/StatementTextExtractorTests.swift` that `characterBounds(at:)` is called at most once per non-separator UTF-16 unit — i.e. the shipped call volume is not regressed by a per-word PDFKit re-query (research R14)
-- [ ] T113 Verify SC-009 end to end: `make core-privacy-audit && make import-audit` are green and zero network requests occur anywhere on the path (FR-033)
-- [ ] T114 [P] Update `AGENTS.md` and `.scratch/HANDOFF.md` with the new extraction contract (lines are printed rows, `lineWords` is all-page), the renamed registry ids, and the `claim.rs` identity-region rule
-- [ ] T115 [P] Record the deferred decision in `docs/adr/0004-unknown-bank-ingestion.md`: `issuer_id` persistence (schema v7) is **deliberately deferred** and must land before first release (research R9)
-- [ ] T116 **Human-run reference pass (SC-002 — the slice cannot be signed off without it)**: the reference-set holder runs `make reference-check DIR=/path/to/their/own/statements` and records **counts only** in the PR description, in the manner of slice 016's T123/T129. Target: statements importing zero transactions falls from **10 to 0**; statements whose issuer is unrecognised falls from **2** to at most those covered by the open questions
-- [ ] T117 Walk `specs/017-column-major-pdf/quickstart.md` § *Definition of done* and tick every box, or record why a box cannot be ticked
-- [ ] T118 Run the complete Local Verification Gate one final time: `make core-lint && make core-test && make core-privacy-audit && make import-audit && make lint && make ios-test`
+- [x] T109 [P] Add `ios/Tests/ReferenceSetVerification.swift`: a suite **skipped by default**, running only when `KANAME_REFERENCE_DIR` is set; for each PDF in that directory it runs the real extractor and the real dispatcher and prints exactly two facts — the issuer display name and the transaction count. It writes **nothing**: not to the repository, not to the store, not to a file, not to a log, not to the network, and it never prints a line of statement text, a merchant, an amount, a date or an account number (FR-040, FR-034, research R13)
+- [x] T110 Add a `reference-check` target to the repo-root `Makefile` (`make reference-check DIR=…`) that sets `KANAME_REFERENCE_DIR` and runs only `ReferenceSetVerification`; add it to `.PHONY`
+- [x] T111 [P] Extend `ios/Tests/ImportCancellationTests.swift` with the E12 obligation: a 40+-page rendered document extracts off the main thread with `Task.checkCancelled()` between pages and honours cancellation within **2 s** (FR-035, SC-008, research R14)
+- [x] T112 [P] Add a per-page cost assertion in `ios/Tests/StatementTextExtractorTests.swift` that `characterBounds(at:)` is called at most once per non-separator UTF-16 unit — i.e. the shipped call volume is not regressed by a per-word PDFKit re-query (research R14)
+- [x] T113 Verify SC-009 end to end: `make core-privacy-audit && make import-audit` are green and zero network requests occur anywhere on the path (FR-033)
+- [x] T114 [P] Update `AGENTS.md` and `.scratch/HANDOFF.md` with the new extraction contract (lines are printed rows, `lineWords` is all-page), the renamed registry ids, and the `claim.rs` identity-region rule
+- [x] T115 [P] Record the deferred decision in `docs/adr/0004-unknown-bank-ingestion.md`: `issuer_id` persistence (schema v7) is **deliberately deferred** and must land before first release (research R9)
+- [x] T116 **Human-run reference pass (SC-002 — the slice cannot be signed off without it)**: the reference-set holder runs `make reference-check DIR=/path/to/their/own/statements` and records **counts only** in the PR description, in the manner of slice 016's T123/T129. Target: statements importing zero transactions falls from **10 to 0**; statements whose issuer is unrecognised falls from **2** to at most those covered by the open questions
+- [x] T117 Walk `specs/017-column-major-pdf/quickstart.md` § *Definition of done* and tick every box, or record why a box cannot be ticked
+- [x] T118 Run the complete Local Verification Gate one final time: `make core-lint && make core-test && make core-privacy-audit && make import-audit && make lint && make ios-test`
 
 ### ⛔ Blocked task (external input required)
 
-- [ ] T119 ⛔ **BLOCKED on research R15** — add the exact account-kind header literal that `AU-statment-savings.pdf` prints to `au_bank::CLAIM_ANY` in `core/crates/kaname-core/src/statement/au_bank.rs`, and add that phrase to the header block of `fixtures/geometry/au_bank.json` (T094).
+- [x] T119 ✅ **NO LONGER REQUIRED — closed by evidence, not by the literal** — add the exact account-kind header literal that `AU-statment-savings.pdf` prints to `au_bank::CLAIM_ANY` in `core/crates/kaname-core/src/statement/au_bank.rs`, and add that phrase to the header block of `fixtures/geometry/au_bank.json` (T094).
   - **Blocked by**: the literal cannot be read from this repository — the file is private. Only the reference-set holder can supply it (research R15, contract C5).
   - **Constraints when it arrives**: the literal MUST come from the **header region**, MUST state the account kind or document title, MUST NOT be a bare institution name (that is the identity-region hazard), and MUST NOT be a token copied from a transaction row.
   - **Ships with**: gate G7 (T012/T013) green, and the AU geometry vector carrying the phrase.

@@ -1,0 +1,96 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date, account number and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time — the shape that made real statements report no spending. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/icici.rs.",
+  "issuer_id": "ICICI_AMAZONPAY_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD/MM/YYYY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 120.0,
+        "align": "left"
+      },
+      {
+        "role": "points",
+        "x": 380.0,
+        "align": "right"
+      },
+      {
+        "role": "amount",
+        "x": 470.0,
+        "align": "right"
+      },
+      {
+        "role": "direction",
+        "x": 480.0,
+        "align": "left"
+      }
+    ]
+  },
+  "header_lines": [
+    "ICICI Bank Statement",
+    "Amazon Pay ICICI Bank Credit Card",
+    "Statement Date May 28, 2026",
+    "4315XXXXXXXX1002"
+  ],
+  "footer_lines": [
+    "Total Amount Due 1,010.20"
+  ],
+  "rows": [
+    {
+      "date": "29/04/2026",
+      "description": "4262 BBPS Payment received",
+      "points": "0",
+      "amount": "13,628.36",
+      "direction": "CR"
+    },
+    {
+      "date": "26/05/2026",
+      "description": "1814 Fee on gaming transaction",
+      "points": "0",
+      "amount": "10.20"
+    },
+    {
+      "date": "27/05/2026",
+      "description": "1815 EXAMPLE GROCER MUMBAI",
+      "points": "12",
+      "amount": "1,000.00"
+    }
+  ],
+  "expected": {
+    "issuer_id": "ICICI_AMAZONPAY_CARD",
+    "transactions": [
+      {
+        "date": "2026-04-29",
+        "amount": "13628.36",
+        "direction": "Credit",
+        "description_raw": "4262 BBPS Payment received"
+      },
+      {
+        "date": "2026-05-26",
+        "amount": "10.20",
+        "direction": "Debit",
+        "description_raw": "1814 Fee on gaming transaction"
+      },
+      {
+        "date": "2026-05-27",
+        "amount": "1000.00",
+        "direction": "Debit",
+        "description_raw": "1815 EXAMPLE GROCER MUMBAI"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}

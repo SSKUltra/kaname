@@ -225,6 +225,9 @@ extension ImportFailure {
         case ExtractionFailure.passwordRequired: self = .passwordRequired
         case ExtractionFailure.wrongPassword: self = .wrongPassword
         case ExtractionFailure.noExtractableText: self = .noExtractableText
+        // Extraction polls for cancellation between pages, and a stop asked for there is the
+        // same stop as one asked for anywhere else — never an unreadable document.
+        case is CancellationError: self = .cancelled
         default: self = .unreadable
         }
     }

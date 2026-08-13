@@ -1,0 +1,92 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date, account number and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time — the shape that made real statements report no spending. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/hdfc_bank.rs. Its column header prints `WithdrawalAmt` and `Statementof account` exactly as the bank's own export does, spaces and all, so recognition has to be insensitive to where the spaces fell.",
+  "issuer_id": "HDFC_BANK",
+  "kind": "bank_account",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD/MM/YY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "narration",
+        "x": 100.0,
+        "align": "left"
+      },
+      {
+        "role": "serial",
+        "x": 260.0,
+        "align": "left"
+      },
+      {
+        "role": "valuedate",
+        "x": 380.0,
+        "align": "left"
+      },
+      {
+        "role": "amount",
+        "x": 470.0,
+        "align": "right"
+      },
+      {
+        "role": "balance",
+        "x": 545.0,
+        "align": "right"
+      }
+    ]
+  },
+  "header_lines": [
+    "HDFC BANK LIMITED",
+    "Statementof account",
+    "AccountNo : 50100359253425",
+    "Date Narration Chq./Ref.No. ValueDt WithdrawalAmt. DepositAmt. ClosingBalance",
+    "Opening Balance : 1,00,000.00"
+  ],
+  "footer_lines": [],
+  "rows": [
+    {
+      "date": "01/04/26",
+      "narration": "UPI-EXAMPLEMERCHANT",
+      "serial": "0000600000000001",
+      "valuedate": "01/04/26",
+      "amount": "5,000.00",
+      "balance": "95,000.00"
+    },
+    {
+      "date": "16/04/26",
+      "narration": "NEFTCR-EXAMPLEEMPLOYER",
+      "serial": "CITIN26653417445",
+      "valuedate": "16/04/26",
+      "amount": "50,000.00",
+      "balance": "1,45,000.00"
+    }
+  ],
+  "expected": {
+    "issuer_id": "HDFC_BANK",
+    "transactions": [
+      {
+        "date": "2026-04-01",
+        "amount": "5000.00",
+        "direction": "Debit",
+        "description_raw": "UPI-EXAMPLEMERCHANT"
+      },
+      {
+        "date": "2026-04-16",
+        "amount": "50000.00",
+        "direction": "Credit",
+        "description_raw": "NEFTCR-EXAMPLEEMPLOYER"
+      }
+    ],
+    "direction_source": "OpeningBalance",
+    "legacy_max_transactions": 0
+  }
+}

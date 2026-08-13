@@ -53,12 +53,22 @@ Per page:
 1. **Guard** — `page.string` is non-nil and `page.numberOfCharacters == page.string.utf16.count`,
    and at least one glyph yields usable bounds. Otherwise → E8 fallback.
 2. **Words** — split the page string into maximal non-separator UTF-16 runs
-   (`unit <= 0x20 || unit == 0x00A0` is a separator). Each word takes `xMin`/`xMax` from its first
-   and last usable glyph bounds and `yExtent` from the union of its usable glyph ink extents.
-   A glyph is usable iff `!isNull && minY.isFinite && maxY.isFinite && height > 0.5`.
+   (`unit <= 0x20 || unit == 0x00A0` is a separator). Each word takes `xMin`/`xMax` from
+   `PDFSelection.bounds(for:)` over its own range, and `yExtent` from `characterBounds(at:)` read at
+   an index **reduced by the number of `U+000A` before it** — PDFKit inserts those breaks into
+   `string` and they stand for no glyph — reduced further to the row *most* of the word's glyphs
+   agree on. A rect is usable iff `!isNull && minX/maxX/minY/maxY.isFinite && height > 0.5`. Where
+   the two sources' `xMin` disagree by more than about one character at the median, the page's glyph
+   indices cannot be reconciled and the selection box supplies both axes. **See research R17 — this
+   supersedes the glyph-union rule and is the difference between reading a column-major page and
+   scrambling it.**
 3. **Zones** — project every word's `[xMin, xMax]` onto the x-axis; a maximal x-interval no word
-   overlaps and at least `4 ×` the page's median space width wide is a gutter. Gutters partition
-   the page into zones, emitted left-to-right. One zone is the normal case.
+   overlaps and at least `4 ×` the page's median space width wide is a *candidate* gutter, and is a
+   gutter only if **no row band has words on both sides of it** (bands are formed once over the
+   whole page for this test, then re-formed within each zone). Gutters partition the page into
+   zones, emitted left-to-right. One zone is the normal case. **See research R18** — without the
+   crossing test, a ledger's continuation page, which prints rows and nothing else, is cut along
+   every one of its own column gaps.
 4. **Bands** — within a zone, sort words by `(-yMax, xMin, utf16Start)` and sweep: a word joins the
    current band iff it overlaps the band by more than a quarter of the shorter height **and** the
    resulting union does not exceed `2.0 ×` the page's median word height; otherwise it opens a new

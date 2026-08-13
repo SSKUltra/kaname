@@ -1,0 +1,89 @@
+{
+  "_comment": "Synthetic. Every merchant, amount, date, account number and card number is fabricated. Drawn column-major, which is what makes the platform's text layer emit the page a column at a time — the shape that made real statements report no spending. Header literals are the reader's own published claim markers from core/crates/kaname-core/src/statement/sbi.rs. Its rows name rival cards from the same issuer, so the product must not be read out of the spending.",
+  "issuer_id": "SBI_CASHBACK_CARD",
+  "kind": "credit_card",
+  "signature": {
+    "page_size": [
+      595.0,
+      842.0
+    ],
+    "font_size": 9.0,
+    "row_pitch": 21.3,
+    "first_row_y": 520.0,
+    "date_format": "DD MMM YY",
+    "columns": [
+      {
+        "role": "date",
+        "x": 40.0,
+        "align": "left"
+      },
+      {
+        "role": "description",
+        "x": 130.0,
+        "align": "left"
+      },
+      {
+        "role": "amount",
+        "x": 420.0,
+        "align": "right"
+      },
+      {
+        "role": "direction",
+        "x": 435.0,
+        "align": "left"
+      }
+    ]
+  },
+  "header_lines": [
+    "GSTIN of SBI Card",
+    "Credit Card Number XXXX XXXX XXXX XX61",
+    "for Statement Period: 22 Apr 26 to 21 May 26"
+  ],
+  "footer_lines": [
+    "Total Payment Due 83,077.00"
+  ],
+  "rows": [
+    {
+      "date": "21 Apr 26",
+      "description": "CARD CASHBACK CREDIT",
+      "amount": "643.00",
+      "direction": "C"
+    },
+    {
+      "date": "05 May 26",
+      "description": "SIMPLYCLICK STORE MUMBAI IN",
+      "amount": "820.00",
+      "direction": "D"
+    },
+    {
+      "date": "20 May 26",
+      "description": "PRIME LOUNGE ACCESS DELHI IN",
+      "amount": "82,900.00",
+      "direction": "D"
+    }
+  ],
+  "expected": {
+    "issuer_id": "SBI_CASHBACK_CARD",
+    "transactions": [
+      {
+        "date": "2026-04-21",
+        "amount": "643.00",
+        "direction": "Credit",
+        "description_raw": "CARD CASHBACK CREDIT"
+      },
+      {
+        "date": "2026-05-05",
+        "amount": "820.00",
+        "direction": "Debit",
+        "description_raw": "SIMPLYCLICK STORE MUMBAI IN"
+      },
+      {
+        "date": "2026-05-20",
+        "amount": "82900.00",
+        "direction": "Debit",
+        "description_raw": "PRIME LOUNGE ACCESS DELHI IN"
+      }
+    ],
+    "legacy_max_transactions": 0
+  }
+}
