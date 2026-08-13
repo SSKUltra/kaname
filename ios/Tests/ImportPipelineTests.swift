@@ -78,8 +78,9 @@ struct ImportPipelineTests {
         let store = try Store.open(path: db.path, key: Self.key)
 
         var stages: [ImportStage] = []
-        let summary = try await Self.service(lines: Self.cardLines, store: store)
+        let result = try await Self.service(lines: Self.cardLines, store: store)
             .run(url: Self.anyURL, password: nil) { stages.append($0) }
+        let summary = try #require(result.summary)
 
         // The issuer's own name is shown, so a tie-break between two readers is visible.
         #expect(summary.issuerDisplayName == "ICICI Bank Credit Card")
@@ -114,8 +115,9 @@ struct ImportPipelineTests {
         defer { try? FileManager.default.removeItem(at: db.dir) }
         let store = try Store.open(path: db.path, key: Self.key)
 
-        let summary = try await Self.service(lines: Self.ledgerLines, store: store)
-            .run(url: Self.anyURL, password: nil) { _ in }
+        let summary = try #require(
+            (try await Self.service(lines: Self.ledgerLines, store: store)
+                .run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         #expect(summary.issuerDisplayName == "HDFC Bank Account")
         #expect(summary.transactionsImported == 2)
@@ -161,8 +163,9 @@ struct ImportPipelineTests {
         defer { try? FileManager.default.removeItem(at: db.dir) }
         let store = try Store.open(path: db.path, key: Self.key)
 
-        let summary = try await Self.service(lines: Self.ledgerLines, store: store)
-            .run(url: Self.anyURL, password: nil) { _ in }
+        let summary = try #require(
+            (try await Self.service(lines: Self.ledgerLines, store: store)
+                .run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         // Every imported row is accounted for on one side of the split or the other.
         #expect(summary.categorized + summary.uncategorized == summary.transactionsImported)

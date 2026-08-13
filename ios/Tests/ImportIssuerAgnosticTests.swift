@@ -134,10 +134,11 @@ struct ImportIssuerAgnosticTests {
         defer { try? FileManager.default.removeItem(at: db.dir) }
         let store = try Store.open(path: db.path, key: Self.key)
 
-        let summary = try await Self.service(
-            extractor: StubExtractor(text: Self.extracted(Self.doublyClaimedLines)),
-            store: store
-        ).run(url: Self.anyURL, password: nil) { _ in }
+        let summary = try #require(
+            (try await Self.service(
+                extractor: StubExtractor(text: Self.extracted(Self.doublyClaimedLines)),
+                store: store
+            ).run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         // Whatever the engine picked is what the person is told — the app never renames it.
         let winner = try #require(detectIssuer(fullText: Self.doublyClaimedLines.joined(separator: "\n")))
@@ -176,16 +177,17 @@ struct ImportIssuerAgnosticTests {
 
         // Enough for a reader to claim the document, with nothing it can parse as a row —
         // what an extraction that lost the transactions looks like from here.
-        let summary = try await Self.service(
-            extractor: StubExtractor(
-                text: Self.extracted([
-                    "ICICI Bank Statement",
-                    "Statement Date May 28, 2026",
-                    "4315XXXXXXXX1002",
-                ])
-            ),
-            store: store
-        ).run(url: Self.anyURL, password: nil) { _ in }
+        let summary = try #require(
+            (try await Self.service(
+                extractor: StubExtractor(
+                    text: Self.extracted([
+                        "ICICI Bank Statement",
+                        "Statement Date May 28, 2026",
+                        "4315XXXXXXXX1002",
+                    ])
+                ),
+                store: store
+            ).run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         #expect(summary.transactionsImported == 0)
         #expect(summary.nothingRecognized)
@@ -201,18 +203,19 @@ struct ImportIssuerAgnosticTests {
         // A billing period with no activity, where the statement's own printed totals say so:
         // zero spent, zero paid. That is the statement vouching for its own emptiness, and it
         // is the only thing that earns a quiet "0 transactions".
-        let summary = try await Self.service(
-            extractor: StubExtractor(
-                text: Self.extracted([
-                    "YES BANK",
-                    "Card Number XXXX XXXX XXXX 6686",
-                    "Statement Period: 17/04/2026 To 16/05/2026",
-                    "Current Purchases Rs. 0.00 Dr",
-                    "Payment & Credits Received Rs. 0.00 Cr",
-                ])
-            ),
-            store: store
-        ).run(url: Self.anyURL, password: nil) { _ in }
+        let summary = try #require(
+            (try await Self.service(
+                extractor: StubExtractor(
+                    text: Self.extracted([
+                        "YES BANK",
+                        "Card Number XXXX XXXX XXXX 6686",
+                        "Statement Period: 17/04/2026 To 16/05/2026",
+                        "Current Purchases Rs. 0.00 Dr",
+                        "Payment & Credits Received Rs. 0.00 Cr",
+                    ])
+                ),
+                store: store
+            ).run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         #expect(summary.transactionsImported == 0)
         #expect(summary.integrity == .agrees)
@@ -229,18 +232,19 @@ struct ImportIssuerAgnosticTests {
         defer { try? FileManager.default.removeItem(at: db.dir) }
         let store = try Store.open(path: db.path, key: Self.key)
 
-        let summary = try await Self.service(
-            extractor: StubExtractor(
-                text: Self.extracted([
-                    "HDFC BANK LIMITED",
-                    "Statementof account",
-                    "From : 01/04/2026 To : 30/04/2026",
-                    "AccountNo : 50100359253425",
-                    "Date Narration Chq./Ref.No. ValueDt WithdrawalAmt. DepositAmt. ClosingBalance",
-                ])
-            ),
-            store: store
-        ).run(url: Self.anyURL, password: nil) { _ in }
+        let summary = try #require(
+            (try await Self.service(
+                extractor: StubExtractor(
+                    text: Self.extracted([
+                        "HDFC BANK LIMITED",
+                        "Statementof account",
+                        "From : 01/04/2026 To : 30/04/2026",
+                        "AccountNo : 50100359253425",
+                        "Date Narration Chq./Ref.No. ValueDt WithdrawalAmt. DepositAmt. ClosingBalance",
+                    ])
+                ),
+                store: store
+            ).run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         #expect(summary.transactionsImported == 0)
         #expect(summary.nothingRecognized)

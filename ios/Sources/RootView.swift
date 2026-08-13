@@ -37,6 +37,16 @@ struct RootView: View {
                 }
             }
         }
+        .sheet(isPresented: showingAccountPicker) {
+            if let choice = model.accountChoice {
+                AccountPickerView(choice: choice) { decision in
+                    Task { await model.chooseAccount(decision) }
+                } onCancel: {
+                    Task { await model.cancel() }
+                    model.reset()
+                }
+            }
+        }
         .statementPasswordPrompt(
             isPresented: $model.isPromptingForPassword,
             password: $model.passwordEntry,
@@ -99,6 +109,19 @@ struct RootView: View {
 
     private var showingSummary: Binding<Bool> {
         Binding(get: { model.summary != nil }, set: { if !$0 { model.reset() } })
+    }
+
+    private var showingAccountPicker: Binding<Bool> {
+        Binding(
+            get: { model.accountChoice != nil },
+            set: { presented in
+                // Swiping the question away abandons the import; nothing was written for it.
+                if !presented {
+                    Task { await model.cancel() }
+                    model.reset()
+                }
+            }
+        )
     }
 
     static func stageText(_ stage: ImportStage?) -> String {

@@ -1,6 +1,7 @@
 import Foundation
 import KanameCore
 import Testing
+
 @testable import Kaname
 
 /// Smoke tests using Swift Testing (bundled with Xcode 16+). Real coverage arrives

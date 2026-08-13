@@ -228,16 +228,16 @@ candidate branches are US4 (T091–T094) and must never silently guess in the me
 
 ### Tests for User Story 2 (RED first) ⚠️
 
-- [ ] T070 [US2] RED: add `detect_issuer_never_panics_on_arbitrary_input` to `core/crates/kaname-core/tests/dispatcher.rs` — empty string, multi-megabyte string, and byte-soup — proving the totality guarantee in `contracts/engine-ffi.md` §2.
-- [ ] T071 [P] [US2] RED: create `ios/Tests/ImportIssuerAgnosticTests.swift`: an unclaimed document yields `.unrecognizedIssuer` with the store **byte-identical** (US2 §3); a doubly-claimed document resolves to the ledger and the summary carries the winning `display_name` (US2 §4); no message contains a reader name or error code (US2 §5).
-- [ ] T072 [P] [US2] RED: extend `scripts/import-path-audit.sh` with a bank-literal check that fails if any of the ten registry `id`s, `bank_code`s or `display_name`s appears anywhere under `ios/Sources/` — the mechanical FR-012 / SC-010 guard.
+- [x] T070 [US2] RED: add `detect_issuer_never_panics_on_arbitrary_input` to `core/crates/kaname-core/tests/dispatcher.rs` — empty string, multi-megabyte string, and byte-soup — proving the totality guarantee in `contracts/engine-ffi.md` §2.
+- [x] T071 [P] [US2] RED: create `ios/Tests/ImportIssuerAgnosticTests.swift`: an unclaimed document yields `.unrecognizedIssuer` with the store **byte-identical** (US2 §3); a doubly-claimed document resolves to the ledger and the summary carries the winning `display_name` (US2 §4); no message contains a reader name or error code (US2 §5).
+- [x] T072 [P] [US2] RED: extend `scripts/import-path-audit.sh` with a bank-literal check that fails if any of the ten registry `id`s, `bank_code`s or `display_name`s appears anywhere under `ios/Sources/` — the mechanical FR-012 / SC-010 guard.
 
 ### Implementation for User Story 2
 
-- [ ] T073 [US2] Implement the unrecognized path in `ios/Sources/Import/ImportService.swift`: `detectIssuer` returning `nil` maps to `.unrecognizedIssuer` and **returns before any store call**, kept distinct from `.noExtractableText` (FR-006, FR-013).
-- [ ] T074 [US2] Render the engine-supplied `Issuer.display_name` verbatim alongside the last-4 in `ios/Sources/Import/ImportSummaryView.swift`, unconditionally — so a tie-break outcome is always visible rather than silent (FR-014, FR-033).
-- [ ] T075 [US2] Render the "not recognized yet" sentence for `.unrecognizedIssuer` in `ios/Sources/Import/ImportFailureView.swift`, sourced from the T054 copy deck.
-- [ ] T076 [US2] **GATE** `make lint && make ios-test && make import-audit` — the bank-literal audit is the proof that adding an eleventh issuer costs zero app lines. Targets live in the repo-root `Makefile`.
+- [x] T073 [US2] Implement the unrecognized path in `ios/Sources/Import/ImportService.swift`: `detectIssuer` returning `nil` maps to `.unrecognizedIssuer` and **returns before any store call**, kept distinct from `.noExtractableText` (FR-006, FR-013).
+- [x] T074 [US2] Render the engine-supplied `Issuer.display_name` verbatim alongside the last-4 in `ios/Sources/Import/ImportSummaryView.swift`, unconditionally — so a tie-break outcome is always visible rather than silent (FR-014, FR-033).
+- [x] T075 [US2] Render the "not recognized yet" sentence for `.unrecognizedIssuer` in `ios/Sources/Import/ImportFailureView.swift`, sourced from the T054 copy deck.
+- [x] T076 [US2] **GATE** `make lint && make ios-test && make import-audit` — the bank-literal audit is the proof that adding an eleventh issuer costs zero app lines. Targets live in the repo-root `Makefile`.
 
 **Checkpoint**: US1 and US2 both work independently. The app is provably bank-agnostic.
 
@@ -251,20 +251,20 @@ candidate branches are US4 (T091–T094) and must never silently guess in the me
 
 ### Tests for User Story 3 (RED first) ⚠️
 
-- [ ] T077 [US3] RED: create `ios/Tests/StatementTextExtractorTests.swift` generating five PDFs **in-test** with `UIGraphicsPDFRenderer` — text-bearing, image-only, password-protected, truncated bytes, and a `.pdf`-named text file — and asserting the five `ExtractionFailure` cases. Generated, never committed: no binary fixtures and no route for a real statement to enter the repo (FR-043, SC-011).
-- [ ] T078 [US3] RED: add the password paths to `ios/Tests/StatementTextExtractorTests.swift`: the correct password proceeds, a wrong one yields `.wrongPassword` with retry and cancel available, and the password is **absent** from the Keychain, the store and any log after the run (FR-008).
-- [ ] T079 [P] [US3] RED: create `ios/Tests/ImportStoreIntegrityTests.swift` hashing the SQLCipher database file before and after **every** US3 failure path and asserting byte-identity (FR-031, SC-006).
+- [x] T077 [US3] RED: create `ios/Tests/StatementTextExtractorTests.swift` generating five PDFs **in-test** with `UIGraphicsPDFRenderer` — text-bearing, image-only, password-protected, truncated bytes, and a `.pdf`-named text file — and asserting the five `ExtractionFailure` cases. Generated, never committed: no binary fixtures and no route for a real statement to enter the repo (FR-043, SC-011).
+- [x] T078 [US3] RED: add the password paths to `ios/Tests/StatementTextExtractorTests.swift`: the correct password proceeds, a wrong one yields `.wrongPassword` with retry and cancel available, and the password is **absent** from the Keychain, the store and any log after the run (FR-008).
+- [x] T079 [P] [US3] RED: create `ios/Tests/ImportStoreIntegrityTests.swift` hashing the SQLCipher database file before and after **every** US3 failure path and asserting byte-identity (FR-031, SC-006).
 
 ### Implementation for User Story 3
 
-- [ ] T080 [US3] Implement `.notAPDF` (`PDFDocument(url:) == nil`) and `.unreadable` (`startAccessingSecurityScopedResource()` returned `false`, or a read threw) in `ios/Sources/Import/StatementTextExtractor.swift` — never a crash, never a silent no-op (FR-009, FR-002, US3 §7).
-- [ ] T081 [US3] Implement `.passwordRequired` keyed on **`doc.isLocked`** — never `doc.isEncrypted` — and `.wrongPassword` on `unlock(withPassword:) == false`, in `ios/Sources/Import/StatementTextExtractor.swift`. This satisfies the empty/owner-password edge case for free.
-- [ ] T082 [US3] Implement `.noExtractableText` (document opens, every page's text is empty or whitespace) in `ios/Sources/Import/StatementTextExtractor.swift`, distinct from unrecognized-issuer (FR-006).
-- [ ] T083 [US3] Wrap the **entire** extraction in `startAccessingSecurityScopedResource()` / `defer { stopAccessingSecurityScopedResource() }` in `ios/Sources/Import/StatementTextExtractor.swift`, covering the success, throw and cancellation paths (FR-002). The file is read into memory and never copied (FR-004).
-- [ ] T084 [US3] Create `ios/Sources/Import/PasswordPromptView.swift` — a standard `.alert` with a `SecureField`, its binding cleared in `onDisappear`. The password is a parameter only: never a stored property, `@State` beyond the prompt, Keychain item, store row or log line (FR-008).
-- [ ] T085 [US3] Wire password retry and cancel through `ios/Sources/Import/ImportService.swift` and `ios/Sources/Import/ImportViewModel.swift`, passing the password down the call stack and discarding it at the boundary.
-- [ ] T086 [US3] Confirm each of the five failures renders its own distinct sentence in `ios/Sources/Import/ImportFailureView.swift`, drawn from the T054 copy deck — no shared generic message.
-- [ ] T087 [US3] **GATE** `make lint && make ios-test` — T077–T079 GREEN. Targets live in the repo-root `Makefile`.
+- [x] T080 [US3] Implement `.notAPDF` (`PDFDocument(url:) == nil`) and `.unreadable` (`startAccessingSecurityScopedResource()` returned `false`, or a read threw) in `ios/Sources/Import/StatementTextExtractor.swift` — never a crash, never a silent no-op (FR-009, FR-002, US3 §7).
+- [x] T081 [US3] Implement `.passwordRequired` keyed on **`doc.isLocked`** — never `doc.isEncrypted` — and `.wrongPassword` on `unlock(withPassword:) == false`, in `ios/Sources/Import/StatementTextExtractor.swift`. This satisfies the empty/owner-password edge case for free.
+- [x] T082 [US3] Implement `.noExtractableText` (document opens, every page's text is empty or whitespace) in `ios/Sources/Import/StatementTextExtractor.swift`, distinct from unrecognized-issuer (FR-006).
+- [x] T083 [US3] Wrap the **entire** extraction in `startAccessingSecurityScopedResource()` / `defer { stopAccessingSecurityScopedResource() }` in `ios/Sources/Import/StatementTextExtractor.swift`, covering the success, throw and cancellation paths (FR-002). The file is read into memory and never copied (FR-004).
+- [x] T084 [US3] Create `ios/Sources/Import/PasswordPromptView.swift` — a standard `.alert` with a `SecureField`, its binding cleared in `onDisappear`. The password is a parameter only: never a stored property, `@State` beyond the prompt, Keychain item, store row or log line (FR-008).
+- [x] T085 [US3] Wire password retry and cancel through `ios/Sources/Import/ImportService.swift` and `ios/Sources/Import/ImportViewModel.swift`, passing the password down the call stack and discarding it at the boundary.
+- [x] T086 [US3] Confirm each of the five failures renders its own distinct sentence in `ios/Sources/Import/ImportFailureView.swift`, drawn from the T054 copy deck — no shared generic message.
+- [x] T087 [US3] **GATE** `make lint && make ios-test` — T077–T079 GREEN. Targets live in the repo-root `Makefile`.
 
 ### Extraction fidelity — the silent-empty-import gap ⚠️ (added after PR C)
 
@@ -276,7 +276,7 @@ reported "0 transactions" — a **success** under FR-020. A person whose stateme
 would be told their statement had no spending. That is the one way this slice can currently
 mislead, and it fails silently.
 
-- [ ] T137 [US3] RED: create `ios/Tests/ExtractionFidelityTests.swift` — for a representative
+- [x] T137 [US3] RED: create `ios/Tests/ExtractionFidelityTests.swift` — for a representative
       card fixture **and** a representative ledger fixture, render the fixture's `lines` into a
       PDF in-test with `UIGraphicsPDFRenderer`, extract it with `PDFKitStatementTextExtractor`,
       and assert `readStatement` over the *extracted* text yields the **same** transactions
@@ -285,14 +285,14 @@ mislead, and it fails silently.
       agree. Generated, never committed (FR-043, SC-011). Include a **line-merge** case —
       rows laid out close enough that PDFKit joins them — and pin the *current* behaviour so
       the failure mode is documented rather than discovered by a person.
-- [ ] T138 [US3] Make the empty result **honest**: a parse that recognised no transactions in a
+- [x] T138 [US3] Make the empty result **honest**: a parse that recognised no transactions in a
       document that *did* carry extractable text must not read as "your statement had no
       spending". Surface it as its own summary state with its own hand-written sentence
       (copy deck, `ios/Sources/Import/ImportModels.swift`), distinct from both a genuinely
       empty statement and from `.unrecognizedIssuer`. Nothing is written that is wrong, so this
       is a **notice, not a failure** — FR-020 still holds. If the engine cannot distinguish the
       two cases from `ParsedStatement` alone, stop and raise it rather than guessing.
-- [ ] T139 [US3] **GATE** `make lint && make ios-test` — T137 GREEN.
+- [x] T139 [US3] **GATE** `make lint && make ios-test` — T137 GREEN.
 
 **Checkpoint**: Every unusable input fails honestly with the store untouched.
 
@@ -306,19 +306,19 @@ mislead, and it fails silently.
 
 ### Tests for User Story 4 (RED first) ⚠️
 
-- [ ] T088 [US4] RED: add `import_statement_attaches_to_an_existing_account_by_issuer_and_last4` to `core/crates/kaname-core/tests/store_import.rs` (FR-021).
-- [ ] T089 [US4] RED: add `import_statement_creates_the_account_and_reports_account_created` to `core/crates/kaname-core/tests/store_import.rs` (FR-022, US4 §5).
-- [ ] T090 [US4] RED: add `importing_the_same_statement_twice_does_not_double_history` to `core/crates/kaname-core/tests/store_import.rs` — compare period totals after one import and after two, and assert `ImportOutcome.duplicates_linked` is non-zero and nothing was deleted or replaced (FR-025, SC-005).
-- [ ] T091 [P] [US4] RED: create `ios/Tests/ImportAccountResolutionTests.swift` covering the FR-024 matrix — a `nil` last-4 with exactly one candidate attaches, with zero or ≥2 candidates asks the person, and never guesses.
+- [x] T088 [US4] RED: add `import_statement_attaches_to_an_existing_account_by_issuer_and_last4` to `core/crates/kaname-core/tests/store_import.rs` (FR-021).
+- [x] T089 [US4] RED: add `import_statement_creates_the_account_and_reports_account_created` to `core/crates/kaname-core/tests/store_import.rs` (FR-022, US4 §5).
+- [x] T090 [US4] RED: add `importing_the_same_statement_twice_does_not_double_history` to `core/crates/kaname-core/tests/store_import.rs` — compare period totals after one import and after two, and assert `ImportOutcome.duplicates_linked` is non-zero and nothing was deleted or replaced (FR-025, SC-005).
+- [x] T091 [P] [US4] RED: create `ios/Tests/ImportAccountResolutionTests.swift` covering the FR-024 matrix — a `nil` last-4 with exactly one candidate attaches, with zero or ≥2 candidates asks the person, and never guesses.
 
 ### Implementation for User Story 4
 
-- [ ] T092 [US4] Implement resolve-or-create with last-4 minting inside the transaction in `Store::import_statement` (`core/crates/kaname-core/src/store.rs`), honouring `ImportAccountTarget::Existing` / `::New`.
-- [ ] T093 [US4] Implement the three-way FR-024 resolution in `ios/Sources/Import/ImportService.swift`: exactly one candidate → attach; zero or ≥2 with no recoverable last-4 → surface the candidate set for a human decision.
-- [ ] T094 [US4] Create `ios/Sources/Import/AccountPickerView.swift` — a standard dense `List`, **not glassed** (FR-047) — letting the person pick or name the account.
-- [ ] T095 [US4] Add the "new account" badge and the "N duplicates skipped" figure to `ios/Sources/Import/ImportSummaryView.swift`, both `.monospacedDigit()` (FR-022, FR-025, FR-033).
-- [ ] T096 [US4] **GATE** `make core-fmt && make core-lint && make core-test` — T088–T090 GREEN. Targets live in the repo-root `Makefile`.
-- [ ] T097 [US4] ⚠️ **GATE** `make core-xcframework && make ios-gen && make ios-test` — the engine binary changed, so the xcframework must be rebuilt **before** generation. T091 GREEN. Targets live in the repo-root `Makefile`.
+- [x] T092 [US4] Implement resolve-or-create with last-4 minting inside the transaction in `Store::import_statement` (`core/crates/kaname-core/src/store.rs`), honouring `ImportAccountTarget::Existing` / `::New`.
+- [x] T093 [US4] Implement the three-way FR-024 resolution in `ios/Sources/Import/ImportService.swift`: exactly one candidate → attach; zero or ≥2 with no recoverable last-4 → surface the candidate set for a human decision.
+- [x] T094 [US4] Create `ios/Sources/Import/AccountPickerView.swift` — a standard dense `List`, **not glassed** (FR-047) — letting the person pick or name the account.
+- [x] T095 [US4] Add the "new account" badge and the "N duplicates skipped" figure to `ios/Sources/Import/ImportSummaryView.swift`, both `.monospacedDigit()` (FR-022, FR-025, FR-033).
+- [x] T096 [US4] **GATE** `make core-fmt && make core-lint && make core-test` — T088–T090 GREEN. Targets live in the repo-root `Makefile`.
+- [x] T097 [US4] ⚠️ **GATE** `make core-xcframework && make ios-gen && make ios-test` — the engine binary changed, so the xcframework must be rebuilt **before** generation. T091 GREEN. Targets live in the repo-root `Makefile`.
 
 **Checkpoint**: Account identity is correct and a re-import can no longer double a person's history.
 

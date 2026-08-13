@@ -256,6 +256,10 @@ pub enum StatementSource {
 pub enum ImportAccountTarget {
     Existing {
         id: String,
+        /// The last-4 this statement carried, if any. An account created from a statement
+        /// that had none learns it here, so the *next* import can match on it instead of
+        /// falling back to "the only account for this issuer".
+        last4: Option<String>,
     },
     New {
         name: String,
@@ -587,7 +591,7 @@ impl Store {
         let tx = conn.transaction()?;
 
         let (account_id, account_created) = match request.account {
-            ImportAccountTarget::Existing { id } => {
+            ImportAccountTarget::Existing { id, last4 } => {
                 let exists = tx
                     .query_row("SELECT 1 FROM accounts WHERE id = ?1", params![id], |_| {
                         Ok(())
@@ -598,6 +602,15 @@ impl Store {
                     return Err(StoreError::Sql {
                         message: "import account does not exist".to_string(),
                     });
+                }
+                // Only ever fills a blank: a statement never overwrites a last-4 the account
+                // already has, because that would silently re-label somebody's account.
+                if last4.is_some() {
+                    tx.execute(
+                        "UPDATE accounts SET last4 = ?2, updated_at = ?3 \
+                         WHERE id = ?1 AND last4 IS NULL",
+                        params![id, last4, request.now],
+                    )?;
                 }
                 (id, false)
             }
@@ -682,6 +695,7 @@ impl Store {
             }
         }
 
+        let reimported = link_reimported_rows_in(&tx, &account_id, &statement_id)?;
         let categorized = categorize_account_in(&tx, &account_id)?;
         let duplicates = find_duplicates_in(&tx)?;
         tx.commit()?;
@@ -691,7 +705,7 @@ impl Store {
             account_created,
             statement_id: Some(statement_id),
             transactions_inserted: request.transactions.len() as u32,
-            duplicates_linked: duplicates.duplicates_linked,
+            duplicates_linked: duplicates.duplicates_linked + reimported,
             categorized: categorized.categorized,
             uncategorized: categorized.uncategorized,
         })
@@ -1031,6 +1045,96 @@ pub fn categorize_account_in(
         }
     }
     Ok(summary)
+}
+
+/// Link the rows of a just-inserted statement to rows the same account already had.
+///
+/// The cross-source de-duplication in [`find_duplicates_in`] compares accounts against each
+/// other and never an account against itself, which is right for a spend seen on both a bank
+/// ledger and a card — but it leaves the commonest mistake unanswered: picking the same
+/// statement twice. Without this, a person's month quietly doubles.
+///
+/// Only the **canonical** layer counts here — same date, same amount, same direction, same
+/// narration — because within one account the fuzzy layer (±1 day, near-identical text) would
+/// happily merge two genuine purchases of the same thing. Two identical rows *inside* one
+/// statement stay separate: they are both incoming, and only earlier statements are candidates.
+fn link_reimported_rows_in(
+    tx: &rusqlite::Transaction<'_>,
+    account_id: &str,
+    statement_id: &str,
+) -> Result<u32, StoreError> {
+    let existing = load_account_rows(tx, account_id, statement_id, false)?;
+    let incoming = load_account_rows(tx, account_id, statement_id, true)?;
+    if existing.is_empty() || incoming.is_empty() {
+        return Ok(0);
+    }
+
+    let existing_txns: Vec<Transaction> = existing.iter().map(|(_, t)| t.clone()).collect();
+    let incoming_txns: Vec<Transaction> = incoming.iter().map(|(_, t)| t.clone()).collect();
+
+    let mut update = tx.prepare(
+        "UPDATE transactions SET superseded_by = ?2, dedup_layer = ?3 \
+         WHERE id = ?1 AND superseded_by IS NULL",
+    )?;
+    let mut linked = 0;
+    for m in crate::dedup::cross_source_duplicates(&existing_txns, &incoming_txns) {
+        if m.layer != DedupLayer::Canonical {
+            continue;
+        }
+        let (loser_id, _) = &incoming[m.incoming_index as usize];
+        let (winner_id, _) = &existing[m.existing_index as usize];
+        linked += update.execute(params![
+            loser_id,
+            winner_id,
+            dedup_layer_to_sql(DedupLayer::Canonical)
+        ])? as u32;
+    }
+    Ok(linked)
+}
+
+/// One account's live rows, either from the statement just imported or from every other
+/// source it already had. Oldest first, so the row a person already has always wins.
+fn load_account_rows(
+    tx: &rusqlite::Transaction<'_>,
+    account_id: &str,
+    statement_id: &str,
+    from_this_statement: bool,
+) -> Result<Vec<(String, Transaction)>, StoreError> {
+    let sql = if from_this_statement {
+        "SELECT id, date, description_raw, amount, direction FROM transactions \
+         WHERE account_id = ?1 AND statement_id = ?2 \
+           AND is_deleted = 0 AND superseded_by IS NULL ORDER BY rowid"
+    } else {
+        "SELECT id, date, description_raw, amount, direction FROM transactions \
+         WHERE account_id = ?1 AND (statement_id IS NULL OR statement_id != ?2) \
+           AND is_deleted = 0 AND superseded_by IS NULL ORDER BY rowid"
+    };
+    let mut stmt = tx.prepare(sql)?;
+    let raw = stmt
+        .query_map(params![account_id, statement_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    raw.into_iter()
+        .map(|(id, date, description, amount, direction)| {
+            Ok((
+                id,
+                Transaction::new(
+                    date_from_sql(&date)?,
+                    description,
+                    amount_from_sql(&amount)?,
+                    direction_from_sql(&direction)?,
+                ),
+            ))
+        })
+        .collect()
 }
 
 /// Link duplicate rows inside an already-open SQLite transaction.
