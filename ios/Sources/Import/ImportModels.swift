@@ -109,6 +109,9 @@ enum ImportFailure: Error, Equatable, Sendable {
     case unrecognizedIssuer
     case cancelled
     case storageUnavailable
+    /// A different statement was asked for while one was still importing. Handing back the
+    /// running import's summary would report one document's figures for another.
+    case alreadyImporting
 }
 
 /// The copy deck. Every user-facing sentence in the import flow is hand-written here, so
@@ -125,6 +128,7 @@ extension ImportFailure {
         case .unrecognizedIssuer: return "Kaname doesn't read this statement yet"
         case .cancelled: return "Import stopped"
         case .storageUnavailable: return "Kaname couldn't open your data"
+        case .alreadyImporting: return "One statement at a time"
         }
     }
 
@@ -149,6 +153,9 @@ extension ImportFailure {
             return "Nothing was saved. You can start again whenever you like."
         case .storageUnavailable:
             return "Your transactions are safe and nothing was changed. Try again in a moment."
+        case .alreadyImporting:
+            return "Kaname is still importing the statement you picked before this one. "
+                + "Wait for it to finish, or stop it, and then try this one again."
         }
     }
 
@@ -162,6 +169,7 @@ extension ImportFailure {
         case .unrecognizedIssuer: return "questionmark.folder"
         case .cancelled: return "xmark.circle"
         case .storageUnavailable: return "externaldrive.badge.xmark"
+        case .alreadyImporting: return "clock.arrow.circlepath"
         }
     }
 }

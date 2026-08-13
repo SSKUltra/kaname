@@ -356,18 +356,18 @@ mislead, and it fails silently.
 
 ### Tests for User Story 6 (RED first) ⚠️
 
-- [ ] T106 [P] [US6] RED: create `ios/Tests/ImportCancellationTests.swift` — cancelling mid-parse yields `.cancelled` with the store byte-identical (US6 §3, FR-031); a second `run` while `inFlight` is rejected (FR-032); a simulated background/foreground cycle does not cancel the task and never leaves a stuck indicator (US6 §4).
-- [ ] T107 [P] [US6] Add a 200-transaction synthetic fixture `fixtures/hdfc/credit_card/large_200.json` to exercise SC-008. Synthetic only.
+- [x] T106 [P] [US6] RED: create `ios/Tests/ImportCancellationTests.swift` — cancelling mid-parse yields `.cancelled` with the store byte-identical (US6 §3, FR-031); a second `run` while `inFlight` is rejected (FR-032); a simulated background/foreground cycle does not cancel the task and never leaves a stuck indicator (US6 §4).
+- [x] T107 [P] [US6] Generate the 200-transaction synthetic statement inside `ios/Tests/ImportCancellationTests.swift` to exercise SC-008. Synthetic only. **Deviation, settled:** this task originally named a fixture file, but every file under `fixtures/` is a golden parity vector whose expected output was captured from a live run of the web engine. A hand-fabricated 200-row file would be a golden vector that pins nothing, so the rows are generated in the test (`largeCardLines(rows:)`), which is synthetic by construction and keeps `fixtures/` meaning one thing.
 
 ### Implementation for User Story 6
 
-- [ ] T108 [US6] Implement the `inFlight` guard in `ios/Sources/Import/ImportService.swift` so a double-tap on Import cannot start two conflicting writes (FR-032).
-- [ ] T109 [US6] Add `try Task.checkCancellation()` at **every** stage boundary before the write in `ios/Sources/Import/ImportService.swift` — reading, identifying, parsing, checking, resolving. The single atomic write is deliberately uncancellable.
-- [ ] T110 [US6] Emit `onStage(_:)` transitions for each `ImportStage` from `ios/Sources/Import/ImportService.swift` and publish them via `ios/Sources/Import/ImportViewModel.swift` (FR-037).
-- [ ] T111 [US6] Create `ios/Sources/Import/ImportProgressView.swift`: a `GlassEffectContainer(spacing:)` holding a `ProgressView`, the stage `Text`, and a Cancel `Button(…).buttonStyle(.glass)`; `.glassEffect(.regular.interactive(), in: .capsule)` applied **after** padding and frame. `.interactive()` is honest here because Cancel is tappable. No `#available`, no `.ultraThinMaterial`.
-- [ ] T112 [US6] Ensure the pipeline `Task` is owned by the `actor` and not by a view in `ios/Sources/Import/ImportService.swift`, so backgrounding cannot cancel it and the view model always reflects a terminal state (US6 §4).
-- [ ] T113 [US6] Assert cancel-to-stopped is under **2 seconds** against `fixtures/hdfc/credit_card/large_200.json` in `ios/Tests/ImportCancellationTests.swift` (SC-008).
-- [ ] T114 [US6] **GATE** `make lint && make ios-test` — T106 GREEN. Targets live in the repo-root `Makefile`.
+- [x] T108 [US6] Implement the `inFlight` guard in `ios/Sources/Import/ImportService.swift` so a double-tap on Import cannot start two conflicting writes (FR-032). **Settled:** `inFlight` records the document as well as the task. Asking for the **same** document joins the running import, so a double-tapped button imports once and both callers see the same summary; asking for a **different** one throws the new `ImportFailure.alreadyImporting`, because handing back the running import's summary would report one document's figures for another. The previous behaviour joined unconditionally and had exactly that hole.
+- [x] T109 [US6] Add `try Task.checkCancellation()` at **every** stage boundary before the write in `ios/Sources/Import/ImportService.swift` — reading, identifying, parsing, checking, resolving. The single atomic write is deliberately uncancellable.
+- [x] T110 [US6] Emit `onStage(_:)` transitions for each `ImportStage` from `ios/Sources/Import/ImportService.swift` and publish them via `ios/Sources/Import/ImportViewModel.swift` (FR-037).
+- [x] T111 [US6] Create `ios/Sources/Import/ImportProgressView.swift`: a `GlassEffectContainer(spacing:)` holding a `ProgressView`, the stage `Text`, and a Cancel `Button(…).buttonStyle(.glass)`; `.glassEffect(.regular.interactive(), in: .capsule)` applied **after** padding and frame. `.interactive()` is honest here because Cancel is tappable. No `#available`, no `.ultraThinMaterial`.
+- [x] T112 [US6] Ensure the pipeline `Task` is owned by the `actor` and not by a view in `ios/Sources/Import/ImportService.swift`, so backgrounding cannot cancel it and the view model always reflects a terminal state (US6 §4).
+- [x] T113 [US6] Assert cancel-to-stopped is under **2 seconds** against `fixtures/hdfc/credit_card/large_200.json` in `ios/Tests/ImportCancellationTests.swift` (SC-008).
+- [x] T114 [US6] **GATE** `make lint && make ios-test` — T106 GREEN. Targets live in the repo-root `Makefile`.
 
 **Checkpoint**: A long import is responsive, abandonable, and leaves no mess.
 

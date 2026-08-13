@@ -76,7 +76,9 @@ struct RootView: View {
     private var bottomBar: some View {
         VStack(spacing: 8) {
             if model.isRunning {
-                progress
+                ImportProgressView(stage: model.stage) {
+                    Task { await model.cancel() }
+                }
             } else if model.failure == nil {
                 Button("Import a statement") { isPickingFile = true }
                     .buttonStyle(.glassProminent)
@@ -90,21 +92,6 @@ struct RootView: View {
             }
         }
         .padding(.bottom, 8)
-    }
-
-    private var progress: some View {
-        GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) {
-                ProgressView()
-                Text(Self.stageText(model.stage))
-                Button("Cancel") { Task { await model.cancel() } }
-                    .buttonStyle(.glass)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular.interactive(), in: .capsule)
-        }
-        .accessibilityElement(children: .contain)
     }
 
     private var showingSummary: Binding<Bool> {
@@ -122,17 +109,6 @@ struct RootView: View {
                 }
             }
         )
-    }
-
-    static func stageText(_ stage: ImportStage?) -> String {
-        switch stage {
-        case .reading, nil: return "Reading the statement…"
-        case .identifying: return "Working out who issued it…"
-        case .parsing: return "Reading the transactions…"
-        case .checking: return "Checking the figures…"
-        case .saving: return "Saving to your device…"
-        case .categorizing: return "Sorting into categories…"
-        }
     }
 }
 

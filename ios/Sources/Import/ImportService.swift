@@ -7,7 +7,9 @@ import KanameCore
 /// start a second run, and it owns the in-flight `Task` itself, so backgrounding the app — a
 /// view disappearing — never cancels an import in progress.
 actor ImportService {
-    private var inFlight: Task<PipelineOutcome, Error>?
+    /// The import currently running, and the document it is for — a second call can only join
+    /// it when it names that same document.
+    private var inFlight: (url: URL, task: Task<PipelineOutcome, Error>)?
     private let pipeline: ImportPipeline
     /// The statement waiting on a person to say which account it belongs to. Held only until
     /// they answer or walk away — nothing has been written for it yet.
@@ -26,16 +28,18 @@ actor ImportService {
     /// Import one statement. Throws `ImportFailure` and nothing else: every engine and store
     /// error is mapped at this boundary so no internal text can reach the UI.
     ///
-    /// A second call while one is in flight joins the running import rather than starting a
-    /// competing one, so a double-tapped Import button imports once and both callers see the
-    /// same summary.
+    /// Asking for the *same* document while it is already importing joins the running import
+    /// rather than starting a competing one, so a double-tapped Import button imports once and
+    /// both callers see the same summary. Asking for a *different* one is refused: returning
+    /// the running import's summary would report one document's figures for another.
     func run(
         url: URL,
         password: String?,
         onStage: @escaping @Sendable (ImportStage) -> Void
     ) async throws -> ImportResult {
         if let existing = inFlight {
-            let outcome = try await existing.value
+            guard existing.url == url else { throw ImportFailure.alreadyImporting }
+            let outcome = try await existing.task.value
             return outcome.result
         }
 
@@ -44,7 +48,7 @@ actor ImportService {
         let task = Task { [pipeline] in
             try pipeline.run(url: url, password: password, onStage: onStage)
         }
-        inFlight = task
+        inFlight = (url, task)
         defer { inFlight = nil }
         let outcome = try await task.value
         pendingChoice = outcome.pending
@@ -61,7 +65,7 @@ actor ImportService {
     /// Stop the running import. Every checkpoint sits before the single write, so a
     /// cancelled import leaves the store byte-identical.
     func cancel() {
-        inFlight?.cancel()
+        inFlight?.task.cancel()
         pendingChoice = nil
     }
 }
@@ -175,6 +179,7 @@ private struct ImportPipeline: Sendable {
         password: String?,
         onStage: @Sendable (ImportStage) -> Void
     ) throws -> ExtractedText {
+        try Self.checkCancellation()
         onStage(.reading)
         do {
             return try extractor.extract(from: url, password: password)
