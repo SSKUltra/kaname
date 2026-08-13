@@ -8,6 +8,7 @@ use regex::{Captures, Regex};
 
 use crate::model::Direction;
 use crate::statement::base::{truncate_chars, ParsedStatement, ParsedTransaction, MAX_RAW};
+use crate::statement::claim::Regions;
 use crate::statement::common::{parse_amount, parse_date};
 
 /// Per-issuer configuration for the line reader.
@@ -31,16 +32,19 @@ pub trait LineReaderConfig {
     }
 }
 
-/// True when `cfg` recognises `text` as a statement for `bank_code` (document-type +
+/// True when `cfg` recognises a document as a statement for `bank_code` (document-type +
 /// issuer plausibility).
-pub fn claims<C: LineReaderConfig + ?Sized>(cfg: &C, text: &str, bank_code: &str) -> bool {
+///
+/// Matched against the document's identity region, never its raw text: a marker found inside
+/// a transaction description is evidence of where the holder shopped, not of who issued the
+/// statement.
+pub fn claims<C: LineReaderConfig + ?Sized>(cfg: &C, regions: &Regions, bank_code: &str) -> bool {
     if bank_code != cfg.bank_code() {
         return false;
     }
-    let hay = text.to_lowercase();
     cfg.claim_markers()
         .iter()
-        .any(|marker| hay.contains(&marker.to_lowercase()))
+        .any(|marker| regions.identity_has(marker))
 }
 
 /// Parse already-extracted text `lines` (+ `full_text` for enrichment) into a

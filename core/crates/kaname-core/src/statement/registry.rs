@@ -1,5 +1,6 @@
 use crate::ffi::{Issuer, ReaderError, StatementKind};
 use crate::statement::base::{LineWords, ParsedStatement};
+use crate::statement::claim::Regions;
 use crate::statement::{au_bank, federal, federal_bank, hdfc, hdfc_bank, icici, icici_bank, iob};
 use crate::statement::{ledger_reader, line_reader, sbi, yes};
 
@@ -10,7 +11,9 @@ pub struct ReaderEntry {
     pub display_name: &'static str,
     pub bank_code: &'static str,
     pub kind: StatementKind,
-    pub claims: fn(&str) -> bool,
+    /// Receives the document's identity and header regions, never its raw text
+    /// (`statement::claim`).
+    pub claims: fn(&Regions) -> bool,
     read: fn(&[String], &str, &[LineWords]) -> ParsedStatement,
 }
 
@@ -108,10 +111,22 @@ pub fn kind_rank(kind: StatementKind) -> u8 {
     }
 }
 
-pub fn detect_issuer(full_text: &str) -> Option<Issuer> {
+/// Every reader that claims a document, in registry order.
+///
+/// Exposed because "which readers claimed this?" is a sharper question than "which one
+/// won?": a false claim that happens to lose the tie-break is still a false claim, and the
+/// gate that fences the AU/HDFC hazard has to be able to see it.
+pub fn claimants(full_text: &str) -> Vec<&'static ReaderEntry> {
+    let regions = Regions::of(full_text);
     REGISTRY
         .iter()
-        .filter(|entry| (entry.claims)(full_text))
+        .filter(|entry| (entry.claims)(&regions))
+        .collect()
+}
+
+pub fn detect_issuer(full_text: &str) -> Option<Issuer> {
+    claimants(full_text)
+        .into_iter()
         .min_by_key(|entry| (kind_rank(entry.kind), entry.id))
         .map(to_issuer)
 }
@@ -139,52 +154,48 @@ fn to_issuer(entry: &ReaderEntry) -> Issuer {
     }
 }
 
-fn au_bank_claims(full_text: &str) -> bool {
-    ledger_reader::claims_ledger(&au_bank::AuBankReader, full_text, au_bank::BANK_CODE)
+fn au_bank_claims(regions: &Regions) -> bool {
+    ledger_reader::claims_ledger(&au_bank::AuBankReader, regions, au_bank::BANK_CODE)
 }
 
-fn federal_bank_claims(full_text: &str) -> bool {
+fn federal_bank_claims(regions: &Regions) -> bool {
     ledger_reader::claims_ledger(
         &federal_bank::FederalBankReader,
-        full_text,
+        regions,
         federal_bank::BANK_CODE,
     )
 }
 
-fn hdfc_bank_claims(full_text: &str) -> bool {
-    ledger_reader::claims_ledger(&hdfc_bank::HdfcBankReader, full_text, hdfc_bank::BANK_CODE)
+fn hdfc_bank_claims(regions: &Regions) -> bool {
+    ledger_reader::claims_ledger(&hdfc_bank::HdfcBankReader, regions, hdfc_bank::BANK_CODE)
 }
 
-fn icici_bank_claims(full_text: &str) -> bool {
-    ledger_reader::claims_ledger(
-        &icici_bank::IciciBankReader,
-        full_text,
-        icici_bank::BANK_CODE,
-    )
+fn icici_bank_claims(regions: &Regions) -> bool {
+    ledger_reader::claims_ledger(&icici_bank::IciciBankReader, regions, icici_bank::BANK_CODE)
 }
 
-fn federal_card_claims(full_text: &str) -> bool {
-    line_reader::claims(&federal::FederalReader, full_text, federal::BANK_CODE)
+fn federal_card_claims(regions: &Regions) -> bool {
+    line_reader::claims(&federal::FederalReader, regions, federal::BANK_CODE)
 }
 
-fn hdfc_card_claims(full_text: &str) -> bool {
-    hdfc::hdfc_claims(full_text)
+fn hdfc_card_claims(regions: &Regions) -> bool {
+    hdfc::hdfc_claims(regions)
 }
 
-fn icici_card_claims(full_text: &str) -> bool {
-    line_reader::claims(&icici::IciciReader, full_text, icici::BANK_CODE)
+fn icici_card_claims(regions: &Regions) -> bool {
+    line_reader::claims(&icici::IciciReader, regions, icici::BANK_CODE)
 }
 
-fn iob_card_claims(full_text: &str) -> bool {
-    line_reader::claims(&iob::IobReader, full_text, iob::BANK_CODE)
+fn iob_card_claims(regions: &Regions) -> bool {
+    line_reader::claims(&iob::IobReader, regions, iob::BANK_CODE)
 }
 
-fn sbi_card_claims(full_text: &str) -> bool {
-    line_reader::claims(&sbi::SbiReader, full_text, sbi::BANK_CODE)
+fn sbi_card_claims(regions: &Regions) -> bool {
+    line_reader::claims(&sbi::SbiReader, regions, sbi::BANK_CODE)
 }
 
-fn yes_card_claims(full_text: &str) -> bool {
-    line_reader::claims(&yes::YesReader, full_text, yes::BANK_CODE)
+fn yes_card_claims(regions: &Regions) -> bool {
+    line_reader::claims(&yes::YesReader, regions, yes::BANK_CODE)
 }
 
 fn read_au_bank(lines: &[String], full_text: &str, line_words: &[LineWords]) -> ParsedStatement {

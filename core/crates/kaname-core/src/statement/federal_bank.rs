@@ -108,6 +108,7 @@ impl LedgerReaderConfig for FederalBankReader {
 mod tests {
     use super::*;
     use crate::model::Direction;
+    use crate::statement::claim::Regions;
     use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
     use rust_decimal_macros::dec;
 
@@ -203,11 +204,27 @@ mod tests {
 
     #[test]
     fn claims_accepts_federal_savings_and_rejects_scapia_credit_card() {
-        assert!(claims_ledger(&FederalBankReader, &classic(), BANK_CODE));
-        assert!(claims_ledger(&FederalBankReader, &fi(), BANK_CODE));
+        assert!(claims_ledger(
+            &FederalBankReader,
+            &Regions::of(&classic()),
+            BANK_CODE
+        ));
+        assert!(claims_ledger(
+            &FederalBankReader,
+            &Regions::of(&fi()),
+            BANK_CODE
+        ));
         // A Scapia/Federal credit-card statement lacks the "Statement of Account" header.
         let cc = "Scapia by Federal Bank\nXXXXXXXXXXXX4836 20Apr2026-19May2026\n";
-        assert!(!claims_ledger(&FederalBankReader, cc, BANK_CODE));
-        assert!(!claims_ledger(&FederalBankReader, &classic(), "ICICI"));
+        assert!(!claims_ledger(
+            &FederalBankReader,
+            &Regions::of(cc),
+            BANK_CODE
+        ));
+        assert!(!claims_ledger(
+            &FederalBankReader,
+            &Regions::of(&classic()),
+            "ICICI"
+        ));
     }
 }

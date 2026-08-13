@@ -17,8 +17,9 @@ use regex::{Captures, Regex};
 
 use crate::model::Direction;
 use crate::statement::base::ParsedStatement;
+use crate::statement::claim::Regions;
 use crate::statement::common::{find_last4, month_year_end, parse_date};
-use crate::statement::line_reader::{claims, read_lines_first_match, LineReaderConfig};
+use crate::statement::line_reader::{read_lines_first_match, LineReaderConfig};
 use crate::statement::polarity::classify;
 
 pub const BANK_CODE: &str = "HDFC";
@@ -128,9 +129,13 @@ pub fn read_hdfc_statement(lines: &[String], full_text: &str) -> ParsedStatement
     read_lines_first_match(&configs, lines, full_text, BANK_CODE)
 }
 
-/// Whether `full_text` is recognizably an HDFC credit-card statement.
-pub fn hdfc_claims(full_text: &str) -> bool {
-    claims(&HdfcYearEnd, full_text, BANK_CODE)
+/// Whether a document is recognizably an HDFC credit-card statement.
+///
+/// Matched against the **header region**, not the whole document: `CLAIM_MARKERS` are title
+/// phrases, and a co-brand card's statement repeats its brand dozens of times inside the
+/// holder's own spending. A statement says what it is at the top or not at all (FR-047).
+pub fn hdfc_claims(regions: &Regions) -> bool {
+    CLAIM_MARKERS.iter().any(|m| regions.header_has(m))
 }
 
 #[cfg(test)]
@@ -191,8 +196,8 @@ mod tests {
     #[test]
     fn claims_gates_by_issuer() {
         let (_, full_text) = year_end();
-        assert!(hdfc_claims(&full_text));
-        assert!(!hdfc_claims("ICICI Bank Statement"));
+        assert!(hdfc_claims(&Regions::of(&full_text)));
+        assert!(!hdfc_claims(&Regions::of("ICICI Bank Statement")));
     }
 
     #[test]

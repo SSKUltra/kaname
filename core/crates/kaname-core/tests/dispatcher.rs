@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
 use kaname_core::statement::{
-    au_bank, federal, federal_bank, hdfc, hdfc_bank, icici, icici_bank, iob, registry, sbi, yes,
+    au_bank, claim, federal, federal_bank, hdfc, hdfc_bank, icici, icici_bank, iob, registry, sbi,
+    yes,
 };
 use kaname_core::{
     detect_issuer, read_au_bank_statement, read_federal_bank_statement, read_federal_statement,
@@ -92,6 +93,159 @@ fn registry_bank_code_matches_the_backing_reader_constant() {
             .unwrap_or_else(|| panic!("missing registry entry {id}"));
         assert_eq!(entry.bank_code, bank_code, "{id}: bank code");
         assert_eq!(entry.kind, kind, "{id}: kind");
+    }
+}
+
+/// **Gate G7** (FR-014): a bank named inside somebody's spending is not the bank that issued
+/// the statement.
+///
+/// Measured, not hypothetical: a real AU savings statement carries the literal `HDFC` inside
+/// a UPI narration, and `hdfc_bank::CLAIM_ALL` is exactly `["HDFC"]`. Before 017 that was held
+/// off only by the document failing every one of HDFC's `CLAIM_ANY` markers — and
+/// whitespace-insensitive matching widens all of them at once. This is the fence that makes
+/// the widening safe, which is why it ships in the same PR.
+#[test]
+fn a_bank_named_in_a_narration_does_not_claim_the_statement() {
+    let text = concat!(
+        "AU Small Finance Bank\n",
+        "Savings Account Details\n",
+        "www.aubank.in\n",
+        "Date Narration Withdrawal Amt. Deposit Amt. Balance\n",
+        "01/04/2026 UPI-PAYEE-HDFC-BANK-0001 5,000.00 95,000.00\n",
+        "02/04/2026 UPI-HDFC-STATEMENTOF ACCOUNT-0002 1,000.00 94,000.00\n",
+    );
+
+    let claimants: Vec<&str> = registry::claimants(text)
+        .iter()
+        .map(|entry| entry.id)
+        .collect();
+    assert_eq!(
+        claimants,
+        vec!["AU_BANK"],
+        "only the issuer whose own header identifies it may claim the document"
+    );
+    assert_eq!(
+        detect_issuer(text.to_string()).map(|i| i.id).as_deref(),
+        Some("AU_BANK")
+    );
+}
+
+/// The same hazard where it would actually change the answer.
+///
+/// `HDFC_BANK` sorts before `ICICI_BANK`, so an HDFC claim on an ICICI document does not
+/// merely add noise — it wins, and the person is told their ICICI savings statement is an
+/// HDFC one. The column header `Withdrawal Amt.` is ordinary on any ledger, and it is
+/// `hdfc_bank::CLAIM_ANY`'s first marker once whitespace stops counting.
+#[test]
+fn a_ledger_is_not_stolen_by_another_bank_named_in_its_rows() {
+    let text = concat!(
+        "ICICI Bank\n",
+        "Statement of Transactions in Savings Account\n",
+        "Date Particulars Withdrawal Amt. Deposit Amt. Balance\n",
+        "01/04/2026 UPI/HDFC/PAYMENT/0001 5,000.00 95,000.00\n",
+    );
+
+    let issuer = detect_issuer(text.to_string()).expect("the ICICI ledger is claimed");
+    assert_eq!(issuer.id, "ICICI_BANK");
+    assert!(
+        !registry::claimants(text)
+            .iter()
+            .any(|entry| entry.id == "HDFC_BANK"),
+        "HDFC must not claim a document that only mentions it inside a transaction row"
+    );
+}
+
+/// **Gate G7, second case** (FR-047): a card statement is identified by its title, not by
+/// where its holder shops.
+///
+/// The measured HDFC co-brand statement contains `Swiggy` roughly forty times inside merchant
+/// descriptions. Product identification (PR B) matches the header region for exactly this
+/// reason, so the region itself has to hold the line first.
+#[test]
+fn a_brand_repeated_in_the_spending_does_not_identify_the_card() {
+    let mut lines = vec![
+        "HDFC Bank Credit Card".to_string(),
+        "Statement for the period 01/04/2026 to 30/04/2026".to_string(),
+    ];
+    for day in 1..=40 {
+        lines.push(format!(
+            "{:02}/04/2026 SWIGGY BANGALORE 4,32{:02}.10",
+            (day % 28) + 1,
+            day % 10
+        ));
+    }
+    let spending_only = lines.join("\n");
+
+    assert!(
+        !claim::header_region(&spending_only).contains("swiggy"),
+        "forty purchases are evidence of where someone eats, not of which card they hold"
+    );
+
+    let mut titled = lines.clone();
+    titled[0] = "Swiggy HDFC Bank Credit Card".to_string();
+    assert!(
+        claim::header_region(&titled.join("\n")).contains("swiggy"),
+        "the title line is where a product may be claimed"
+    );
+
+    // Either way it is still an HDFC card: the widening changes what may be *proven*, never
+    // what is recognised.
+    for text in [spending_only, titled.join("\n")] {
+        assert_eq!(
+            detect_issuer(text).map(|i| i.id).as_deref(),
+            Some("HDFC_CARD")
+        );
+    }
+}
+
+/// The literals in `hdfc_bank::CLAIM_ANY` — `WithdrawalAmt`, `Statementof account` — are
+/// spellings a *different* extractor produced (research R7). Matching a document against the
+/// spacing one extractor happened to emit was always the wrong contract.
+#[test]
+fn a_marker_matches_whatever_spacing_the_extractor_produced() {
+    for header in [
+        "Date Narration WithdrawalAmt. DepositAmt. ClosingBalance",
+        "Date Narration Withdrawal Amt. Deposit Amt. Closing Balance",
+    ] {
+        for title in ["Statementof account", "Statement of account"] {
+            let text = format!("HDFC BANK LIMITED\n{title}\n{header}\n");
+            let issuer = detect_issuer(text.clone())
+                .unwrap_or_else(|| panic!("not claimed: {title} / {header}"));
+            assert_eq!(issuer.id, "HDFC_BANK", "{title} / {header}");
+        }
+    }
+}
+
+/// US2 scenario 3: a header phrase printed as two columns, rejoined by the extractor with a
+/// single space, still identifies the document.
+#[test]
+fn a_header_phrase_split_across_columns_still_resolves() {
+    for spelling in [
+        "Statement of Transactions",
+        "Statement of  Transactions",
+        "Statementof Transactions",
+        "Statement ofTransactions",
+    ] {
+        let text = format!("ICICI Bank\n{spelling}\nSavings Account\n");
+        let issuer = detect_issuer(text).unwrap_or_else(|| panic!("not claimed: {spelling}"));
+        assert_eq!(issuer.id, "ICICI_BANK", "{spelling}");
+    }
+}
+
+/// FR-014: the widening may make an existing claim easier to satisfy. It may never invent one.
+#[test]
+fn a_document_nobody_claimed_is_still_unclaimed() {
+    for text in [
+        "Electricity bill\nnot a statement",
+        "TAX INVOICE\nInvoice No 42\nTotal 1,234.56\n",
+        "Boarding Pass\nSeat 14A\n",
+        "",
+    ] {
+        assert!(
+            registry::claimants(text).is_empty(),
+            "nothing should claim: {text:?}"
+        );
+        assert_eq!(detect_issuer(text.to_string()), None, "{text:?}");
     }
 }
 

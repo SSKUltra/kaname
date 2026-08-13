@@ -101,6 +101,7 @@ impl LedgerReaderConfig for AuBankReader {
 mod tests {
     use super::*;
     use crate::model::Direction;
+    use crate::statement::claim::Regions;
     use crate::statement::ledger_reader::{claims_ledger, read_ledger_lines};
     use rust_decimal_macros::dec;
 
@@ -175,9 +176,17 @@ mod tests {
 
     #[test]
     fn claims_accepts_au_savings_and_rejects_credit_card() {
-        assert!(claims_ledger(&AuBankReader, &savings(), BANK_CODE));
+        assert!(claims_ledger(
+            &AuBankReader,
+            &Regions::of(&savings()),
+            BANK_CODE
+        ));
         let cc = "AU Bank\nYour Credit Card Statement\n4315XXXXXXXX1002\n";
-        assert!(!claims_ledger(&AuBankReader, cc, BANK_CODE));
-        assert!(!claims_ledger(&AuBankReader, &savings(), "HDFC"));
+        assert!(!claims_ledger(&AuBankReader, &Regions::of(cc), BANK_CODE));
+        assert!(!claims_ledger(
+            &AuBankReader,
+            &Regions::of(&savings()),
+            "HDFC"
+        ));
     }
 }
