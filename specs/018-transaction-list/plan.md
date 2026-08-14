@@ -241,18 +241,27 @@ twice and lose a different coffee each time.
 original recommendation: *"a finance app that reorders rows between launches is the trust problem
 018 exists to avoid."*
 
-The change is the minimal one: order dedup's account groups by **`accounts.rowid`** instead of
-`created_at, id` — the same single account ordering R3 establishes for the whole app. The loser
-becomes deterministic and matches the order the person sees. `US1 AS-6` is written RED first
-(the shipped behaviour genuinely fails it) and enabled from PR A onward, and determinism is
-proven **across processes** — the same import on a fresh database must supersede the same row
-every time, since a single-run assertion would have passed against the defect.
+The change is two parts. The **tie-break**: order dedup's account groups by **`accounts.rowid`**
+instead of `created_at, id` — the same single account ordering R3 establishes for the whole app.
+And the **source-kind guard**: cross-account de-duplication only ever compares a bank ledger
+against a credit card, because `find_duplicates_in` currently folds every account against every
+earlier one regardless of kind, so **two credit cards de-duplicate against each other** — which
+013 never intended ("a bank-account ledger and a credit-card statement",
+`specs/013-cross-source-dedup/spec.md:15`) and which hides a purchase the person actually made.
 
-**Deliberately still not answered here:** whether identical rows in two accounts should collapse
-*at all*. A shared card and a joint account will legitimately both print the same purchase, and
-that is a policy question for a slice that owns dedup. This slice makes the outcome
-**deterministic**, not necessarily **right** — the matcher, its layers and the absence of a
-same-institution guard are untouched, and remain recorded findings.
+Without the guard, the tie-break alone leaves one of two identical coffees hidden —
+deterministically, but still hidden — and US1 AS-6 says "neither is mistaken for, merged with, or
+hidden by the other". With both, AS-6 holds as written. `US1 AS-6` is written RED first and
+enabled from PR A onward; determinism is proven **across processes**, since a single-run
+assertion would have passed against the defect; and the bank↔card collapse is fenced by its own
+test before the guard lands, so the narrowing cannot silently delete 013's reason for existing.
+
+**Deliberately still not answered here:** whether a matcher should understand *why* two rows are
+the same purchase. The guard shipped here is blunt — two accounts **of the same kind** are now
+never compared at all, so a person with two bank ledgers, one of which itemises the other's card
+spends, would double-count. That is a smaller wrong than hiding a purchase a person definitely
+made, and it is recorded as an open finding for the slice that owns dedup. The matcher itself,
+its layers and its thresholds are untouched.
 
 ### 2. 🚨 `detectTransfers()` is never called, so FR-018 is vacuous in a real install
 

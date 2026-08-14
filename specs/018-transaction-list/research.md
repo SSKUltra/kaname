@@ -887,10 +887,23 @@ establishes for the whole app. That makes the outcome deterministic, makes it ma
 the person actually sees, and changes nothing about *what* dedup matches. The random-id
 tie-break disappears because `rowid` is total and monotonic.
 
-Scope discipline still applies: this is a **tie-break** change, not a change to the matcher. Do
-**not** add a same-institution guard, do **not** touch `dedup.rs`'s layers, and do **not**
-change which pairs are considered duplicates — those remain findings to record, not work to do
-here.
+Scope discipline still applies: this is a **tie-break** change plus a **source-kind guard**, not a
+change to the matcher. Do **not** touch `dedup.rs`'s layers or thresholds, and do **not** change
+what counts as a match — only *which pairs are offered to it*.
+
+**The tie-break alone was not enough.** Put to the repo owner a second time, because the fix as
+first scoped left one of the person's two coffees hidden — deterministically, but still hidden,
+and US1 AS-6 says "neither is mistaken for, merged with, or hidden by the other". Verified:
+`find_duplicates_in` (`store.rs:1147`) folds **every** account against a pool of all previously
+seen accounts, with no regard to what kind of account either is — so **two credit cards are
+de-duplicated against each other**. 013 never intended that: its spec describes "the same
+purchase appears in two different statements … a bank-account ledger and a credit-card
+statement" (`specs/013-cross-source-dedup/spec.md:15`). Two cards printing a ₹250 coffee on the
+same day are two real purchases.
+
+So the fix is two changes: `accounts.rowid` for the tie-break, **and** a source-kind guard so
+cross-account de-duplication only ever compares a bank ledger against a credit card. AS-6 then
+holds as written.
 
 Consequences:
 
@@ -899,6 +912,12 @@ Consequences:
 - Determinism needs proving across processes, not within one: the same import repeated on a
   fresh database must supersede the **same** row every time. A single-run assertion would have
   passed against the shipped defect.
+- The bank↔card case must be fenced by its own test *before* the guard lands, or the narrowing
+  silently deletes 013's reason for existing.
+- The guard is blunt and it is recorded as such: two accounts of the same kind are now never
+  compared, so a person with two bank ledgers where one itemises the other's spends would
+  double-count. A matcher that understands *why* two rows are the same purchase is a larger
+  question, for the slice that owns dedup.
 - The synthetic corpus for this slice is still built so it does not trip the matcher
   accidentally (R20) — that is about measuring the right thing, and is unaffected.
 
