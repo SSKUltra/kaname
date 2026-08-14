@@ -1,0 +1,220 @@
+# Quickstart: The Transaction List
+
+**Feature**: `018-transaction-list` | **Plan**: [`plan.md`](./plan.md)
+
+Read order for a fresh session: [`spec.md`](./spec.md) → [`plan.md`](./plan.md) →
+[`research.md`](./research.md) (R1–R20, the decisions with measured evidence) →
+[`contracts/engine-history.md`](./contracts/engine-history.md) →
+[`contracts/platform-seams.md`](./contracts/platform-seams.md) →
+[`data-model.md`](./data-model.md) → `tasks.md` (once `/speckit.tasks` has run) → this file.
+
+---
+
+## The one-sentence problem
+
+Import writes a person's financial history to their device, and the app shows them a number.
+
+## The one-paragraph fix
+
+Give the engine two reads — one keyset-paged screenful of every account's live transactions in
+one deterministic order, and one live count per account — then give the app a scrollable,
+date-grouped list that renders them. The live-row rule and the ordering are expressed **once**,
+in SQL, behind one partial index whose `WHERE` clause is byte-identical to the Rust constant
+that names it, so a read that forgets the rule loses its index and a test goes red. Everything
+the person sees is a projection of those two reads: the front door's count, the filtered list,
+the unfiltered list, the empty states.
+
+---
+
+## Build order
+
+Follow the PR split in `plan.md` § *Delivery order*. **A before B is not a preference** — it is
+the FFI boundary, and Tuist resolves the xcframework path at *generation* time.
+
+```text
+A  Engine   🔒  → core: schema v7 index, LIVE, history_page, account_summaries, ffi exports
+B  The list 🎯  → ios: Sources/Transactions/*, StoreProvider, nav, front-door count, audit widen
+C  Filter       → ios: account filter + the six empty states + pluralisation
+D  Detail       → ios: currency, categories, transfers, the full a11y suite
+E  Live & fast  → ios+core: import signal, scroll anchor, perf gates, manual gate, docs
+```
+
+**The build-order trap, in full.** After any change to `core/src/ffi.rs` or any
+`#[uniffi::export]`:
+
+```bash
+make core-xcframework   # rebuilds KanameCoreFFI.xcframework AND regenerates the Swift bindings
+make ios-gen            # tuist generate — resolves the xcframework path AT THIS MOMENT
+```
+
+`make ios-gen` already depends on `core-xcframework`, so **always use `make ios-gen`, never a
+bare `tuist generate`**. Running `tuist generate` before the xcframework is rebuilt produces a
+project that links yesterday's bindings and fails with a "cannot find `HistoryPage` in scope"
+error that looks like a Swift problem and is not.
+
+---
+
+## Verification gate (run before every PR — Constitution § iOS Local Verification Gate)
+
+```bash
+make core-lint          # cargo fmt --check + clippy -D warnings
+make core-test          # engine tests incl. O/L/P/F/S suites and the v6→v7 migration
+make core-privacy-audit # no networking crate reaches the shipped core
+make import-audit       # no networking symbol, no legacy material, no #available(iOS 26)
+make lint               # swiftlint --strict + swift-format lint --strict
+make ios-test           # core-xcframework → tuist generate → simulator build + tests
+```
+
+**Non-negotiable outcomes**
+
+| Check | Requirement |
+|---|---|
+| `EXPLAIN QUERY PLAN` for the page query contains no `SCAN` and no `USE TEMP B-TREE`, on both corpora | SC-006, SC-008a |
+| `sum(account_summaries().live_transaction_count)` equals a full unfiltered read's row count | FR-006, FR-008, SC-004 |
+| A re-imported statement changes neither the row count nor the sequence | FR-009, SC-003 |
+| Ten consecutive full reads are byte-identical | FR-031, SC-009 |
+| `TransactionRowLayout.amountYields == false` for all 12 `DynamicTypeSize` cases | FR-021, SC-013 |
+| `make import-audit` green **with the widened networking scan** covering `ios/Sources/Transactions` | Constitution I, FR-062 |
+| `swiftlint --strict` green — remember `ImportService.swift` is at exactly 400 lines | Constitution |
+
+---
+
+## Smoke test (the shortest path to seeing it work)
+
+1. Land PR A. `make core-test` — the O/L/P/F/S suites go green, **including** the cross-account
+   dedup determinism test: PR A fixes the random-id tie-break (research R17), so no test in this
+   slice is skipped. If any test reports as skipped, something has been quietly disabled.
+2. `make ios-gen && open ios/Kaname.xcworkspace`.
+3. Land PR B. Import a statement, return to the front door, **tap an account row** — the list
+   appears, filtered to that account, newest first.
+4. Back out and use the toolbar item — the same list, unfiltered, every account interleaved by
+   date.
+5. Import the **same** statement again. The count on the front door and the number of rows in
+   the list both stay the same. If one moves and the other does not, the count and the list are
+   being computed in two places again, which is the entire thing this design exists to prevent.
+
+---
+
+## The performance measurement, and how to re-run it
+
+The engine half is automated in `core/crates/kaname-core/tests/history_perf.rs`. Two things
+about the corpus are easy to get wrong and both were measured during planning:
+
+**1. Seed by direct SQL, not through `import_statement`.** Seeding 10,000 rows through the real
+import path takes **11.77 s**; direct SQL takes **151 ms** — 78× — because `find_duplicates_in`
+runs a full cross-account de-duplication on every import. Use the real path for the correctness
+corpus, direct SQL for the performance corpus.
+
+**2. Give every row a globally unique amount and description.** A first attempt at the 10,000-row
+corpus silently de-duplicated itself down to **1,250 live rows** (research R20). A performance
+test that measures an eighth of the corpus it claims to measure is worse than no test.
+
+Reference numbers on the planning machine (M-series Mac, debug build, warm cache), for
+recognising a regression rather than for pass/fail:
+
+| Measurement | Value |
+|---|---|
+| First page, 10,000 rows / 8 accounts, with the v7 index | 254.75 µs |
+| Same, **without** the index | 3.974 ms (and `USE TEMP B-TREE FOR ORDER BY`) |
+| Worst page over a full 10,000-row walk (335 pages) | 289 µs |
+| Median page | 10 µs |
+| Per-account first-page cost, 200/2 vs 10,000/8 | 13% spread (SC-008b budget: 20%) |
+| `account_summaries()` grouped count, 10,000 rows | 0.99 ms |
+| Today's Swift-side `importedAccounts()` count, same corpus | 43.8 ms of Rust time |
+| Index size | 282,624 B on a 2,273,280 B file (+12.4%, ≈28 B/live row) |
+| Cold `Store::open` | 180–260 µs, either corpus |
+
+The wall-clock assertions are set at **25 ms** — roughly 100× the measured value — so they catch
+an algorithmic regression (an accidental full scan, a lost index, an N+1) without going red on a
+loaded CI machine.
+
+---
+
+## Gotchas discovered during planning
+
+| Gotcha | Where it bites |
+|---|---|
+| **`cargo` is not on `PATH`** in a fresh shell. | `export PATH="$HOME/.cargo/bin:$PATH"` before any `cargo` command, or use the `make` targets, which do it for you. |
+| **`ImportService.swift` is at exactly 400 lines** — the SwiftLint `--strict` limit. | Adding *one* line to it fails `make lint`. The one change it takes in PR B must be net-neutral or shorter; everything else goes in `ios/Sources/Transactions/`. |
+| **`std::sync::Mutex` is not reentrant.** | `history_page` and `account_summaries` take `self.lock()` **once** and use `*_in(&conn, …)` helpers thereafter. Re-entering deadlocks the happy path — 016 learned this the hard way, and it is why the "lazy cursor handle across the FFI" design was rejected outright (research R1). |
+| **`list_transactions` is the raw view on purpose.** | It returns deleted and superseded rows and engine tests depend on that. Do not "fix" it. The live rule lands in the new reads. |
+| **`rowid` is *import* order, not *printed* order, across two statements of one account on one date.** | The order stays total, deterministic and stable; it is simply not the paper's. Priced in `data-model.md` §2 — do not re-derive it. |
+| **A partial index is only used when the query's `WHERE` clause matches its own.** | This is a feature: the `LIVE` constant and `SCHEMA_V7`'s `WHERE` must stay byte-identical, and test L6 asserts it. If someone paraphrases one of them, the plan-shape test goes red before anyone sees wrong rows. |
+| **An ASC index does not satisfy this `ORDER BY`.** | `(account_id, date DESC)` is fully satisfied; `(account_id, date)` costs `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`. Measured. |
+| **A `UNION ALL` across accounts is worse than merging in Rust.** | Measured: it reintroduces `USE TEMP B-TREE FOR ORDER BY` twice (research R2, evidence E11). |
+| **`detectTransfers()` is called from no Swift file.** | `is_transfer` is always `0` in a real install, and this slice deliberately does not wire it (research R18; wiring is the categorize slice's work). A test that expects a transfer marking must set the flag itself — via `store.detectTransfers()` or by seeding it directly. Never let a test name imply the app detects transfers. |
+| **Two accounts holding an identical row de-duplicate each other, non-deterministically.** | Fixture rows need globally unique amounts and descriptions or a test will exercise research R17 by accident and fail intermittently. |
+| **`import-path-audit.sh` scans only `ios/Sources/Import` for networking symbols.** | Widen line 15 to `ios/Sources` in PR B, or `ios/Sources/Transactions/` ships with no networking audit at all (research R19). |
+| **The simulator's app container persists between runs.** | `make ios-test` uninstalls first. If you run a suite from Xcode and see a store from a previous corpus, `xcrun simctl uninstall <device> <bundle-id>`. |
+| **A git worktree's `.git` is a file, not a directory**, and Tuist chokes on it. | Plan and build in the main checkout, as 016 and 017 recorded. |
+| **Environment variables reach the test bundle only with the `TEST_RUNNER_` prefix.** | Relevant if a perf or fixture toggle is added on the Swift side. |
+
+---
+
+## The manual, release-blocking gate
+
+Automated tests cover the *decisions*; they cannot see a *screen*. Everything below is run by a
+person on a device and recorded in the PR that closes PR E. **This slice cannot be signed off
+without it** (SC-012, FR-075, research R9 and R12).
+
+### Accessibility (SC-012, FR-065–FR-070)
+
+| # | Check | Requirement |
+|---|---|---|
+| G1 | At the largest accessibility text size, in the unfiltered list, **no amount is truncated or ellipsised** — scroll at least three screenfuls | FR-021, SC-012 |
+| G2 | At the same size, no row's content is clipped by the bottom bar or the home indicator — the finding this replaces is `StaticText '1'` at `{32, 724}` on the accounts list | FR-021, the parked finding |
+| G3 | VoiceOver reads each row as one coherent sentence: date, description, amount **with currency**, direction **in words**, account — and "transfer" where marked | FR-015, FR-018, FR-066 |
+| G4 | The date group heading is announced when the group is entered, and includes the year when it is not the current year | FR-033, FR-035 |
+| G5 | The current account filter is announced, and clearing it is reachable and announced | FR-038, FR-039 |
+| G6 | Reduce Transparency: the list stays legible, glass chrome degrades gracefully, no text on text | FR-067 |
+| G7 | Increase Contrast + Dark Mode: amounts and direction words remain distinguishable **without relying on colour** | FR-013, FR-068 |
+| G8 | While scrolling, the date currently in view stays identifiable | FR-034 |
+
+### Performance on device (SC-006, SC-007, SC-008c)
+
+Run on a real iPhone, release build, with the 10,000-row / 8-account corpus installed.
+
+| # | Check | Requirement |
+|---|---|---|
+| G9 | Time from tapping into the list to the first screenful being readable — **< 1 s** | SC-006 |
+| G10 | Scroll the full corpus: **no blank row persists for more than a moment**; no stutter that reads as a stall | SC-007 |
+| G11 | The same measurement as G9 on a 200-row corpus — the two should not feel like different apps (the engine half is asserted as ≤ 20% in `cargo test`) | SC-008c |
+| G12 | Apply a filter, then clear it — each **< 300 ms**, and the list does not jump to the top of an unrelated position | SC-008, FR-040 |
+| G13 | Start an import while the list is open, scrolled and filtered. The list updates when the import commits; the filter is preserved; the scroll position is preserved; **no partially-written statement is ever visible** | FR-053, FR-054, FR-056, SC-010 |
+| G14 | Cancel an import mid-way with the list open. **Nothing changes** on the list | FR-055 |
+
+### Record here
+
+| Field | Value |
+|---|---|
+| Device / iOS build | _to fill_ |
+| App build (commit) | _to fill_ |
+| Date run | _to fill_ |
+| G1–G8 result | _to fill_ |
+| G9 / G11 measured | _to fill_ |
+| G12 measured | _to fill_ |
+| Notes | _to fill_ |
+
+---
+
+## Definition of done
+
+- [ ] The front door's account rows are tappable and lead to the list (US1)
+- [ ] The unfiltered list interleaves every account by date, newest first (US1, FR-028)
+- [ ] The order is total, deterministic and stable — proved by O1–O7 (FR-031, SC-009)
+- [ ] Re-importing a statement changes neither the count nor the list (US2, SC-003)
+- [ ] The front-door count comes from the engine, from the same rule as the list (FR-008, SC-004)
+- [ ] Deleted and superseded rows never appear anywhere (FR-007, SC-005)
+- [ ] The filter shows exactly one account, names itself, and is always clearable (US3, FR-038)
+- [ ] The filter is `.all` on every launch (FR-041)
+- [ ] Dates group across accounts, with the year shown when it is not the current year (US4)
+- [ ] No total, subtotal, balance or average exists anywhere in the code (FR-025, FR-026)
+- [ ] Each amount shows its own transaction's currency (US5, SC-011)
+- [ ] Categories and transfer markings render what the engine recorded (US6)
+- [ ] All six empty states are correct, and none of them blames the person (US7, FR-051)
+- [ ] The list keeps up with an import without losing filter or scroll position (US8, SC-010)
+- [ ] Engine perf gates green: no `SCAN`, no temp b-tree, every bound met (SC-006–SC-008a/b)
+- [ ] Every fixture synthetic; no real merchant, amount pattern or account identifier (SC-017)
+- [ ] `make core-lint && make core-test && make lint && make ios-test && make import-audit` green
+- [ ] **Manual gate recorded above** with device, build and date (SC-012, SC-008c)
+- [ ] `.scratch/HANDOFF.md` and `AGENTS.md` updated; R17 and R18 carried forward as open items

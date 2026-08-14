@@ -1142,10 +1142,29 @@ fn load_account_rows(
 pub fn find_duplicates_in(tx: &rusqlite::Transaction<'_>) -> Result<DedupSummary, StoreError> {
     let by_account = load_dedup_candidates(tx)?;
     let mut links: Vec<(String, String, DedupLayer)> = Vec::new();
-    let mut pool: Vec<(String, Transaction)> = Vec::new();
+    let mut pool: Vec<(String, Transaction, bool)> = Vec::new();
 
-    for incoming in by_account {
-        let existing_txns: Vec<Transaction> = pool.iter().map(|(_, t)| t.clone()).collect();
+    for DedupGroup {
+        is_credit_card: incoming_is_card,
+        rows: incoming,
+    } in by_account
+    {
+        // ⚠️ Only a bank ledger against a credit card, never two of a kind. Slice 013 exists
+        // for one purchase that appears in *two different sources* — a spend showing up on
+        // both a ledger and a card statement. Two cards printing the same coffee on the same
+        // day are two real purchases, and collapsing them hides money a person actually spent.
+        // The matcher itself is untouched; this decides only which pairs it is asked about.
+        let candidates: Vec<usize> = pool
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, _, is_card))| *is_card != incoming_is_card)
+            .map(|(index, _)| index)
+            .collect();
+
+        let existing_txns: Vec<Transaction> = candidates
+            .iter()
+            .map(|&index| pool[index].1.clone())
+            .collect();
         let incoming_txns: Vec<Transaction> = incoming.iter().map(|(_, t)| t.clone()).collect();
         let matches = crate::dedup::cross_source_duplicates(&existing_txns, &incoming_txns);
 
@@ -1157,10 +1176,12 @@ pub fn find_duplicates_in(tx: &rusqlite::Transaction<'_>) -> Result<DedupSummary
             layer,
         } in matches
         {
+            // `existing_index` indexes the filtered list handed to the matcher, not the pool.
+            let winner = candidates[existing_index as usize];
             let (loser_id, _) = &incoming[incoming_index as usize];
-            let (winner_id, _) = &pool[existing_index as usize];
+            let (winner_id, _, _) = &pool[winner];
             links.push((loser_id.clone(), winner_id.clone(), layer));
-            consumed[existing_index as usize] = true;
+            consumed[winner] = true;
             superseded[incoming_index as usize] = true;
         }
 
@@ -1175,7 +1196,7 @@ pub fn find_duplicates_in(tx: &rusqlite::Transaction<'_>) -> Result<DedupSummary
                 .into_iter()
                 .zip(superseded)
                 .filter(|(_, dup)| !dup)
-                .map(|(row, _)| row),
+                .map(|((id, txn), _)| (id, txn, incoming_is_card)),
         );
     }
 
@@ -1379,18 +1400,36 @@ fn load_transfer_inputs(conn: &Connection) -> Result<Vec<TransferInput>, StoreEr
         .collect()
 }
 
-/// Load the de-duplication candidates — every non-deleted row that is not already linked as a
-/// duplicate — as `(id, Transaction)` pairs **grouped by account, oldest account first**.
+/// One account's de-duplication candidates, tagged with the kind of account they came from.
 ///
-/// The grouping is what turns the pure matcher's two-list contract into a store-wide sweep:
-/// account order (`accounts.created_at`, tie-broken on `id` so it is total and deterministic)
-/// decides which side of a duplicate survives. Rows within an account keep insertion order.
-fn load_dedup_candidates(conn: &Connection) -> Result<Vec<Vec<(String, Transaction)>>, StoreError> {
+/// The tag is load-bearing: [`find_duplicates_in`] may only compare a bank ledger against a
+/// credit card, never two of a kind.
+struct DedupGroup {
+    is_credit_card: bool,
+    rows: Vec<(String, Transaction)>,
+}
+
+/// Load the de-duplication candidates — every non-deleted row that is not already linked as a
+/// duplicate — as one [`DedupGroup`] per account, **in the order the person sees their
+/// accounts**.
+///
+/// The grouping is what turns the pure matcher's two-list contract into a store-wide sweep, and
+/// the group order decides which side of a duplicate survives. That order is `accounts.rowid` —
+/// the same single ordering [`Store::list_accounts`] uses, so the row that survives always
+/// belongs to the account shown first.
+///
+/// ⚠️ It used to be `a.created_at, a.id`. Two accounts created by one import share a
+/// `created_at` to the second, so the tie-break fell through to `a.id`, which is
+/// `lower(hex(randomblob(16)))` — and *which* of a person's rows disappeared was decided by 128
+/// random bits, differently on every fresh database. `rowid` is total and monotonic, so there is
+/// nothing left to tie-break.
+fn load_dedup_candidates(conn: &Connection) -> Result<Vec<DedupGroup>, StoreError> {
     let mut stmt = conn.prepare(
-        "SELECT t.account_id, t.id, t.date, t.description_raw, t.amount, t.direction \
+        "SELECT t.account_id, t.id, t.date, t.description_raw, t.amount, t.direction, \
+                a.is_credit_card \
          FROM transactions t JOIN accounts a ON a.id = t.account_id \
          WHERE t.is_deleted = 0 AND t.superseded_by IS NULL \
-         ORDER BY a.created_at, a.id, t.rowid",
+         ORDER BY a.rowid, t.rowid",
     )?;
     let raw = stmt
         .query_map([], |row| {
@@ -1401,13 +1440,14 @@ fn load_dedup_candidates(conn: &Connection) -> Result<Vec<Vec<(String, Transacti
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, String>(5)?,
+                row.get::<_, i64>(6)? != 0,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
-    let mut grouped: Vec<Vec<(String, Transaction)>> = Vec::new();
+    let mut grouped: Vec<DedupGroup> = Vec::new();
     let mut current_account: Option<String> = None;
-    for (account_id, id, date, description, amount, direction) in raw {
+    for (account_id, id, date, description, amount, direction, is_credit_card) in raw {
         let txn = Transaction::new(
             date_from_sql(&date)?,
             description,
@@ -1415,12 +1455,16 @@ fn load_dedup_candidates(conn: &Connection) -> Result<Vec<Vec<(String, Transacti
             direction_from_sql(&direction)?,
         );
         if current_account.as_deref() != Some(account_id.as_str()) {
-            grouped.push(Vec::new());
+            grouped.push(DedupGroup {
+                is_credit_card,
+                rows: Vec::new(),
+            });
             current_account = Some(account_id);
         }
         grouped
             .last_mut()
             .expect("a group was just pushed for this account")
+            .rows
             .push((id, txn));
     }
     Ok(grouped)
@@ -2166,7 +2210,7 @@ mod tests {
     }
 
     #[test]
-    fn load_dedup_candidates_groups_by_account_oldest_first_and_excludes_linked() {
+    fn load_dedup_candidates_groups_by_account_rowid_and_excludes_linked() {
         let mut conn = Connection::open_in_memory().expect("in-memory db");
         {
             let tx = conn.transaction().unwrap();
@@ -2175,8 +2219,9 @@ mod tests {
             }
             tx.pragma_update(None, "user_version", SCHEMA_VERSION)
                 .unwrap();
-            // `newer` is inserted first but created later, so ordering must follow
-            // `created_at`, not insertion order.
+            // `newer` is inserted first and carries the later `created_at`. Ordering follows
+            // `accounts.rowid` — insertion order, the same order `list_accounts` returns and
+            // the person sees — so `newer` comes first and nothing is left to tie-break.
             tx.execute(
                 "INSERT INTO accounts \
                  (id, name, bank_code, is_credit_card, currency, created_at, updated_at) \
@@ -2199,12 +2244,19 @@ mod tests {
         }
 
         let grouped = load_dedup_candidates(&conn).expect("load");
-        let ids: Vec<Vec<&str>> = grouped
+        let ids: Vec<(bool, Vec<&str>)> = grouped
             .iter()
-            .map(|g| g.iter().map(|(id, _)| id.as_str()).collect())
+            .map(|group| {
+                (
+                    group.is_credit_card,
+                    group.rows.iter().map(|(id, _)| id.as_str()).collect(),
+                )
+            })
             .collect();
-        // Older account first; the deleted (`o2`) and already-linked (`o3`) rows are excluded.
-        assert_eq!(ids, vec![vec!["o1"], vec!["n1"]]);
+        // Insertion order, each group carrying its account's kind so `find_duplicates_in` can
+        // refuse to compare two of a kind; the deleted (`o2`) and already-linked (`o3`) rows
+        // are excluded.
+        assert_eq!(ids, vec![(true, vec!["n1"]), (false, vec!["o1"])]);
     }
 
     #[test]
