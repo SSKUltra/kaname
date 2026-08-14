@@ -146,9 +146,229 @@ Two-layer repo (`plan.md` → Project Structure):
 
 **Purpose**: Fix the visual and copy contract before building. Kaname has no Figma tooling; the visual contract of record is `contracts/platform-seams.md` §3–§4 plus research R12/R13 and `.github/skills/swiftui-liquid-glass/SKILL.md`.
 
-- [ ] T045 [Design] Walk the glass application points for this screen against `.github/skills/swiftui-liquid-glass/SKILL.md`: glass on **exactly one** element — the filter chrome, in a `GlassEffectContainer`, on an **opaque** bar via `.safeAreaBar(edge: .bottom)`; **never** under rows or numbers ("the transaction list, statement rows, and any table of numbers stay on opaque backgrounds" is the skill's own words); the app's accent (`ios/Sources/Theme.swift`), never the system default. Record any deviation as a note in this file **before** building — do not edit the FINAL design artifacts.
-- [ ] T046 [Design] Write the copy deck: the exact user-facing sentence for each of the **six** empty states (`data-model.md` §6), the direction words ("debit" / "credit"), the uncategorized label, the transfer marking, the filter chrome's wording and the row accessibility sentence's shape. Every sentence is hand-written. The only engine-supplied strings permitted on screen are the account name, the description as printed, and the category name. **No sentence may imply transfers are detected** (FR-018).
-- [ ] T047 [Design] Trace the state machine in `data-model.md` §5 and the empty-state table in §6 against the six rows: confirm every branch has a destination, that rows 4–6 are distinguishable from row 1 with only `[AccountSummary]` and the filter in hand, and that nothing needs a field `AccountSummary` does not carry. If a branch cannot be decided from those two inputs, stop and raise it rather than adding a count that breaks FR-008.
+- [x] T045 [Design] Walk the glass application points for this screen against `.github/skills/swiftui-liquid-glass/SKILL.md`: glass on **exactly one** element — the filter chrome, in a `GlassEffectContainer`, on an **opaque** bar via `.safeAreaBar(edge: .bottom)`; **never** under rows or numbers ("the transaction list, statement rows, and any table of numbers stay on opaque backgrounds" is the skill's own words); the app's accent (`ios/Sources/Theme.swift`), never the system default. Record any deviation as a note in this file **before** building — do not edit the FINAL design artifacts.
+- [x] T046 [Design] Write the copy deck: the exact user-facing sentence for each of the **six** empty states (`data-model.md` §6), the direction words ("debit" / "credit"), the uncategorized label, the transfer marking, the filter chrome's wording and the row accessibility sentence's shape. Every sentence is hand-written. The only engine-supplied strings permitted on screen are the account name, the description as printed, and the category name. **No sentence may imply transfers are detected** (FR-018).
+- [x] T047 [Design] Trace the state machine in `data-model.md` §5 and the empty-state table in §6 against the six rows: confirm every branch has a destination, that rows 4–6 are distinguishable from row 1 with only `[AccountSummary]` and the filter in hand, and that nothing needs a field `AccountSummary` does not carry. If a branch cannot be decided from those two inputs, stop and raise it rather than adding a count that breaks FR-008.
+
+### Design contract — RECORDED (T045–T047)
+
+*Written before any UI, per T045's instruction. The FINAL artifacts (`spec.md`, `plan.md`,
+`data-model.md`, `contracts/`) are **not** edited; everything this walk found is recorded here.
+T056, T060, T061, T088, T096, T098 and their RED suites build from this section.*
+
+---
+
+#### T045 — The glass walk
+
+**Application points, element by element.** Glass appears on exactly one *region* of this
+screen, and never on anything a figure is read against.
+
+| Element | Glass? | Why |
+|---|---|---|
+| Transaction rows, amounts, dates, account names | **No** — opaque `List` rows | FR-068, W1; the skill's own words: "the transaction list, statement rows, and any table of numbers stay on opaque backgrounds" |
+| Date group headers (`Section` headers) | **No** — system `List` chrome, unmodified | skill: don't re-skin system chrome |
+| Navigation bar + back affordance | **System** — gets Liquid Glass for free | skill: let the system own its chrome |
+| The filter bar's **background** | **No** — opaque `.background(.background)`, pinned by `.safeAreaBar(edge: .bottom)` | FR-069, W3 |
+| The scope button + the clear button **inside** that bar | **Yes** — `.buttonStyle(.glass)`, both in one `GlassEffectContainer(spacing: 12)` | the screen's only glass |
+| The transfer marker, the uncategorized label, the direction sign | **No** | they live inside rows; a static badge never gets glass (skill: `.interactive()` only where there is interaction) |
+| An empty state's action button | **Glass, non-prominent** — except the one state where it is the only glass on screen (see D2) | at most one prominent element per screen |
+
+**Rules this screen commits to:**
+
+- **`.buttonStyle(.glass)`, never a hand-glassed `Text` with a tap gesture**, and never an
+  additional `.glassEffect(.regular.interactive())` on top of a `Button` — the built-in style
+  already carries interactivity.
+- **One container, one shape.** Both bar buttons are `.capsule` (the default). Mixed radii inside
+  one container is the single most common way a glass screen reads wrong.
+- **Morphing, not cross-fading.** The clear button appears and disappears with the filter, so it
+  and the scope button carry `@Namespace` + `.glassEffectID(_:in:)`, and the filter change happens
+  inside `withAnimation`.
+- **No tint anywhere in `ios/Sources/Transactions/`.** `KanameApp.swift:10` already applies
+  `.tint(.kanameAccent)` app-wide, so the app's accent is structural: a view in this directory
+  that passes **any** `.tint(...)` is the only way the system default could come back, and none
+  will. Debit/credit colour is **redundant** (the sign glyph and the a11y word are the carriers,
+  FR-013/FR-071) and rows are never glassed, so the skill's "never a red/green amount on tinted
+  glass" rule cannot be violated here.
+- **Reduce Transparency / Increase Contrast** are handled by the native material substitution;
+  nothing on this screen carries meaning through the material itself (FR-070). The filtered state
+  is carried by **words** — the account's name in the scope button — never by the glass.
+- **Order.** If any raw `.glassEffect(...)` is ever added, it goes **after** padding/frame/font.
+
+**Deviations, recorded before building:**
+
+- **D1 — Glass on an opaque bar refracts the bar, not content.** The skill says glass "needs
+  content behind it to refract"; here there is deliberately nothing behind it. FR-068/FR-069
+  outrank that guidance on this screen: the glass buys the native control treatment and touch
+  response, not a material effect. Accepted as a deliberate trade, not an oversight.
+- **D2 — `.buttonStyle(.glassProminent)` is permitted in exactly one state**: empty state 1
+  ("nothing imported yet"), where the filter bar is absent (D3) and the import action is therefore
+  the *only* glass element on screen. Every other empty state's action is `.buttonStyle(.glass)`,
+  because the filter bar is on screen with it and two prominent elements make prominence
+  meaningless. This narrows "exactly one glass element", it does not widen it.
+- **D3 — The filter bar is hidden when `summaries.isEmpty`.** FR-038 ("the filtered account named
+  at all times") is vacuous when there are no accounts and no filter can be set; a bar reading
+  "All accounts" above a screen that says nothing was imported is a contradiction.
+- **D4 / D5** — two model-shaped deviations, recorded under T047 as **E3** and **E4**.
+
+---
+
+#### T046 — The copy deck
+
+Every sentence below is hand-written and belongs in `TransactionListStrings.swift` (T056). The
+only engine-supplied strings that reach the screen are the **account name**, the **description as
+printed**, and the **category name**. The masked last-4 is rendered through the app's own
+`"•••• %@"` template — the same identity shape the front door already shows (FR-003) — never as
+raw engine text. Dates and amounts are formatted by the app.
+
+**Screen and navigation**
+
+| Key | String |
+|---|---|
+| `title` | `Transactions` |
+| `frontDoorLinkTitle` (N3 toolbar item) | `All transactions` |
+| `loadingAnnouncement` | `Loading transactions` |
+
+**Filter chrome** (FR-003, FR-038, FR-039)
+
+| Key | String |
+|---|---|
+| `scopeAll` | `All accounts` |
+| `scopeAccount(name:last4:)` | `<name>` with `•••• <last4>` beneath it; `<name>` alone when no last-4 |
+| `menuHeader` | `Show transactions from` |
+| `clearFilter` | `Show all accounts` |
+| `scopeAccessibilityAll` | `Showing all accounts` |
+| `scopeAccessibilityAccount` | `Showing <name>, ending <last4> only` — `Showing <name> only` without a last-4 |
+| `scopeAccessibilityHint` | `Choose which account to show` |
+
+**A row** (FR-012–FR-021)
+
+| Key | String / shape |
+|---|---|
+| `directionWordDebit` | `debit` |
+| `directionWordCredit` | `credit` |
+| direction glyph on the amount | `−` (U+2212 MINUS SIGN) for a debit, `+` for a credit — **the** at-a-glance carrier, so colour is never the only one (FR-013). It is rendered from the recorded `Direction`, never from the sign of the amount (FR-014). |
+| `uncategorized` | `Uncategorized` |
+| `transferMarker` | `Transfer` (with `arrow.left.arrow.right`, so the marking is never colour alone) |
+| `missingDescription` | `No description` — so an empty description still yields a complete, announceable row (FR-020) |
+| `accountIdentity(name:last4:)` | `<name> ending <last4>` / `<name>` |
+| `rowAccessibilityLabel` | **`<date>, <description>, <amount> <direction word>, <account identity>, <category>`**, plus `, transfer` when the flag is set. Example: `12 August 2026, Coffee shop, ₹450.00 debit, Example Bank Credit Card ending 1002, Uncategorized, transfer` |
+
+⚠️ **Nothing here claims transfers are detected** (FR-018). The word is the bare noun `Transfer`
+and the announcement is the bare `transfer` — never "detected", "found", "matched" or
+"automatically". The app does not run detection today (research R18), and no string may imply
+otherwise, in the UI, a test name or a release note.
+
+**Date groups** (FR-026, FR-033–FR-035, FR-052, FR-072)
+
+| Key | String |
+|---|---|
+| visible heading, current year | `12 August` |
+| visible heading, any other year | `12 August 2025` |
+| `groupAccessibilityLabel` | `12 August, 3 transactions` — singular `1 transaction` at one |
+
+- **The visible heading carries no count and no figure.** FR-026 permits a count; leaving it off
+  the *visible* heading keeps "a heading can never hold a sum" obvious at a glance.
+- **The count moves to the heading's accessibility label**, where it is genuinely useful (it tells
+  a VoiceOver reader how large the group is) and where it is unambiguously a count of
+  transactions, not money. **This is the pluralisation helper's real, tested user** (FR-052,
+  SC-013) — without it, the helper and its singular/plural test would be vacuous in this slice.
+  The front door's existing count sentence (`ImportedAccountsView.announcement`) stays where it
+  is: routing it through `TransactionListStrings` would breach H5's layering.
+- The "current year" comes from the **injected clock** (V6), never `Date()` inside a formatter.
+
+**The six empty states** (`data-model.md` §6 → FR-047–FR-052)
+
+| # | Title | Message | Action |
+|---|---|---|---|
+| 1 | `Nothing imported yet` | `Import a statement and the transactions in it will appear here.` | `Import a statement` (D2: the one prominent button; wired to `RootView`'s existing picker, T099) |
+| 2 | `No transactions` | `The statements you imported didn't have any transactions in them.` | — |
+| 3 | `Nothing to show` | `There's nothing to show here yet. Import another statement to see transactions.` | `Import a statement` |
+| 4 | `No transactions` | `The statement you imported for <name> didn't have any transactions in it.` | — |
+| 5 | `Nothing to show` | `There's nothing to show for <name>.` | `Show all accounts` |
+| 6 | `No transactions for <name>` | row 4's or row 5's sentence, followed by `Other accounts have transactions.` (see E3) | `Show all accounts` |
+
+Wording rules these are written to satisfy, each asserted by a test rather than reviewed:
+
+- **No empty-state string contains** `lost`, `missing`, `gone`, `error` or `failed` (FR-051).
+  None of the six does. Row 4 is phrased as a fact about the statement, never as a failure, and
+  never as "nothing imported yet" (FR-048).
+- **No string contains an id, an internal code or a layer name** (FR-019, SC-016).
+- **The only interpolations are** the account name and the masked last-4.
+
+**The unavailable state** (H4, FR-063 — not an empty state)
+
+| Key | String |
+|---|---|
+| `unavailableTitle` | `Transactions are unavailable` |
+| `unavailableMessage` | `Kaname couldn't open your transactions just now. Everything is still stored on this device.` |
+| `unavailableRetry` | `Try again` (see E4) |
+
+No raw error text, no identifier, no description, amount, date or account crosses into it — the
+`TransactionListError` it is rendered from carries none of those (H4).
+
+---
+
+#### T047 — The state-machine and empty-state trace
+
+**Sufficiency — the question T047 exists to answer.** Every branch decides from
+`[AccountSummary]` and `AccountFilter` alone:
+
+```text
+if summaries.isEmpty                                  -> 1  nothingImported
+if filter == .account(id, name, last4):
+    others = summaries.contains { $0.id != id && $0.liveTransactionCount > 0 }
+    guard let mine = summaries.first(where: { $0.id == id }) else { -> E4 }
+    if others  -> 6  accountEmptyOthersHaveRows(name, statementWasEmpty: !mine.hasOnlyExcludedRows)
+    if mine.hasOnlyExcludedRows -> 5  accountNothingToShow(name)
+    else                        -> 4  accountStatementEmpty(name)
+else (.all):
+    if summaries.contains(\.hasOnlyExcludedRows) -> 3  nothingToShowAnywhere
+    else                                         -> 2  noTransactionsAnywhere
+```
+
+- **E6 — No field is missing.** Rows 4/5 need `hasOnlyExcludedRows`; row 6 needs
+  `liveTransactionCount > 0` on *another* summary; rows 2/3 need `hasOnlyExcludedRows` across the
+  set; naming needs `name` + `last4`. `AccountSummary` carries all of them, and **no count beyond
+  `liveTransactionCount` is required** — so nothing here tempts a second population and FR-008
+  holds structurally.
+- **E7 — Rows 4–6 can never be confused with row 1.** Row 1 is `summaries.isEmpty`; rows 4–6 all
+  require a filter over a non-empty `summaries`. The two conditions are mutually exclusive by
+  construction, not by ordering.
+
+**Findings raised (none required a change to a FINAL artifact):**
+
+- **E1 — `data-model.md` §5's diagram says `empty (4 kinds)`; §6's table has six rows**, and both
+  `contracts/platform-seams.md` V8 and T093 say six. **The table is authoritative — six cases.**
+  The diagram's parenthetical is stale; recorded rather than edited.
+- **E2 — `empty` and `unavailable` are drawn as terminal, and must not be.** Both must accept the
+  same `filter changed` and `import completed` edges that `showing` accepts, or a person who lands
+  on "Nothing imported yet", imports a statement, and stays stuck on it. Both edges re-enter
+  `loading`. T058 implements it; the US7 suite pins it.
+- **E3 (D4) — Row 6's precedence over rows 4–5 was ambiguous.** Read as *replaces*, FR-048's
+  distinct "this statement had no transactions" state becomes nearly unreachable, since it would
+  additionally require every *other* account to be empty — which inverts FR-048's intent. §6's own
+  sentence resolves it: "row 6 **refines** rows 4–5 rather than replacing them". So case 6 keeps
+  the account's own reason and *adds* the filter as a reason plus the clear action, carried as an
+  associated **`statementWasEmpty: Bool`**. Still six cases, one per table row (T093 holds); the
+  Bool is derived from `hasOnlyExcludedRows` and can never be rendered as a count.
+- **E4 (D5) — A filter naming an account absent from `summaries` has no row in §6.** It is
+  unreachable today (there is no delete path, and `data-model.md` §3 makes an unknown `account_id`
+  an **empty page, not an error**), but the decision must be total. It resolves to **case 6** —
+  named from the filter's own payload, with the clear action — when any other account has rows,
+  and otherwise to case 2/3 with the clear action offered. No new field, no throw, no
+  silently-cleared filter (which would breach FR-038's "named at all times").
+- **E5 — `loadingMore` and `refreshing` in §5 are phases, not `State` cases.** The contract's enum
+  is `.loading | .showing | .empty(EmptyKind) | .unavailable` with a separate `isLoadingMore: Bool`
+  and a `refreshAfterImport()` that stays in `showing`. **T058 must not add enum cases for them** —
+  a `.refreshing` case would make V3's "the filter and the anchor survive a refresh" a transition
+  to prove rather than an invariant that cannot be broken.
+- **E8 — `unavailable` had no outgoing edge at all.** `Try again` (T046) gives it one, re-entering
+  `loading`. Nothing in the spec requires the action; a dead-end screen behind a transient store
+  error is worse than one extra string, and it costs no new state.
+
+**Checkpoint**: The visual contract, the copy and the state machine are fixed. UI may be built.
+
+---
 
 ## Phase 3: User Story 1 — See everything I have, across every account (Priority: P1) 🎯 MVP
 
