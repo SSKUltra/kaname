@@ -124,6 +124,7 @@ private struct ImportPipeline: Sendable {
 
     /// Every account the store holds, with the weight of what is in it. The count is the
     /// evidence: an account with no transactions behind it would be a claim, not a fact.
+    /// Live rows only — see `StoredTransaction.isLive`.
     fileprivate func importedAccounts() throws -> [ImportedAccount] {
         do {
             return try store.listAccounts().map { account in
@@ -132,7 +133,7 @@ private struct ImportPipeline: Sendable {
                     name: account.name,
                     last4: account.last4,
                     isCreditCard: account.isCreditCard,
-                    transactionCount: try store.listTransactions(accountId: account.id).count
+                    transactionCount: try store.listTransactions(accountId: account.id).filter(\.isLive).count
                 )
             }
         } catch {

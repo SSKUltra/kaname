@@ -76,6 +76,18 @@ struct ImportedAccount: Identifiable, Equatable, Sendable {
     let transactionCount: Int
 }
 
+extension StoredTransaction {
+    /// Is this a transaction the person actually has?
+    ///
+    /// ⚠️ `Store.listTransactions` is the store's **raw** view: it returns deleted rows, and
+    /// it returns the superseded losers of a de-duplication. Both are kept on purpose — a
+    /// re-import writes every row again and *links* the repeats rather than dropping them
+    /// (FR-025), so the provenance survives. Neither is history, and any screen that counts
+    /// or lists transactions must say so, or it will show a person their spending doubling
+    /// the moment they import the same statement twice.
+    var isLive: Bool { !isDeleted && supersededBy == nil }
+}
+
 /// The import stopped to ask which account this statement belongs to, because more than one
 /// answer was possible — or none was. Nothing has been written at this point.
 struct AccountChoice: Equatable, Sendable {

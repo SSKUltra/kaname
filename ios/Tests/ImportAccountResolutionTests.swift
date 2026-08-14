@@ -271,4 +271,23 @@ struct ImportAccountResolutionTests {
         #expect(stored.count == 2)
         #expect(stored.filter { $0.supersededBy == nil }.count == 1)
     }
+
+    @Test("The front door counts what a person has, not what was written to reach it")
+    func reimportDoesNotInflateTheAccountsList() async throws {
+        let db = Self.tempDatabase()
+        defer { try? FileManager.default.removeItem(at: db.dir) }
+        let store = try Store.open(path: db.path, key: Self.key)
+
+        let service = Self.service(lines: Self.cardWithLast4, store: store)
+        _ = try await service.run(url: Self.anyURL, password: nil) { _ in }
+        let afterFirst = try #require(try await service.importedAccounts().first)
+        #expect(afterFirst.transactionCount == 1)
+
+        _ = try await Self.service(lines: Self.cardWithLast4, store: store)
+            .run(url: Self.anyURL, password: nil) { _ in }
+
+        // The superseded repeat is still in the database, on purpose. It is not history.
+        let afterSecond = try #require(try await service.importedAccounts().first)
+        #expect(afterSecond.transactionCount == 1)
+    }
 }
