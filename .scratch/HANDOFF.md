@@ -162,6 +162,40 @@ are release-blocking:
   re-import, then the failure matrix (image-only, password right and wrong, corrupt, `.txt`
   renamed `.pdf`, a utility bill, cancel mid-parse).
 
+### T129 — first run: three findings, one fixed
+
+A first pass over §5 was run on the simulator. The 4-tap path, force-quit/relaunch and the
+failure matrix all behaved. **The same-file re-import did not**, and two further questions came
+out of it. T129 stays unticked until 2 and 3 are decided.
+
+1. ✅ **FIXED (`3ba7890`) — the accounts list doubled on a re-import.** The engine was right:
+   the repeat is inserted, then pointed at the row it duplicates via `superseded_by`, so
+   nothing is deleted and provenance survives (FR-025). `Store::list_transactions` is the
+   store's **raw** view and returns those superseded losers — plus deleted rows — and the
+   front door counted it directly. The summary said "1 duplicate skipped" while the screen
+   behind it said 2, which is exactly the doubling FR-025 exists to prevent. The predicate now
+   lives on **`StoredTransaction.isLive`** (`ImportModels.swift`) with the reason beside it:
+   **every P3 screen that lists or counts transactions must use it**, and each one can get
+   this wrong the same way. Pinned by `reimportDoesNotInflateTheAccountsList`.
+2. ⚠️ **Open, needs a decision — a corrupt PDF and a `.txt` renamed `.pdf` give the same
+   sentence.** `StatementTextExtractor.swift:61` maps *any* nil `PDFDocument` to `.notAPDF`, so
+   both read *"That file isn't a PDF"*; `.unreadable` is reserved for bytes that can't be read
+   at all (line 57). §5 asks for a distinct sentence per matrix row. Either the matrix is six
+   cases by design, or the extractor should sniff the `%PDF` header to separate "not a PDF at
+   all" from "a PDF I couldn't parse". Found by reading the code, not observed on device.
+3. ⚠️ **Open, needs a decision — the summary counts rows written, not rows kept.**
+   `transactionsImported` is `outcome.transactionsInserted`, so a re-import reads "1 imported,
+   1 duplicate skipped". Internally consistent, arguably self-contradictory. FR-033 doesn't
+   settle it. Deliberately left alone — it is a product call, not a bug.
+
+**The seven documents §5 needs are synthetic and can be regenerated**, so no statement is ever
+needed to run this gate: a supported ICICI card statement (detects `ICICI_AMAZONPAY_CARD`, 3
+rows), image-only, password-protected, corrupt, `.txt`-as-`.pdf`, a utility bill
+(`detect_issuer` → `None`), and a long one to cancel mid-parse. The generator is a throwaway
+CoreGraphics script — `CGContext(url:mediaBox:)` with `kCGPDFContextUserPassword` for the
+locked one, a rasterised page for the image-only one, and a half-truncated valid PDF for the
+corrupt one.
+
 **What PR E settled — don't re-litigate it:**
 
 - **The integrity verdict is on screen, in three states.** A reconciling statement confirms
