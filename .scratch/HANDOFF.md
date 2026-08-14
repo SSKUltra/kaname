@@ -19,13 +19,18 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/018-transaction-list/`, resuming at T045 (PR B).**
+**The live one is `specs/018-transaction-list/`, resuming at T071 (PR B, US2).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
 `Status:` line (`needs-triage`/`needs-info`/`ready-for-agent`/`ready-for-human`/`wontfix`,
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
+
+⚠️ **One thing *is* open here**: `.scratch/016-statement-import-vertical/issues/01-front-door-contrast-dark-mode-largest-text.md`
+(`Status: ready-for-human`) — **`make ios-test` is red on unmodified `main`**, and every slice
+after 016 inherits a gate it cannot pass. Read it before running any iOS gate and concluding
+you broke something.
 
 ⚠️ **Don't conclude "no work left" from an empty `.scratch/` queue** — that is the older
 tracker. Check §3.
@@ -67,17 +72,42 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR B — the list itself, starting at T045.**
+**⬅️ NEXT: `018-transaction-list`, PR B — US2, starting at T071.**
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
-**PR A0 (#38) is merged** and **PR A is done — T001–T044, every gate green.** The engine now
-reads every account's history as one sequence: schema **v7** (one partial, descending index),
-the `LIVE` constant, `history_page`, `account_summaries`, the six records and the O/L/P/F/S
-suites. The xcframework is regenerated and the shipped Swift compiles untouched against it, so
-**PR B may begin at T045** — the three design-contract tasks, then US1.
+**PR A0 (#38) is merged**, **PR A is done — T001–T044**, and **PR B's design contract and US1
+are done — T045–T070, less T069.** A person can now open the app, tap once, and read their own
+transactions across every account.
+
+**What US1 landed** (`ea7ba68`): `ios/Sources/Transactions/` — the models, the copy deck, the
+`actor TransactionHistoryService`, the paging + incremental-grouping view model, the row and the
+screen; `StoreProvider` (one `Store` per process, so a page read can never land inside an
+import's transaction); the front door's rows became `NavigationLink`s and stopped being
+`LabeledContent`; **the front-door count became one `account_summaries()` call**; and the
+networking audit widened from `ios/Sources/Import` to all of `ios/Sources`.
+
+Green: `make lint` (0 violations), `make import-audit` (all four scans), the **unit target —
+166 tests in 37 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
+exactly on. Read `tasks.md` § "US1 — RECORDED" for the five deviations before continuing; the
+two that change later work are:
+
+- ⚠️ **US7's empty states landed early** (`EmptyKind.decide` = T096, the rendering = T098),
+  because "shippable on its own" and "blank screen when you have nothing" cannot both be true.
+  **T093 must still be written, and must be observed failing against a deliberately broken
+  decision** — a suite that has only ever been green proves nothing about what it would catch.
+- **The Swift corpus cannot build a deleted row.** `is_deleted` has no write path in the store's
+  API, so `LivenessParityTests` proves the *superseded* half of the live rule end to end and
+  names the gap; the `!isDeleted` half stays pinned engine-side (`history_live.rs` L1–L5).
+
+⚠️ **T069 is unchecked, and not because of this slice.** `make ios-test` also runs the UI target,
+where the **front door** fails a Dark Mode contrast audit at the largest text size — **verified
+identical on a stashed, clean `main`**. Filed as
+`.scratch/016-statement-import-vertical/issues/01-front-door-contrast-dark-mode-largest-text.md`
+(`Status: ready-for-human`), with the two fixes already tried and reverted so nobody spends that
+time twice. **Use `-only-testing:KanameTests` to gate 018's own work** until it is settled.
 
 **What PR A settled, and the two things it found:**
 
@@ -197,12 +227,19 @@ screens behind an import all need a person.
 all on `main`. What remains there is the two manual gates only a person can run (T123 and
 T129); they are release-blocking but they do not block 017.
 
-⚠️ **One finding parked for 016's T123**: the accessibility audit, run by accident against the
-accounts list at the largest text size, reported a contrast failure on a `StaticText '1'` at
-`{32, 724}` — consistent with `LabeledContent` switching to a vertical layout at accessibility
-sizes and dropping the transaction count to the leading edge under the bottom bar. No
-automated test covers that screen (the audit only reaches the front door). Unverified, and out
-of 017's scope.
+⚠️ **Two findings now belong to 016's T123.**
+
+1. **Filed, and blocking every iOS gate**:
+   `.scratch/016-statement-import-vertical/issues/01-front-door-contrast-dark-mode-largest-text.md`
+   — the front door's explanation fails the Dark Mode contrast audit at the largest text size,
+   and **`make ios-test` is red on unmodified `main`** because of it. Verified pre-existing from
+   018. Two fixes tried and reverted; the ticket records both.
+2. **Parked, and still unverified**: the accessibility audit, run by accident against the
+   accounts list at the largest text size, reported a contrast failure on a `StaticText '1'` at
+   `{32, 724}` — consistent with `LabeledContent` switching to a vertical layout at accessibility
+   sizes and dropping the transaction count to the leading edge under the bottom bar. 018 removed
+   the suspected cause (`ImportedAccountsView` is no longer a `LabeledContent`), but the finding
+   was never reproduced, so it is not closed by that. No automated test covers that screen.
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
