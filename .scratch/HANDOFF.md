@@ -54,9 +54,9 @@ and the app's first real screen — the statement-import flow in `ios/Sources/Im
 
 ## 3. What's next
 
-**`017-column-major-pdf` is code-complete — all 119 tasks, every gate green, including the
-human reference pass (T116).** PR A+B is merged (#36); PR C–E is in the working tree awaiting
-review. **Nothing in 017 is open**, R15/T119 included.
+**`017-column-major-pdf` is DONE and fully merged — all 119 tasks, every gate green, including
+the human reference pass (T116).** PR A+B is #36, PR C–E is #37; both are on `main`.
+**Nothing in 017 is open**, R15/T119 included.
 
 **What the reference pass measured** (13 real statements, on the holder's machine, counts
 only): statements reading **zero** transactions **10 → 0**; **unrecognised 2 → 0**. Re-run it
