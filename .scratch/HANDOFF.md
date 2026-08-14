@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/018-transaction-list/`, resuming at T013.**
+**The live one is `specs/018-transaction-list/`, resuming at T045 (PR B).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -49,7 +49,8 @@ Orientation in one line: the deterministic engine (10 readers + balance-chain, r
 dedup, coverage, transfer, categorize), the UniFFI bridge, and the SQLCipher encrypted store
 are all in and fully wired together — **P2 is done; P3 (the SwiftUI app) is now the work**.
 The import vertical and the front door have landed (016, 017); **the transaction list is
-under way (018, PR A0 merged)** and the accounts/dashboard/budgets screens have not started.
+under way (018 — PR A0 merged, PR A's engine done)** and the accounts/dashboard/budgets screens
+have not started.
 
 ---
 
@@ -66,16 +67,39 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR A, resuming at T013.**
+**⬅️ NEXT: `018-transaction-list`, PR B — the list itself, starting at T045.**
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
-**PR A0 (#38) is merged** — the design artifacts plus one complete engine fix (T004–T012). PR A
-continues at **T013**: schema v7's partial index, the `LIVE` constant, `history_page`,
-`account_summaries`, the six records, the `ffi.rs` exports, and the O/L/P/F/S suites. It must
-merge before any interface work, because it crosses the FFI.
+**PR A0 (#38) is merged** and **PR A is done — T001–T044, every gate green.** The engine now
+reads every account's history as one sequence: schema **v7** (one partial, descending index),
+the `LIVE` constant, `history_page`, `account_summaries`, the six records and the O/L/P/F/S
+suites. The xcframework is regenerated and the shipped Swift compiles untouched against it, so
+**PR B may begin at T045** — the three design-contract tasks, then US1.
+
+**What PR A settled, and the two things it found:**
+
+- **The live rule is structural.** `live_predicate!()` is one literal, and `concat!` builds both
+  the v7 index's `WHERE` clause and `PAGE_SQL` from it *at compile time*. A read that paraphrases
+  the rule loses its index and the plan-shape gates go red; L6 re-reads the predicate out of
+  `sqlite_master` and compares it to `LIVE` byte for byte.
+- **A filter is `k = 1` over the same statement**, and a first page binds the identity cursor
+  `('9999-12-31', 0)` — no separate filtered path, no separate first-page path. F3 proves it by
+  running `PAGE_SQL` by hand and reproducing both reads.
+- ⚠️ **A parse failure printed the row.** `invalid stored amount "1234.56"` put a person's money
+  into an error string, in *every* path rather than just this one. Z2 caught it; both
+  `amount_from_sql` and `date_from_sql` now name the column and nothing else.
+- ⚠️ **S5 cannot be two-sided through `history_page`.** A page's fixed cost — one lock, one
+  account list, one category catalog — divides by 2 accounts on the small corpus and by 8 on the
+  large one, so the large corpus measures ~37% *cheaper* per account (research R9 measured 13% in
+  the same direction, and called it correct). The gate asserts the claim it means: cost must not
+  **grow** with the corpus.
+- **Two deliberate deviations from `tasks.md`**: `SCHEMA_V7`/`PAGE_SQL` are `concat!`-built
+  consts rather than a runtime `format!` (byte-identity at compile time is the stronger form of
+  T018), and the two reads are exported from `store.rs`'s existing `#[uniffi::export] impl Store`
+  block, where every other `Store` method lives — `ffi.rs` carries no `Store` code (T036).
 
 Read, in order: `spec.md` → `plan.md` → `research.md` (R1–R20, with measured evidence) →
 `contracts/` → **`tasks.md`** (the queue) → `quickstart.md` (build order + 14 traps).
