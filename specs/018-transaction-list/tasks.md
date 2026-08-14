@@ -475,16 +475,56 @@ marked green while red is worth less than no gate.
 
 ### Tests for User Story 2 (RED first) ⚠️
 
-- [ ] T071 [P] [US2] RED: create `ios/Tests/TransactionListLivenessTests.swift` — over the bridge against a real temp store: importing the identical statement twice leaves the rendered row ids, their count and their order identical (FR-009, SC-003); a superseded row and a deleted row appear nowhere, in any filter state (FR-007, SC-005); an excluded row leaves **no gap, no blank row, no placeholder and no effect on grouping** — the `DateGroup` sequence is byte-identical to a store that never held the excluded rows (FR-010).
-- [ ] T072 [P] [US2] RED: add `frontDoorCountEqualsTheFilteredRowCountInEveryState` to `ios/Tests/TransactionListLivenessTests.swift`, asserting the equality after a first import, after a re-import that supersedes duplicates, and after a deletion — the states SC-004 names (FR-006, FR-046).
+- [x] T071 [P] [US2] RED: create `ios/Tests/TransactionListLivenessTests.swift` — over the bridge against a real temp store: importing the identical statement twice leaves the rendered row ids, their count and their order identical (FR-009, SC-003); a superseded row and a deleted row appear nowhere, in any filter state (FR-007, SC-005); an excluded row leaves **no gap, no blank row, no placeholder and no effect on grouping** — the `DateGroup` sequence is byte-identical to a store that never held the excluded rows (FR-010).
+- [x] T072 [P] [US2] RED: add `frontDoorCountEqualsTheFilteredRowCountInEveryState` to `ios/Tests/TransactionListLivenessTests.swift`, asserting the equality after a first import, after a re-import that supersedes duplicates, and after a deletion — the states SC-004 names (FR-006, FR-046).
 
 ### Implementation for User Story 2
 
-- [ ] T073 [US2] Confirm — and pin, do not add — that nothing in `ios/Sources/Transactions/` re-derives the population: `TransactionHistoryService` is transport-only, `TransactionListViewModel` never filters `rows`, and the count on the front door comes from `AccountSummary.liveTransactionCount` alone. Any Swift-side `.filter` over transactions found on this path is deleted here (FR-008, FR-045).
-- [ ] T074 [US2] Ensure an import affecting one account cannot disturb another in `ios/Sources/Transactions/TransactionListViewModel.swift`: a refresh re-reads through the engine rather than mutating rows in place, so per-account state cannot drift (FR-011). Extend `ios/Tests/TransactionListLivenessTests.swift` with the assertion.
-- [ ] T075 [US2] **GATE** `make lint && make ios-test` — T071 and T072 green.
+- [x] T073 [US2] Confirm — and pin, do not add — that nothing in `ios/Sources/Transactions/` re-derives the population: `TransactionHistoryService` is transport-only, `TransactionListViewModel` never filters `rows`, and the count on the front door comes from `AccountSummary.liveTransactionCount` alone. Any Swift-side `.filter` over transactions found on this path is deleted here (FR-008, FR-045).
+- [x] T074 [US2] Ensure an import affecting one account cannot disturb another in `ios/Sources/Transactions/TransactionListViewModel.swift`: a refresh re-reads through the engine rather than mutating rows in place, so per-account state cannot drift (FR-011). Extend `ios/Tests/TransactionListLivenessTests.swift` with the assertion.
+- [x] T075 [US2] **GATE** `make lint && make ios-test` — T071 and T072 green. Run as `make lint`, `make import-audit` and `-only-testing:KanameTests` (**172 tests in 38 suites**, all green); the UI target is still red for the front-door contrast failure that predates this slice (see T069).
 
 **Checkpoint**: The screen that doubled a person's history in 016 cannot do it again, and the count and the list are provably one definition.
+
+### US2 — RECORDED
+
+**Every assertion was observed failing before it was trusted.** The implementation US2 needed
+already existed — US1 built it — so a suite written here would otherwise have been green from
+birth and proved nothing. Three deliberate breaks, each reverted:
+
+1. **The 016 defect, put back**: `importedAccounts()` counting `listTransactions(…).count`
+   instead of `liveTransactionCount`. T072 went red with the exact shape of the original bug —
+   *the front door says 8, the list shows 4*.
+2. **A second Swift-side population**: a `TransactionHistoryReading` that assembled pages from
+   the raw `listTransactions`. Five of the six tests went red, including every superseded row
+   becoming visible and the two stores' `DateGroup` sequences diverging.
+3. **A refresh that mutates in place**: `reload()` no longer clearing `groups`. T074 went red —
+   and only after it was rewritten to drive **one** screen across the import. Its first form
+   opened a fresh view model each time and stayed green under this break, which is the whole
+   reason the break was run.
+
+**Deviations, each deliberate:**
+
+- **The deletion state is unreachable from Swift, and stays pinned engine-side.** SC-004 names
+  "after a deletion", but `is_deleted` has no write path in the store's API — the Rust corpus
+  reaches it with direct SQL through SQLCipher, which Swift has no handle on. T072 therefore
+  asserts the count equality over the three states a real install can actually reach — a first
+  import, a re-import that supersedes its own duplicates, and cross-source duplicates linked by
+  `findDuplicates()` — and the deleted row stays covered by `history_live.rs` L1 (visibility)
+  and L4/L5 (counts). The suite says so in its own doc comment, and asserts `!isDeleted` over
+  the corpus so a future write path cannot slip past untested. Same gap US1 recorded, named
+  once more where it bites.
+- **T073 found nothing to delete, so it pinned instead.** Nothing under
+  `ios/Sources/Transactions/` re-derives the population today. A confirmation that lives only in
+  a commit message is not a pin, so `scripts/import-path-audit.sh` grew a fourth scan: no
+  `listTransactions(` call anywhere under `ios/Sources`, and no `isLive`, `supersededBy`,
+  `isDeleted`, `rows.filter`/`rows.sorted` or `groups.filter`/`groups.sorted` under
+  `ios/Sources/Transactions/`. Both directions were verified — the scan was watched failing
+  against a deliberately reintroduced raw count.
+- **Two stores, not one, prove FR-010.** "No trace" is compared against a store that never held
+  an excluded row, over a projection that leaves row ids out — ids cannot match across stores,
+  and a comparison that passed because of them would prove nothing. Ids are compared directly
+  where they are meaningful: within one store, across a re-import.
 
 ## Phase 5: User Story 4 — A long history reads as a history, not a pile (Priority: P4)
 

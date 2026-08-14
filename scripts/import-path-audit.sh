@@ -145,3 +145,52 @@ if [ -n "$glass_hits" ]; then
 fi
 
 echo "import-audit: OK (no availability gate or material fallback under ios/Sources)"
+
+# ---------------------------------------------------------------------------
+# Population audit (FR-006, FR-008, FR-045) — one definition of "the transactions a person
+# has", and it lives in the engine.
+#
+# `list_transactions` is a **raw** read: it returns deleted rows and the superseded losers of
+# a de-duplication, deliberately, so a re-import's provenance survives. Counting or listing
+# from it means re-deriving the population in Swift under a second copy of the live rule —
+# which is exactly how the front door once came to show a person twice as many transactions
+# as the list did (`3ba7890`). The app reads history through `historyPage` and counts through
+# `accountSummaries`, both of which apply the engine's `LIVE` predicate, and nothing else.
+#
+# The screen's own sources are held to more than that: re-sorting or re-filtering the rows
+# the engine returned would be a second opinion about order or membership, and a count and a
+# list that disagree is the defect this whole slice exists to prevent.
+
+# A *call*, not a mention: the doc comment that explains why this read is raw must stay.
+RAW_READ_PATTERN='listTransactions\('
+raw_hits="$(grep -rInE "$RAW_READ_PATTERN" "$SOURCES_DIR" || true)"
+
+if [ -n "$raw_hits" ]; then
+    echo "import-audit: FAIL — raw transaction read under ios/Sources:" >&2
+    echo "$raw_hits" >&2
+    echo "listTransactions returns deleted and superseded rows. Read the history through" >&2
+    echo "historyPage and count through accountSummaries (FR-006, FR-008)." >&2
+    exit 1
+fi
+
+TRANSACTIONS_DIR="$SOURCES_DIR/Transactions"
+SECOND_OPINION=(
+    'isLive' 'supersededBy' 'isDeleted'
+    '\brows\.filter' '\brows\.sorted' '\bgroups\.filter' '\bgroups\.sorted'
+)
+
+if [ -d "$TRANSACTIONS_DIR" ]; then
+    second_pattern="$(printf '%s|' "${SECOND_OPINION[@]}")"
+    second_pattern="(${second_pattern%|})"
+    second_hits="$(grep -rInE "$second_pattern" "$TRANSACTIONS_DIR" || true)"
+
+    if [ -n "$second_hits" ]; then
+        echo "import-audit: FAIL — the transaction list re-derives its own population:" >&2
+        echo "$second_hits" >&2
+        echo "Which rows exist, and in what order, is the engine's answer alone — the list" >&2
+        echo "renders it and never re-decides it (FR-008, FR-045)." >&2
+        exit 1
+    fi
+fi
+
+echo "import-audit: OK (the engine is the only definition of the live population)"

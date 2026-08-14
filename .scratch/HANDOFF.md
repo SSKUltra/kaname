@@ -72,15 +72,27 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR B — US2, starting at T071.**
+**⬅️ NEXT: `018-transaction-list`, PR B — US4, starting at T076.**
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
-**PR A0 (#38) is merged**, **PR A is done — T001–T044**, and **PR B's design contract and US1
-are done — T045–T070, less T069.** A person can now open the app, tap once, and read their own
-transactions across every account.
+**PR A0 (#38) is merged**, **PR A is done — T001–T044**, and **PR B's design contract, US1 and
+US2 are done — T045–T075, less T069.** A person can now open the app, tap once, and read their
+own transactions across every account — and importing the same statement a second time changes
+nothing they can see.
+
+**What US2 landed**: `ios/Tests/TransactionListLivenessTests.swift` — six tests over the **real**
+import pipeline, a real encrypted store, the real bridge and the real view model (only extraction
+and the clock are stubbed). Every one of them was **watched failing** against three deliberate
+breaks before it was trusted, including the 016 defect put back on purpose; the count went *front
+door 8, list 4*, exactly as it did to a person. T073 found nothing to delete, so it pinned:
+`scripts/import-path-audit.sh` gained a **fifth scan** banning a `listTransactions(` call anywhere
+under `ios/Sources` and any second opinion (`isLive`, `supersededBy`, `isDeleted`,
+`rows.filter`/`sorted`) under `ios/Sources/Transactions/`. Read `tasks.md` § "US2 — RECORDED"
+for the three deviations; the one that carries forward is that **SC-004's "after a deletion" is
+still unreachable from Swift** and stays pinned engine-side (`history_live.rs` L1, L4, L5).
 
 **What US1 landed** (`ea7ba68`): `ios/Sources/Transactions/` — the models, the copy deck, the
 `actor TransactionHistoryService`, the paging + incremental-grouping view model, the row and the
@@ -89,8 +101,8 @@ import's transaction); the front door's rows became `NavigationLink`s and stoppe
 `LabeledContent`; **the front-door count became one `account_summaries()` call**; and the
 networking audit widened from `ios/Sources/Import` to all of `ios/Sources`.
 
-Green: `make lint` (0 violations), `make import-audit` (all four scans), the **unit target —
-166 tests in 37 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
+Green: `make lint` (0 violations), `make import-audit` (all five scans), the **unit target —
+172 tests in 38 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
 exactly on. Read `tasks.md` § "US1 — RECORDED" for the five deviations before continuing; the
 two that change later work are:
 
