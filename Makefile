@@ -1,4 +1,4 @@
-.PHONY: bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test import-audit lint reference-check reference-shapes
+.PHONY: bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test import-audit lint reference-check reference-shapes a11y-sweep
 
 # SQLCipher crypto backend is chosen per-OS with NO OpenSSL (Constitution I): Apple
 # auto-selects CommonCrypto; on Linux we force LibTomCrypt by injecting the compile flag
@@ -87,6 +87,30 @@ reference-shapes:
 # statement-import path. `core-privacy-audit` cannot see Swift.
 import-audit:
 	./scripts/import-path-audit.sh
+
+# The accessibility axes a test cannot set for itself (T123, Constitution IV).
+#
+# `performAccessibilityAudit` runs against whatever the device is currently configured for,
+# and XCUITest can set appearance and text size but NOT Increase Contrast — that one is read
+# from the accessibility daemon, so neither a launch argument nor a test API reaches it. Only
+# `simctl` does. This runs the front-door audit with it on, and puts the simulator back
+# afterwards however the run ends.
+#
+# Reduce Transparency has no `simctl` control at all and stays with the manual gate, as do
+# VoiceOver's announcements and the four screens behind an import.
+a11y-sweep: ios-gen
+	@xcrun simctl bootstatus "iPhone 16" -b >/dev/null 2>&1 || true
+	@xcrun simctl uninstall "iPhone 16" in.beaconbrain.kaname >/dev/null 2>&1 || true
+	@echo "a11y-sweep: Increase Contrast enabled"
+	@xcrun simctl ui "iPhone 16" increase_contrast enabled >/dev/null 2>&1 || \
+		{ echo "a11y-sweep: this runtime cannot set Increase Contrast — nothing was proven."; exit 1; }
+	@cd ios && xcodebuild -workspace Kaname.xcworkspace -scheme Kaname \
+		-destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+		-only-testing:KanameUITests test; \
+		status=$$?; \
+		xcrun simctl ui "iPhone 16" increase_contrast disabled >/dev/null 2>&1 || true; \
+		echo "a11y-sweep: Increase Contrast restored to disabled"; \
+		exit $$status
 
 # --- Everything ---
 lint: core-lint

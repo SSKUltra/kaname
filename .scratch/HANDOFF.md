@@ -158,6 +158,33 @@ are release-blocking:
   **Increase Contrast**, VoiceOver across every screen in the flow. The automated audit
   (`ios/UITests/`) covers only the front door; the summary, failure, password and
   account-picker screens need eyes and ears.
+
+### T123 — what is now automated, and what a person still has to do
+
+Three of §6's axes were moved out of the manual gate, because the system auditor can run them
+and a person's memory cannot. All green on the front door:
+
+- **Dark Mode**, and **Dark Mode at the largest accessibility text size** — two new cases in
+  `ios/UITests/ImportFrontDoorUITests.swift`, using `XCUIDevice.shared.appearance`. They run in
+  `make ios-test`. Dark Mode is its own contrast problem, not a repaint of the light one.
+- **Increase Contrast** — **`make a11y-sweep`** (new). No XCUITest API sets it and no launch
+  argument reaches it: it is read from the accessibility daemon, so only `simctl` can. The
+  target enables it, runs the front-door suite underneath, and restores the simulator however
+  the run ends.
+
+**Still human-only, and still release-blocking:**
+
+- **Reduce Transparency** — no `simctl` control and no test API. Eyes.
+- **VoiceOver** — the auditor finds *unlabelled* elements; it cannot judge whether what is
+  announced is meaningful. Ears.
+- **The four screens behind an import** (summary, failure, password, account picker) — and the
+  **accounts list**, which is where the parked contrast finding below lives. `performAccessibilityAudit`
+  runs against a launched app, and every one of these is behind a real file being picked, so the
+  audit reaches none of them. Closing this needs a decision, not more effort: a DEBUG-only seeding
+  hook in the app would make every screen auditable — for this slice and for all of P3's screens
+  after it — at the cost of a test-only entry point in the shipped source. T115 deferred exactly
+  that call. **It is still open.**
+
 - **T129** — `quickstart.md` §5: the 4-tap path, force-quit and relaunch, the same-file
   re-import, then the failure matrix (image-only, password right and wrong, corrupt, `.txt`
   renamed `.pdf`, a utility bill, cancel mid-parse).
@@ -166,7 +193,8 @@ are release-blocking:
 
 A first pass over §5 was run on the simulator. The 4-tap path, force-quit/relaunch and the
 failure matrix all behaved. **The same-file re-import did not**, and two further questions came
-out of it. T129 stays unticked until 2 and 3 are decided.
+out of it — both now decided, so **only the fix was code**. T129 is ready to be re-run and
+ticked.
 
 1. ✅ **FIXED (`3ba7890`) — the accounts list doubled on a re-import.** The engine was right:
    the repeat is inserted, then pointed at the row it duplicates via `superseded_by`, so
@@ -177,24 +205,26 @@ out of it. T129 stays unticked until 2 and 3 are decided.
    lives on **`StoredTransaction.isLive`** (`ImportModels.swift`) with the reason beside it:
    **every P3 screen that lists or counts transactions must use it**, and each one can get
    this wrong the same way. Pinned by `reimportDoesNotInflateTheAccountsList`.
-2. ⚠️ **Open, needs a decision — a corrupt PDF and a `.txt` renamed `.pdf` give the same
-   sentence.** `StatementTextExtractor.swift:61` maps *any* nil `PDFDocument` to `.notAPDF`, so
-   both read *"That file isn't a PDF"*; `.unreadable` is reserved for bytes that can't be read
-   at all (line 57). §5 asks for a distinct sentence per matrix row. Either the matrix is six
-   cases by design, or the extractor should sniff the `%PDF` header to separate "not a PDF at
-   all" from "a PDF I couldn't parse". Found by reading the code, not observed on device.
-3. ⚠️ **Open, needs a decision — the summary counts rows written, not rows kept.**
-   `transactionsImported` is `outcome.transactionsInserted`, so a re-import reads "1 imported,
-   1 duplicate skipped". Internally consistent, arguably self-contradictory. FR-033 doesn't
-   settle it. Deliberately left alone — it is a product call, not a bug.
+2. ✅ **DECIDED — a corrupt PDF and a `.txt` renamed `.pdf` say the same thing, on purpose.**
+   `StatementTextExtractor.swift:61` maps *any* nil `PDFDocument` to `.notAPDF`, so both read
+   *"That file isn't a PDF"*; `.unreadable` stays reserved for bytes that can't be read at all
+   (line 57). The distinction is real to a parser and meaningless to a person — both mean "this
+   file is not something Kaname can open", and the remedy is the same. §5's failure matrix is
+   therefore **six distinct sentences over seven documents**, not seven. Don't add a `%PDF`
+   header sniff to split them.
+3. ✅ **DECIDED — the summary reports rows *written*, and a re-import reads "1 imported, 1
+   duplicate skipped".** `transactionsImported` stays `outcome.transactionsInserted`. The two
+   figures describe two different things — what the statement offered, and what was already
+   there — and reporting "0 imported" would hide that the statement was read in full. FR-033 is
+   satisfied. The screen behind it now counts live rows only (finding 1), which is where the
+   person's actual history is stated.
 
-**The seven documents §5 needs are synthetic and can be regenerated**, so no statement is ever
-needed to run this gate: a supported ICICI card statement (detects `ICICI_AMAZONPAY_CARD`, 3
-rows), image-only, password-protected, corrupt, `.txt`-as-`.pdf`, a utility bill
-(`detect_issuer` → `None`), and a long one to cancel mid-parse. The generator is a throwaway
-CoreGraphics script — `CGContext(url:mediaBox:)` with `kCGPDFContextUserPassword` for the
-locked one, a rasterised page for the image-only one, and a half-truncated valid PDF for the
-corrupt one.
+**The seven documents §5 needs are synthetic and regenerated on demand** — `swift
+scripts/make-manual-test-kit.swift <dir>`, then drag the folder onto a booted simulator — so no
+real statement is ever needed to run this gate: a supported ICICI card statement (detects
+`ICICI_AMAZONPAY_CARD`, 3 rows), image-only, password-protected (`kaname`), corrupt,
+`.txt`-as-`.pdf`, a utility bill (`detect_issuer` → `None`), and a long one to cancel mid-parse.
+The PDFs are build output and are never committed.
 
 **What PR E settled — don't re-litigate it:**
 
