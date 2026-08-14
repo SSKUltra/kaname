@@ -38,7 +38,7 @@ use crate::transfer::TransferInput;
 /// The schema version this build of the core knows how to run. The migration runner
 /// applies every version up to and including this one; re-opening an up-to-date database
 /// is a no-op.
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 /// The built-in category a bank-to-bank self-transfer's legs are assigned.
 const SELF_TRANSFER: &str = "SELF_TRANSFER";
@@ -171,6 +171,50 @@ ALTER TABLE transactions ADD COLUMN statement_id TEXT REFERENCES statements(id);
 /// resolution keys on data, not display names.
 const SCHEMA_V6: &str = "ALTER TABLE accounts ADD COLUMN last4 TEXT;";
 
+/// The live-row predicate as a *literal*, so the schema and every read that must agree with it
+/// are built from the same bytes at compile time rather than from someone's memory.
+macro_rules! live_predicate {
+    () => {
+        "is_deleted = 0 AND superseded_by IS NULL"
+    };
+}
+
+/// The only definition of "a transaction the person actually has". It is also, verbatim, the
+/// `WHERE` clause of `idx_txn_live_account_date` — so a read that forgets it does not merely
+/// return the wrong rows, it silently loses its index, and the plan-shape gate goes red.
+const LIVE: &str = live_predicate!();
+
+/// Forward-only schema **v7**: one partial, descending index over the live rows of an account,
+/// so the combined history can be read in its own order without sorting.
+///
+/// `DESC` and `partial` are both load-bearing (research R4): `DESC` makes the index entry order
+/// `(account_id ASC, date DESC, rowid ASC)` — the ordering key with the account fixed — and an
+/// ASC index costs `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`; partial keeps the index to the
+/// rows a person actually has. Its predicate is [`LIVE`] itself.
+const SCHEMA_V7: &str = concat!(
+    "CREATE INDEX idx_txn_live_account_date ON transactions(account_id, date DESC) WHERE ",
+    live_predicate!(),
+    ";"
+);
+
+/// The one statement every combined-history read executes — filtered or not, first page or
+/// resumed. `?1` is the account, `?2`/`?3` the resume point and `?4` the page size; a first
+/// page binds the identity cursor `('9999-12-31', 0)`, so there is no separate first-page code
+/// path and no separate filtered one (FR-042).
+///
+/// Public because the filter's structural proof (F3) and the plan-shape gates (S1, S2) assert
+/// against this exact text: a second page statement anywhere would fail them.
+pub const PAGE_SQL: &str = concat!(
+    "SELECT t.id, t.account_id, t.date, t.description_raw, t.amount, t.direction, \
+     t.currency, t.category_id, t.is_transfer, t.rowid \
+     FROM transactions t \
+     WHERE t.account_id = ?1 AND ",
+    live_predicate!(),
+    " AND (t.date < ?2 OR (t.date = ?2 AND t.rowid > ?3)) \
+     ORDER BY t.date DESC, t.rowid ASC \
+     LIMIT ?4"
+);
+
 /// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
 /// it surfaces in Swift as a throwing `Error`). No variant carries the key or row data.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -240,6 +284,82 @@ pub struct StoredAccount {
     pub currency: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Where to resume a combined-history read. Opaque to the caller: it is produced by
+/// [`Store::history_page`] and handed back unchanged. It is never displayed (FR-019).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HistoryCursor {
+    /// One resume point per account that still has rows to give. An exhausted account is
+    /// absent, so the cursor shrinks as the person scrolls.
+    pub marks: Vec<AccountMark>,
+}
+
+/// One account's resume point: the ordering-key suffix of the last row emitted from it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountMark {
+    pub account_id: String,
+    pub date: NaiveDate,
+    /// `transactions.rowid` — the within-account, within-date tie-break. Internal.
+    pub sequence: i64,
+}
+
+/// What the screen is asking for.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HistoryQuery {
+    /// `None` = every account, in [`Store::list_accounts`] order. `Some(id)` = that account
+    /// only. This is the ONLY difference between a filtered and an unfiltered read (FR-042).
+    pub account_id: Option<String>,
+    /// `None` = start at the newest end of the sequence.
+    pub cursor: Option<HistoryCursor>,
+    /// Rows wanted. Clamped to `1..=200`; an out-of-range value is clamped, never an error —
+    /// a page of 0 would be an infinite scroll loop in the caller.
+    pub limit: u32,
+}
+
+/// One live transaction, ready to render. It carries no storage internals — no
+/// `superseded_by`, `dedup_layer`, `statement_id`, `categorised_by`, `transfer_group_id`,
+/// `is_deleted`, `rowid` or timestamps — so none of them can leak into a view (FR-019,
+/// SC-016).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct HistoryRow {
+    pub id: String,
+    pub account_id: String,
+    pub account_name: String,
+    pub account_last4: Option<String>,
+    pub date: NaiveDate,
+    pub description_raw: String,
+    pub amount: Decimal,
+    pub direction: Direction,
+    /// The **transaction's** currency, never the account's and never the locale's (FR-023).
+    pub currency: String,
+    /// The category's display name, or `None` for uncategorized (FR-017).
+    pub category_name: Option<String>,
+    pub is_transfer: bool,
+}
+
+/// One screenful of the combined history.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct HistoryPage {
+    pub rows: Vec<HistoryRow>,
+    /// `None` ⇔ the sequence is exhausted.
+    pub cursor: Option<HistoryCursor>,
+}
+
+/// One account, with the only count this slice produces.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountSummary {
+    pub id: String,
+    pub name: String,
+    pub last4: Option<String>,
+    pub is_credit_card: bool,
+    pub currency: String,
+    /// Live rows only — neither deleted nor superseded (FR-006, FR-008, FR-046).
+    pub live_transaction_count: u32,
+    /// True when the account holds rows and every one of them is excluded. A boolean and not
+    /// a count, deliberately: FR-008 forbids this slice introducing a count that does not use
+    /// the live rule, and a boolean cannot be rendered as one.
+    pub has_only_excluded_rows: bool,
 }
 
 /// Where an imported run's rows came from: a full statement (a PDF/CSV covering a whole
@@ -495,25 +615,7 @@ impl Store {
     /// All accounts, oldest first (insertion order).
     pub fn list_accounts(&self) -> Result<Vec<StoredAccount>, StoreError> {
         let conn = self.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, name, bank_code, is_credit_card, last4, currency, created_at, updated_at \
-             FROM accounts ORDER BY rowid",
-        )?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(StoredAccount {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    bank_code: row.get(2)?,
-                    is_credit_card: row.get::<_, i64>(3)? != 0,
-                    last4: row.get(4)?,
-                    currency: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows)
+        list_accounts_in(&conn)
     }
 
     /// Persist a new statement — one import run — against an existing account, and return its
@@ -732,10 +834,155 @@ impl Store {
         Ok(rows)
     }
 
+    /// One screenful of every account's **live** transactions, in the combined history's
+    /// order: `date` descending, then the account's position in [`Store::list_accounts`],
+    /// then `transactions.rowid` (FR-028–FR-031, `data-model.md` §2).
+    ///
+    /// One prepared statement ([`PAGE_SQL`]) is run once per account in scope — k already
+    /// sorted streams — and merged here by [`history_order`]. Filtering is the same read with
+    /// k = 1 (FR-042); an `account_id` naming nothing is an empty page, not an error.
+    ///
+    /// Paging is **keyset**, not offset: the returned cursor resumes exactly after the last
+    /// row emitted, so an import landing mid-scroll can neither repeat nor skip a row the
+    /// person has already seen (FR-054, FR-056). `cursor == None` ⇔ exhausted.
+    ///
+    /// Takes the connection lock exactly once and reads the account list and category catalog
+    /// through `*_in` helpers thereafter — `std::sync::Mutex` is not reentrant.
+    pub fn history_page(&self, query: HistoryQuery) -> Result<HistoryPage, StoreError> {
+        let conn = self.lock();
+        let limit = query.limit.clamp(1, MAX_PAGE) as usize;
+        let accounts = list_accounts_in(&conn)?;
+
+        // Scope: the accounts the query asks for, still in the front door's order. A resumed
+        // read drops the accounts the cursor has already exhausted.
+        let scope: Vec<(usize, &StoredAccount)> = accounts
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| query.account_id.as_ref().is_none_or(|id| *id == a.id))
+            .filter(|(_, a)| match &query.cursor {
+                Some(cursor) => cursor.marks.iter().any(|m| m.account_id == a.id),
+                None => true,
+            })
+            .collect();
+        if scope.is_empty() {
+            return Ok(HistoryPage {
+                rows: Vec::new(),
+                cursor: None,
+            });
+        }
+
+        let categories = category_names_in(&conn)?;
+        let mut stmt = conn.prepare(PAGE_SQL)?;
+
+        // One already-sorted buffer per account, each read from the resume point the cursor
+        // carries — or from the identity cursor, which is what makes a first page the same
+        // code path as every later one.
+        let mut streams: Vec<Stream> = Vec::with_capacity(scope.len());
+        for (position, account) in scope {
+            let mark = query.cursor.as_ref().and_then(|c| {
+                c.marks
+                    .iter()
+                    .find(|m| m.account_id == account.id)
+                    .map(|m| (date_to_sql(m.date), m.sequence))
+            });
+            let (from_date, from_sequence) = mark.unwrap_or_else(|| (IDENTITY_DATE.into(), 0));
+            let rows = stmt
+                .query_map(
+                    params![account.id, from_date, from_sequence, limit as i64],
+                    |row| {
+                        Ok(map_history_row(row, account, &categories)
+                            .map(|(row, rowid)| Pending { row, rowid }))
+                    },
+                )?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+                .into_iter()
+                .collect::<Result<Vec<_>, StoreError>>()?;
+
+            streams.push(Stream {
+                account_id: account.id.clone(),
+                position,
+                exhausted: rows.len() < limit,
+                pending: rows.into_iter().collect(),
+                resume: (from_date, from_sequence),
+            });
+        }
+
+        // Merge the k streams: repeatedly take whichever head comes first in the history's
+        // order. k is the account count, which is small, so a linear scan beats a heap.
+        let mut rows = Vec::with_capacity(limit);
+        while rows.len() < limit {
+            let Some(next) = streams
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| !s.pending.is_empty())
+                .min_by(|(_, a), (_, b)| {
+                    let (a_head, b_head) = (&a.pending[0], &b.pending[0]);
+                    history_order(
+                        (a_head.row.date, a.position, a_head.rowid),
+                        (b_head.row.date, b.position, b_head.rowid),
+                    )
+                })
+                .map(|(index, _)| index)
+            else {
+                break;
+            };
+            let stream = &mut streams[next];
+            let taken = stream.pending.pop_front().expect("a non-empty stream");
+            stream.resume = (date_to_sql(taken.row.date), taken.rowid);
+            rows.push(taken.row);
+        }
+
+        // An account with nothing left to give leaves the cursor entirely, so the cursor
+        // shrinks as the person scrolls; an empty cursor is the end of the sequence.
+        let marks: Vec<AccountMark> = streams
+            .iter()
+            .filter(|s| !(s.exhausted && s.pending.is_empty()))
+            .map(|s| {
+                Ok(AccountMark {
+                    account_id: s.account_id.clone(),
+                    date: date_from_sql(&s.resume.0)?,
+                    sequence: s.resume.1,
+                })
+            })
+            .collect::<Result<Vec<_>, StoreError>>()?;
+
+        Ok(HistoryPage {
+            rows,
+            cursor: (!marks.is_empty()).then_some(HistoryCursor { marks }),
+        })
+    }
+
+    /// Every account, in the front door's order, each with its **live** transaction count —
+    /// the only count this slice produces, under the same predicate and the same index the
+    /// history itself reads (FR-006, FR-008, FR-046).
+    pub fn account_summaries(&self) -> Result<Vec<AccountSummary>, StoreError> {
+        let conn = self.lock();
+        let accounts = list_accounts_in(&conn)?;
+
+        let live = grouped_counts(&conn, LIVE)?;
+        let held = grouped_counts(&conn, "1 = 1")?;
+
+        Ok(accounts
+            .into_iter()
+            .map(|account| {
+                let live_transaction_count = live.get(&account.id).copied().unwrap_or(0);
+                let held_rows = held.get(&account.id).copied().unwrap_or(0);
+                AccountSummary {
+                    id: account.id,
+                    name: account.name,
+                    last4: account.last4,
+                    is_credit_card: account.is_credit_card,
+                    currency: account.currency,
+                    live_transaction_count,
+                    has_only_excluded_rows: held_rows > 0 && live_transaction_count == 0,
+                }
+            })
+            .collect())
+    }
+
     /// The category catalog — the 23 seeded [`crate::default_categories`] plus any user
     /// categories created via [`Store::insert_category`] — ready to feed the categorization
-    /// stack. Built-ins surface as [`CategoryRef::Builtin`], user categories as
-    /// [`CategoryRef::Custom`].
+    /// stack. Built-ins surface as [`CategoryRef::Builtin`], user categories as    /// [`CategoryRef::Custom`].
     pub fn list_categories(&self) -> Result<Vec<Category>, StoreError> {
         load_categories(&self.lock())
     }
@@ -1246,6 +1493,10 @@ fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), S
             tx.execute_batch(SCHEMA_V6).map_err(StoreError::migration)?;
             Ok(())
         }
+        7 => {
+            tx.execute_batch(SCHEMA_V7).map_err(StoreError::migration)?;
+            Ok(())
+        }
         other => Err(StoreError::Migration {
             message: format!("no migration defined for schema version {other}"),
         }),
@@ -1271,6 +1522,139 @@ fn seed_categories(tx: &rusqlite::Transaction<'_>) -> Result<(), StoreError> {
         stmt.execute(params![code, category.name, classification])?;
     }
     Ok(())
+}
+
+/// The largest page the history will hand back at once. A larger one defeats the point of
+/// paging; a smaller one is the caller's business.
+const MAX_PAGE: u32 = 200;
+
+/// The identity cursor's date — later than any date a statement can carry, so a first page is
+/// the same statement, with the same bindings, as every page after it.
+const IDENTITY_DATE: &str = "9999-12-31";
+
+/// One account's slice of the merge: rows already read and sorted, and where to resume.
+struct Stream {
+    account_id: String,
+    /// The account's index in [`Store::list_accounts`] — the history's account tie-break.
+    position: usize,
+    /// True when the account's own query returned fewer rows than asked for, so there is
+    /// nothing beyond what is already in `pending`.
+    exhausted: bool,
+    pending: std::collections::VecDeque<Pending>,
+    /// `(date, rowid)` of the last row emitted from this account — the resume point.
+    resume: (String, i64),
+}
+
+/// A row read from one account's stream, with the `rowid` the order needs and the caller
+/// must never see.
+struct Pending {
+    row: HistoryRow,
+    rowid: i64,
+}
+
+/// The combined history's order, and the only place it is expressed outside SQL: `date`
+/// descending, then the account's position in [`Store::list_accounts`] ascending, then
+/// `transactions.rowid` ascending (`data-model.md` §2).
+///
+/// Every component is present on every live row and `rowid` is unique, so the order is strict
+/// and total — which is what makes "the same store always reads the same way" provable rather
+/// than argued.
+fn history_order(
+    left: (NaiveDate, usize, i64),
+    right: (NaiveDate, usize, i64),
+) -> std::cmp::Ordering {
+    right
+        .0
+        .cmp(&left.0)
+        .then(left.1.cmp(&right.1))
+        .then(left.2.cmp(&right.2))
+}
+
+/// Map one [`PAGE_SQL`] row to a [`HistoryRow`] plus its `rowid`. The account's name and last-4
+/// and the category's display name are resolved from maps read once per call — a JOIN would
+/// change the query plan and cost the page its index.
+fn map_history_row(
+    row: &rusqlite::Row<'_>,
+    account: &StoredAccount,
+    categories: &std::collections::HashMap<String, String>,
+) -> Result<(HistoryRow, i64), StoreError> {
+    let date: String = row.get(2)?;
+    let amount: String = row.get(4)?;
+    let direction: String = row.get(5)?;
+    let category_id: Option<String> = row.get(7)?;
+    Ok((
+        HistoryRow {
+            id: row.get(0)?,
+            account_id: row.get(1)?,
+            account_name: account.name.clone(),
+            account_last4: account.last4.clone(),
+            date: date_from_sql(&date)?,
+            description_raw: row.get(3)?,
+            amount: amount_from_sql(&amount)?,
+            direction: direction_from_sql(&direction)?,
+            currency: row.get(6)?,
+            category_name: category_id.and_then(|id| categories.get(&id).cloned()),
+            is_transfer: row.get::<_, i64>(8)? != 0,
+        },
+        row.get(9)?,
+    ))
+}
+
+/// Every account in `accounts.rowid` order — the front door's order, and the history's
+/// account tie-break. Takes a connection rather than the lock, so a read that already holds
+/// it cannot deadlock against itself.
+fn list_accounts_in(conn: &Connection) -> Result<Vec<StoredAccount>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, bank_code, is_credit_card, last4, currency, created_at, updated_at \
+         FROM accounts ORDER BY rowid",
+    )?;
+    let rows = stmt
+        .query_map([], map_account)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// Map one `accounts` row. Nothing here can fail to parse, so it is infallible.
+fn map_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredAccount> {
+    Ok(StoredAccount {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        bank_code: row.get(2)?,
+        is_credit_card: row.get::<_, i64>(3)? != 0,
+        last4: row.get(4)?,
+        currency: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+    })
+}
+
+/// Category id → display name, read once per history page.
+fn category_names_in(
+    conn: &Connection,
+) -> Result<std::collections::HashMap<String, String>, StoreError> {
+    let mut stmt = conn.prepare("SELECT id, name FROM categories")?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Transactions per account under `predicate`, which is either [`LIVE`] or nothing at all.
+fn grouped_counts(
+    conn: &Connection,
+    predicate: &str,
+) -> Result<std::collections::HashMap<String, u32>, StoreError> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT account_id, count(*) FROM transactions WHERE {predicate} GROUP BY account_id"
+    ))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u32))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows.into_iter().collect())
 }
 
 /// Mint a fresh 128-bit opaque id (lowercase hex) using SQLite's own PRNG, so the core
@@ -1823,15 +2207,20 @@ fn date_to_sql(date: NaiveDate) -> String {
     date.format("%Y-%m-%d").to_string()
 }
 
+/// A stored date that will not parse. The **value is never rendered** — a date is the
+/// person's data, and an error message is the one place data leaks without anyone deciding
+/// to show it (Constitution I, FR-063).
 fn date_from_sql(value: &str) -> Result<NaiveDate, StoreError> {
-    NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|e| StoreError::Sql {
-        message: format!("invalid stored date {value:?}: {e}"),
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| StoreError::Sql {
+        message: "invalid stored date".to_string(),
     })
 }
 
+/// A stored amount that will not parse. As with [`date_from_sql`], the value stays out of the
+/// message: money is the most sensitive field the store holds.
 fn amount_from_sql(value: &str) -> Result<Decimal, StoreError> {
-    Decimal::from_str(value).map_err(|e| StoreError::Sql {
-        message: format!("invalid stored amount {value:?}: {e}"),
+    Decimal::from_str(value).map_err(|_| StoreError::Sql {
+        message: "invalid stored amount".to_string(),
     })
 }
 
@@ -2185,6 +2574,223 @@ mod tests {
             )
             .unwrap();
         assert_eq!(transaction_statement_id.as_deref(), Some("s1"));
+    }
+
+    #[test]
+    fn migrating_v6_to_v7_preserves_existing_rows() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=6 {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.pragma_update(None, "user_version", 6).unwrap();
+            tx.execute(
+                "INSERT INTO accounts \
+                 (id, name, bank_code, is_credit_card, currency, last4, created_at, updated_at) \
+                 VALUES ('a1', 'Savings', 'HDFC', 0, 'INR', '4321', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO statements \
+                 (id, account_id, bank_code, period_start, period_end, needs_review, source, \
+                  created_at) \
+                 VALUES ('s1', 'a1', 'HDFC', '2026-07-01', '2026-07-31', 0, 'Statement', 't')",
+                [],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO transactions \
+                 (id, account_id, date, description_raw, amount, direction, currency, \
+                  is_deleted, statement_id, created_at, updated_at) \
+                 VALUES ('t1', 'a1', '2026-07-04', 'desc', '1.00', 'Debit', 'INR', 0, 's1', 't', 't')",
+                [],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 7).expect("apply v7");
+            tx.pragma_update(None, "user_version", 7).unwrap();
+            tx.commit().unwrap();
+        }
+
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 7);
+
+        // M1: every pre-existing row survives byte-identically.
+        let account: (String, String, Option<String>) = conn
+            .query_row(
+                "SELECT name, currency, last4 FROM accounts WHERE id = 'a1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            account,
+            ("Savings".into(), "INR".into(), Some("4321".into()))
+        );
+        let txn: (String, String, String, String, Option<String>) = conn
+            .query_row(
+                "SELECT date, description_raw, amount, direction, statement_id \
+                 FROM transactions WHERE id = 't1'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            txn,
+            (
+                "2026-07-04".into(),
+                "desc".into(),
+                "1.00".into(),
+                "Debit".into(),
+                Some("s1".into())
+            )
+        );
+        let statement_count: i64 = conn
+            .query_row("SELECT count(*) FROM statements", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(statement_count, 1);
+
+        // M2: the v7 index exists, and carries its partial predicate.
+        let index_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master \
+                 WHERE type = 'index' AND name = 'idx_txn_live_account_date'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("the v7 index exists");
+        assert!(
+            index_sql.contains("WHERE"),
+            "the index must be partial, not whole-table: {index_sql}"
+        );
+        assert!(
+            index_sql.contains("date DESC"),
+            "the index must be descending by date: {index_sql}"
+        );
+    }
+
+    #[test]
+    fn the_live_constant_is_byte_identical_to_the_v7_index_predicate() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=SCHEMA_VERSION {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.commit().unwrap();
+        }
+
+        let index_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master \
+                 WHERE type = 'index' AND name = 'idx_txn_live_account_date'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("the v7 index exists");
+
+        let predicate = index_sql
+            .split_once("WHERE")
+            .expect("the index is partial")
+            .1
+            .trim()
+            .trim_end_matches(';')
+            .trim();
+        assert_eq!(
+            predicate, LIVE,
+            "a read that paraphrases the live rule silently loses its index"
+        );
+    }
+
+    #[test]
+    fn the_history_order_is_total_and_antisymmetric() {
+        use std::cmp::Ordering;
+
+        let day = |d: u32| NaiveDate::from_ymd_opt(2026, 7, d).unwrap();
+        let keys = [
+            (day(4), 0, 1),
+            (day(4), 0, 2),
+            (day(4), 1, 1),
+            (day(5), 0, 1),
+            (day(5), 2, 9),
+        ];
+
+        for &left in &keys {
+            assert_eq!(history_order(left, left), Ordering::Equal);
+            for &right in &keys {
+                if left == right {
+                    continue;
+                }
+                // Total: no two distinct keys compare equal, because `rowid` is unique.
+                assert_ne!(history_order(left, right), Ordering::Equal);
+                // Antisymmetric.
+                assert_eq!(
+                    history_order(left, right).reverse(),
+                    history_order(right, left)
+                );
+            }
+        }
+
+        // Level 1 — the later date comes first.
+        assert_eq!(
+            history_order((day(5), 3, 9), (day(4), 0, 1)),
+            Ordering::Less
+        );
+        // Level 2 — same date, the account the front door lists first comes first.
+        assert_eq!(
+            history_order((day(4), 0, 9), (day(4), 1, 1)),
+            Ordering::Less
+        );
+        // Level 3 — same date and account, printed (insertion) order.
+        assert_eq!(
+            history_order((day(4), 0, 1), (day(4), 0, 2)),
+            Ordering::Less
+        );
+    }
+
+    #[test]
+    fn the_history_order_is_transitive_across_its_three_levels() {
+        use std::cmp::Ordering;
+
+        let day = |d: u32| NaiveDate::from_ymd_opt(2026, 7, d).unwrap();
+        let mut keys = vec![
+            (day(4), 1, 2),
+            (day(6), 0, 1),
+            (day(4), 0, 7),
+            (day(6), 0, 3),
+            (day(4), 1, 1),
+        ];
+        keys.sort_by(|a, b| history_order(*a, *b));
+        assert_eq!(
+            keys,
+            vec![
+                (day(6), 0, 1),
+                (day(6), 0, 3),
+                (day(4), 0, 7),
+                (day(4), 1, 1),
+                (day(4), 1, 2),
+            ]
+        );
+        for pair in keys.windows(2) {
+            assert_eq!(history_order(pair[0], pair[1]), Ordering::Less);
+        }
     }
 
     #[test]
