@@ -122,19 +122,16 @@ private struct ImportPipeline: Sendable {
         }
     }
 
-    /// Every account the store holds, with the weight of what is in it. The count is the
-    /// evidence: an account with no transactions behind it would be a claim, not a fact.
-    /// Live rows only — see `StoredTransaction.isLive`.
+    /// Every account the store holds, with the weight of what is in it — counted by the engine
+    /// through its `LIVE` predicate and the v7 index, the same rule and the same index the
+    /// transaction list reads, so a count and a list can no longer disagree (FR-006, FR-008).
     fileprivate func importedAccounts() throws -> [ImportedAccount] {
         do {
-            return try store.listAccounts().map { account in
+            return try store.accountSummaries().map {
                 ImportedAccount(
-                    id: account.id,
-                    name: account.name,
-                    last4: account.last4,
-                    isCreditCard: account.isCreditCard,
-                    transactionCount: try store.listTransactions(accountId: account.id).filter(\.isLive).count
-                )
+                    id: $0.id, name: $0.name, last4: $0.last4, isCreditCard: $0.isCreditCard,
+                    transactionCount: Int($0.liveTransactionCount),
+                    hasOnlyExcludedRows: $0.hasOnlyExcludedRows)
             }
         } catch {
             throw ImportFailure.storageUnavailable

@@ -43,11 +43,13 @@ final class ImportViewModel {
     }
 
     /// The real wiring: PDFKit for extraction, and the encrypted store this device already
-    /// holds the key for. Deliberately off the main actor: opening the database is I/O.
+    /// holds the key for — the *same* `Store` the transaction list reads through, so a page
+    /// read can never land inside an import's transaction. Deliberately off the main actor:
+    /// opening the database is I/O.
     nonisolated static func liveService() throws -> ImportService {
         ImportService(
             extractor: PDFKitStatementTextExtractor(),
-            store: try StoreLocator(keyStore: KeychainKeyStore()).open()
+            store: try StoreProvider.shared()
         )
     }
 

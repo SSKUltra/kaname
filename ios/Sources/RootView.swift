@@ -12,7 +12,29 @@ struct RootView: View {
         NavigationStack {
             content
                 .navigationTitle("Kaname")
-                .safeAreaInset(edge: .bottom) { bottomBar }
+                .toolbar {
+                    // The combined history, reachable without picking an account first — the
+                    // list is one list, and an account is a filter on it (FR-001, FR-043).
+                    if !model.accounts.isEmpty {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            NavigationLink(value: AccountFilter.all) {
+                                Label(
+                                    TransactionListStrings.frontDoorLink,
+                                    systemImage: "list.bullet.rectangle"
+                                )
+                            }
+                        }
+                    }
+                }
+                .navigationDestination(for: AccountFilter.self) { filter in
+                    TransactionListView(filter: filter, model: .live()) {
+                        isPickingFile = true
+                    }
+                }
+                // `.safeAreaBar`, not `.safeAreaInset`: the bar owns its own safe-area inset,
+                // which is the mechanism that keeps scrolling content — a list of a person's
+                // transactions, at any text size — from ending up underneath it.
+                .safeAreaBar(edge: .bottom) { bottomBar }
                 .task { await model.refreshAccounts() }
         }
         .fileImporter(

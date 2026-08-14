@@ -74,6 +74,27 @@ struct ImportedAccount: Identifiable, Equatable, Sendable {
     let last4: String?
     let isCreditCard: Bool
     let transactionCount: Int
+    /// True when the account holds rows and every one of them is deleted or superseded. A
+    /// boolean and not a count, deliberately: it is exactly enough to tell "this statement had
+    /// no transactions" from "there is nothing to show", and a boolean cannot be rendered as a
+    /// number that disagrees with the list (FR-008).
+    let hasOnlyExcludedRows: Bool
+
+    init(
+        id: String,
+        name: String,
+        last4: String?,
+        isCreditCard: Bool,
+        transactionCount: Int,
+        hasOnlyExcludedRows: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.last4 = last4
+        self.isCreditCard = isCreditCard
+        self.transactionCount = transactionCount
+        self.hasOnlyExcludedRows = hasOnlyExcludedRows
+    }
 }
 
 extension StoredTransaction {
@@ -85,6 +106,12 @@ extension StoredTransaction {
     /// (FR-025), so the provenance survives. Neither is history, and any screen that counts
     /// or lists transactions must say so, or it will show a person their spending doubling
     /// the moment they import the same statement twice.
+    ///
+    /// This is **no longer what the front door counts** — that is `account_summaries()` now,
+    /// so the count and the list come from one rule in one place. What this remains is the
+    /// cross-language mirror of the engine's `LIVE` constant, and the two are asserted to
+    /// agree row for row by `ios/Tests/LivenessParityTests.swift`. Deleting it would delete
+    /// the only thing that would notice the two definitions drifting apart.
     var isLive: Bool { !isDeleted && supersededBy == nil }
 }
 

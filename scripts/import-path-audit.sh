@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 #
-# Import-path networking audit (Constitution Principle I) — fail if any networking symbol
-# appears anywhere on the statement-import path. The core's crate graph is audited
-# separately by `core/scripts/privacy-egress-audit.sh`; this is the platform half of the
-# same guarantee, because a networking call added in Swift would never show up there.
+# Networking audit (Constitution Principle I) — fail if any networking symbol appears
+# anywhere in the app's Swift sources. The core's crate graph is audited separately by
+# `core/scripts/privacy-egress-audit.sh`; this is the platform half of the same guarantee,
+# because a networking call added in Swift would never show up there.
 #
-# The whole path — pick, extract, detect, parse, persist, categorize, summarise — is
-# `ios/Sources/Import/`. Nothing in it may reach the network, so the audit is a symbol
-# search rather than a review convention: it fails the build, not a discussion.
+# The scan covers **all** of `ios/Sources/`, not just the import path. It was narrower once,
+# and the narrowing was the bug: the glass and bank-literal scans below already covered
+# every source file while the networking scan — the one enforcing the promise a person
+# actually hands Kaname their statements for — covered one directory. A file added anywhere
+# else, `ios/Sources/Transactions/` included, would have shipped with no networking audit at
+# all. Nothing in the app may reach the network, so this is a symbol search rather than a
+# review convention: it fails the build, not a discussion.
 
 set -euo pipefail
 
@@ -37,19 +41,19 @@ pattern="\\b(${pattern%|})\\b"
 # in prose or in a type name is not a false positive.
 import_pattern='^[[:space:]]*(@[A-Za-z]+[[:space:]]+)?import[[:space:]]+(Network|CFNetwork|NetworkExtension)[[:space:]]*$'
 
-hits="$(grep -rInE "$pattern" "$IMPORT_DIR" || true)"
-import_hits="$(grep -rInE "$import_pattern" "$IMPORT_DIR" || true)"
+hits="$(grep -rInE "$pattern" "$SOURCES_DIR" || true)"
+import_hits="$(grep -rInE "$import_pattern" "$SOURCES_DIR" || true)"
 
 if [ -n "$hits" ] || [ -n "$import_hits" ]; then
-    echo "import-audit: FAIL — networking symbol(s) on the statement-import path:" >&2
+    echo "import-audit: FAIL — networking symbol(s) in the app's sources:" >&2
     [ -n "$hits" ] && echo "$hits" >&2
     [ -n "$import_hits" ] && echo "$import_hits" >&2
-    echo "The import path must run 100% on-device with zero network I/O (Constitution I)." >&2
+    echo "The app must run 100% on-device with zero network I/O (Constitution I)." >&2
     exit 1
 fi
 
-file_count="$(find "$IMPORT_DIR" -name '*.swift' | wc -l | tr -d ' ')"
-echo "import-audit: OK (no networking symbol in $file_count file(s) under ios/Sources/Import)"
+file_count="$(find "$SOURCES_DIR" -name '*.swift' | wc -l | tr -d ' ')"
+echo "import-audit: OK (no networking symbol in $file_count file(s) under ios/Sources)"
 
 # ---------------------------------------------------------------------------
 # Bank-literal audit (FR-012 / SC-010) — the app must not know which banks exist.
