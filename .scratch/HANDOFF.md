@@ -19,6 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
+**The live one is `specs/018-transaction-list/`, resuming at T013.**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -46,9 +47,9 @@ truth instead of copying them:
 
 Orientation in one line: the deterministic engine (10 readers + balance-chain, reconcile,
 dedup, coverage, transfer, categorize), the UniFFI bridge, and the SQLCipher encrypted store
-are all in and fully wired together — **P2 is done; P3 (the SwiftUI app) is now the work**,
-and the app's first real screen — the statement-import flow in `ios/Sources/Import/` plus
-`RootView` — has landed with 016 PR C (§3).
+are all in and fully wired together — **P2 is done; P3 (the SwiftUI app) is now the work**.
+The import vertical and the front door have landed (016, 017); **the transaction list is
+under way (018, PR A0 merged)** and the accounts/dashboard/budgets screens have not started.
 
 ---
 
@@ -65,9 +66,57 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: pick the next slice.** P3 (the SwiftUI app) continues — the import vertical and the
-front door have landed; the accounts/transactions screens have not. 016's two manual gates
-(T123, T129) are still open and release-blocking.
+**⬅️ NEXT: `018-transaction-list`, PR A, resuming at T013.**
+
+018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
+re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
+two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
+
+**PR A0 (#38) is merged** — the design artifacts plus one complete engine fix (T004–T012). PR A
+continues at **T013**: schema v7's partial index, the `LIVE` constant, `history_page`,
+`account_summaries`, the six records, the `ffi.rs` exports, and the O/L/P/F/S suites. It must
+merge before any interface work, because it crosses the FFI.
+
+Read, in order: `spec.md` → `plan.md` → `research.md` (R1–R20, with measured evidence) →
+`contracts/` → **`tasks.md`** (the queue) → `quickstart.md` (build order + 14 traps).
+
+**What 018 has settled — don't re-litigate it:**
+
+- **One combined list across every account**, each row naming its account; a single account is a
+  **filter** on that list, not a second screen. This is why a cross-account read is new engine
+  surface (FR-043–FR-046) and why ordering must span accounts.
+- **Nothing is converted across currencies, ever**, and no figure anywhere may be derived from
+  amounts of more than one currency — which is also why a date group heading carries **no
+  total** (FR-023–FR-027). Answered, not deferred.
+- **`list_transactions` is the store's raw view** — deleted rows and superseded duplicates
+  included, deliberately. `StoredTransaction.isLive` is the rule; the front-door count already
+  got this wrong once (`3ba7890`). FR-007/FR-008 make it structural.
+- **018's accessibility gate is manual**, because `performAccessibilityAudit` runs against a
+  launched app and cannot reach any screen behind an import. A **DEBUG-only seeding hook is its
+  own planned slice, before categorize** — it is what would make this automated for every
+  remaining P3 screen. Not designed in 018.
+- **Transfer marking is built; transfer *detection* stays unwired.** `detectTransfers()` is
+  called from no Swift file, so `is_transfer` is always 0 in a real install. Wiring it is the
+  **categorize** slice's work — it is an O(n²) pass on a path SC-006 already constrains.
+
+**What PR A0 fixed, and what it left open:**
+
+- **Cross-account dedup was non-deterministic.** Groups were ordered `a.created_at, a.id`, and
+  two accounts created by one import share a `created_at`, so the tie-break fell to `a.id` —
+  `randomblob(16)`. Over ten fresh databases the vanishing row alternated. Now `accounts.rowid`,
+  the order `list_accounts()` returns and the person sees.
+- **Two credit cards were de-duplicating against each other.** 013 exists for one purchase seen
+  in two *different sources* — a ledger and a card. Only opposite kinds are compared now.
+  `dedup.rs` is untouched; what changed is which pairs it is asked about.
+- ⚠️ **Open finding**: the source guard is blunt. Two accounts of the **same kind** are now never
+  compared at all, so two bank ledgers where one itemises the other's spends would double-count.
+  A smaller wrong than hiding a purchase, but it belongs to whoever owns dedup next.
+- **A determinism proof must re-exec the test binary.** A single-process assertion passes against
+  that defect whenever luck holds — it did, on the first run.
+
+**Also still open, and release-blocking: 016's two manual gates.** T129 is ready to re-run and
+tick (see below); **T123 has never been run** — Reduce Transparency, VoiceOver, and the five
+screens behind an import all need a person.
 
 **What 017 settled — don't re-litigate it:**
 
