@@ -104,4 +104,40 @@ final class ImportFrontDoorUITests: XCTestCase {
         XCTAssertTrue(importButton.waitForExistence(timeout: 10))
         XCTAssertTrue(importButton.isHittable)
     }
+
+    /// ⚠️ **The transaction list cannot be reached by an automated run at all** — and this test
+    /// is the proof of that, rather than an audit of the list.
+    ///
+    /// T118 asked for the unfiltered list to be pushed from a fresh install via the toolbar
+    /// item and audited. It cannot be: the toolbar item is shown only once at least one
+    /// account exists (`RootView`), an account exists only once a real statement has been
+    /// imported, and importing requires the system document picker, which no automated run can
+    /// drive. Closing that gap would take a DEBUG-only seeding hook, which FR-077 forbids
+    /// outright — a test-only path into a person's financial data is exactly the thing that
+    /// must not exist.
+    ///
+    /// So what is asserted here is the reachability fact itself, in both appearances and at
+    /// the largest text size: a launch with nothing imported offers the import action and
+    /// **not** a link to an empty list. The transaction list's own appearance stays on the
+    /// manual gate (SC-012, FR-075, FR-076), where the quickstart walks it.
+    func testAFreshInstallOffersNoRouteToAnEmptyTransactionList() throws {
+        for appearance in [XCUIDevice.Appearance.light, .dark] {
+            let previous = XCUIDevice.shared.appearance
+            XCUIDevice.shared.appearance = appearance
+            addTeardownBlock { XCUIDevice.shared.appearance = previous }
+
+            let app = XCUIApplication()
+            app.launchArguments += [
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+            ]
+            app.launch()
+            XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+
+            XCTAssertTrue(app.buttons["Import a statement"].waitForExistence(timeout: 10))
+            // The list is one list and an account is a filter on it — but with nothing
+            // imported there is nothing to filter, and the front door says so itself.
+            XCTAssertFalse(app.buttons["All transactions"].exists)
+            XCTAssertFalse(app.navigationBars["Transactions"].exists)
+        }
+    }
 }

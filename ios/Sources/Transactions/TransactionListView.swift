@@ -73,6 +73,12 @@ struct TransactionListView: View {
                     }
                 } header: {
                     Text(group.heading)
+                        // A date is **content** — it is how a person finds the day they are
+                        // looking for — and a `Section` header renders in a de-emphasised
+                        // style by default. Full contrast is restored explicitly, colour only:
+                        // no background, no font override, nothing else about the system's
+                        // own chrome is re-skinned (FR-066, T116).
+                        .foregroundStyle(.primary)
                         .accessibilityLabel(
                             TransactionListStrings.groupAnnouncement(
                                 heading: group.heading, count: group.rows.count))

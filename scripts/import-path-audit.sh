@@ -231,3 +231,99 @@ if [ -d "$TRANSACTIONS_DIR" ]; then
 fi
 
 echo "import-audit: OK (the transaction list persists nothing of its own)"
+
+# ---------------------------------------------------------------------------
+# Aggregate audit (FR-025, FR-026, SC-011) — two currencies must never quietly become one.
+#
+# A day can hold rows in more than one currency, so any per-day, per-group or per-screen figure
+# is either meaningless or conditional — and a conditional one is a figure that will eventually
+# be shown when its condition doesn't hold. The defence is structural: there is no sum anywhere
+# in this directory to be wrong, and this scan is what keeps it that way.
+#
+# Matched as *code* rather than as words: `sum` and `total` appear in the comments explaining
+# why they are absent, and a scan that fires on its own explanation teaches people to delete
+# the explanation.
+
+if [ -d "$TRANSACTIONS_DIR" ]; then
+    AGGREGATE_DENYLIST=(
+        '\.reduce\(' '\breduce\(into:'
+        '(var|let|func)[[:space:]]+(sum|total|subtotal|average|balance|aggregate)\\b'
+        '\.sum\(\)' '\.average\(\)'
+    )
+    aggregate_pattern="$(printf '%s|' "${AGGREGATE_DENYLIST[@]}")"
+    aggregate_pattern="(${aggregate_pattern%|})"
+    aggregate_hits="$(grep -rInE "$aggregate_pattern" "$TRANSACTIONS_DIR" || true)"
+
+    if [ -n "$aggregate_hits" ]; then
+        echo "import-audit: FAIL — the transaction list computes a figure of its own:" >&2
+        echo "$aggregate_hits" >&2
+        echo "A day can hold more than one currency, so no total, subtotal, balance or" >&2
+        echo "average may exist on this screen — not hidden, not conditional, not at all" >&2
+        echo "(FR-025, FR-026, SC-011)." >&2
+        exit 1
+    fi
+fi
+
+echo "import-audit: OK (no total, subtotal, balance or average under ios/Sources/Transactions)"
+
+# ---------------------------------------------------------------------------
+# Tint audit (FR-073) — the app's accent is structural, not per-screen.
+#
+# `KanameApp.swift` applies `.tint(.kanameAccent)` app-wide, so every control on the
+# transaction list inherits it. A `.tint(...)` inside this directory is the only way the
+# system default (or a second accent) could come back on this screen, and a screen that
+# tints differently from the rest of the app reads as a different app.
+
+if [ -d "$TRANSACTIONS_DIR" ]; then
+    tint_hits="$(grep -rInE '\.tint\(' "$TRANSACTIONS_DIR" || true)"
+
+    if [ -n "$tint_hits" ]; then
+        echo "import-audit: FAIL — a tint under ios/Sources/Transactions:" >&2
+        echo "$tint_hits" >&2
+        echo "The accent is applied app-wide in KanameApp.swift; a per-screen tint is how" >&2
+        echo "the system default comes back (FR-073)." >&2
+        exit 1
+    fi
+fi
+
+echo "import-audit: OK (the transaction list inherits the app's own accent)"
+
+# ---------------------------------------------------------------------------
+# Transfer-detection audit (FR-018) — the app does not detect transfers, and must not start
+# claiming it does by accident.
+#
+# `detect_transfers` exists in the engine and is tested there, but no Swift source calls it:
+# `is_transfer` is 0 on every row of a real install. The marking is honest only while that
+# stays true, so the call is banned in the app until a slice wires it *deliberately* — at
+# which point this scan is the thing that has to be removed, in the same commit, by someone
+# who has read why it was here.
+#
+# The second half is the copy: a test, a task or a string that says "detected" would document
+# a feature that does not exist, which is worse than the missing feature.
+
+detect_hits="$(grep -rInE '\bdetectTransfers\b' "$SOURCES_DIR" || true)"
+
+if [ -n "$detect_hits" ]; then
+    echo "import-audit: FAIL — the app calls transfer detection:" >&2
+    echo "$detect_hits" >&2
+    echo "Kaname does not detect transfers (FR-018, research R18). If this slice wires it," >&2
+    echo "remove this scan in the same commit and update every string that says otherwise." >&2
+    exit 1
+fi
+
+# Negations are the whole point of most of these lines — "Kaname does not detect transfers"
+# is the documentation this scan exists to protect, so a line carrying a negation is kept.
+# A grep cannot parse English, and a scan that tried would eventually delete its own reason.
+claim_hits="$(grep -rInE 'transfers? (are|is|were) (auto|detect)|detects? (a )?transfers?|transfer detection (is|runs)' \
+    "$SOURCES_DIR" "$REPO_ROOT/ios/Tests" \
+    | grep -viE '\b(not|never|nothing|no|none|unwired|without|cannot|claims)\b' || true)"
+
+if [ -n "$claim_hits" ]; then
+    echo "import-audit: FAIL — something claims Kaname detects transfers:" >&2
+    echo "$claim_hits" >&2
+    echo "The marking is a marking. No source, test name or string may imply detection" >&2
+    echo "(FR-018)." >&2
+    exit 1
+fi
+
+echo "import-audit: OK (transfer detection is unwired, and nothing says otherwise)"

@@ -704,16 +704,16 @@ phases already existed and was **confirmed under test** rather than rewritten.
 
 ### Tests for User Story 5 (RED first) ⚠️
 
-- [ ] T103 [P] [US5] RED: create `ios/Tests/TransactionAmountTests.swift` — `formattedAmount` uses `Decimal.formatted(.currency(code:))` and round-trips a 7-integer-digit, 2-decimal amount with **zero** drift; the currency code comes from the **transaction's** `currency`, never the account's and never the locale's; a currency `en_IN` does not localise still renders exactly and unambiguously (FR-027); the amount is never abbreviated, scaled or truncated.
-- [ ] T104 [P] [US5] RED: add the no-aggregate audit to `ios/Tests/TransactionAmountTests.swift` — grep the compiled model surface and `ios/Sources/Transactions/` for `reduce`, `sum`, `total`, `average`, `balance` applied to an amount and assert none exists; assert `DateGroup` exposes no numeric member other than a row count (FR-025, FR-026, SC-011).
-- [ ] T105 [P] [US5] RED: add `theAccessibilityLabelAnnouncesTheCurrencyWithTheAmount` to `ios/Tests/TransactionAmountTests.swift` (FR-015, US5 AS-5).
+- [x] T103 [P] [US5] RED: create `ios/Tests/TransactionAmountTests.swift` — `formattedAmount` uses `Decimal.formatted(.currency(code:))` and round-trips a 7-integer-digit, 2-decimal amount with **zero** drift; the currency code comes from the **transaction's** `currency`, never the account's and never the locale's; a currency `en_IN` does not localise still renders exactly and unambiguously (FR-027); the amount is never abbreviated, scaled or truncated.
+- [x] T104 [P] [US5] RED: add the no-aggregate audit to `ios/Tests/TransactionAmountTests.swift` — grep the compiled model surface and `ios/Sources/Transactions/` for `reduce`, `sum`, `total`, `average`, `balance` applied to an amount and assert none exists; assert `DateGroup` exposes no numeric member other than a row count (FR-025, FR-026, SC-011).
+- [x] T105 [P] [US5] RED: add `theAccessibilityLabelAnnouncesTheCurrencyWithTheAmount` to `ios/Tests/TransactionAmountTests.swift` (FR-015, US5 AS-5).
 
 ### Implementation for User Story 5
 
-- [ ] T106 [US5] Implement `formattedAmount` in `ios/Sources/Transactions/TransactionListModels.swift` with `Decimal.formatted(.currency(code:))` — `Decimal`'s own `FormatStyle`, which never routes through `Double`. No `NumberFormatter` with a `Double` input, no `String(format:)`, no `Double` anywhere on the path (Constitution II, FR-016).
-- [ ] T107 [US5] Apply `.monospacedDigit()` to every amount and every count rendered by `ios/Sources/Transactions/TransactionRowView.swift` and `TransactionListView.swift`, so figures do not jitter while scrolling (FR-016, FR-027).
-- [ ] T108 [US5] Include the currency in the row's accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift`, alongside date, description, amount, direction in words and account (FR-015).
-- [ ] T109 [US5] **GATE** `make lint && make ios-test` — T103–T105 green.
+- [x] T106 [US5] **Already landed in US1 — confirmed under test.** Implement `formattedAmount` in `ios/Sources/Transactions/TransactionListModels.swift` with `Decimal.formatted(.currency(code:))` — `Decimal`'s own `FormatStyle`, which never routes through `Double`. No `NumberFormatter` with a `Double` input, no `String(format:)`, no `Double` anywhere on the path (Constitution II, FR-016).
+- [x] T107 [US5] **Already landed in US1 — confirmed under test.** Apply `.monospacedDigit()` to every amount and every count rendered by `ios/Sources/Transactions/TransactionRowView.swift` and `TransactionListView.swift`, so figures do not jitter while scrolling (FR-016, FR-027).
+- [x] T108 [US5] **Already landed in US1 — confirmed under test.** Include the currency in the row's accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift`, alongside date, description, amount, direction in words and account (FR-015).
+- [x] T109 [US5] **GATE** `make lint && make ios-test` — T103–T105 green. `make lint` 0 violations; the unit target green at that point.
 
 ## Phase 9: User Story 6 — What the engine already worked out is visible (Priority: P6)
 
@@ -725,23 +725,76 @@ phases already existed and was **confirmed under test** rather than rewritten.
 
 ### Tests for User Story 6 (RED first) ⚠️
 
-- [ ] T110 [P] [US6] RED: create `ios/Tests/TransactionCategoryTests.swift` — a categorized row shows its category **by name**; an uncategorized row shows the plain-language label rather than a blank (FR-017); no row surfaces a `category_id`, a `categorised_by`, a dedup layer name or any other engine internal (FR-019, SC-016).
-- [ ] T111 [P] [US6] RED: create `ios/Tests/TransactionTransferMarkingTests.swift` — with the flag set **by the test**, a flagged row renders the transfer marking; the marking is carried by a glyph **and** a word, never by colour alone (FR-018, FR-071); the accessibility sentence announces it; the row **still appears** in the list and is never hidden or filtered out (US6 AS-7); with the flag unset, no marking appears. Name every test for the **marking**, never for detection.
-- [ ] T112 [P] [US6] RED: create `ios/Tests/TransactionAccessibilityTests.swift` — the automatable half of SC-013: each row is one combined element whose label is the exact expected sentence (date, description, amount with currency, direction in words, account, and "transfer" when marked); every date heading has a label; direction, transfer, uncategorized and the filtered state are each identifiable **with colour perception removed entirely** (FR-071, SC-014); no view body contains a user-visible string literal — every one comes from `TransactionListStrings` (W4).
+- [x] T110 [P] [US6] RED: create `ios/Tests/TransactionCategoryTests.swift` — a categorized row shows its category **by name**; an uncategorized row shows the plain-language label rather than a blank (FR-017); no row surfaces a `category_id`, a `categorised_by`, a dedup layer name or any other engine internal (FR-019, SC-016).
+- [x] T111 [P] [US6] RED: create `ios/Tests/TransactionTransferMarkingTests.swift` — with the flag set **by the test**, a flagged row renders the transfer marking; the marking is carried by a glyph **and** a word, never by colour alone (FR-018, FR-071); the accessibility sentence announces it; the row **still appears** in the list and is never hidden or filtered out (US6 AS-7); with the flag unset, no marking appears. Name every test for the **marking**, never for detection.
+- [x] T112 [P] [US6] RED: create `ios/Tests/TransactionAccessibilityTests.swift` — the automatable half of SC-013: each row is one combined element whose label is the exact expected sentence (date, description, amount with currency, direction in words, account, and "transfer" when marked); every date heading has a label; direction, transfer, uncategorized and the filtered state are each identifiable **with colour perception removed entirely** (FR-071, SC-014); no view body contains a user-visible string literal — every one comes from `TransactionListStrings` (W4).
 
 ### Implementation for User Story 6
 
-- [ ] T113 [US6] Implement `categoryLabel` as `categoryName ?? Strings.uncategorized` in `ios/Sources/Transactions/TransactionListModels.swift` — never blank, never an identifier (FR-017).
-- [ ] T114 [US6] Render the category and the transfer marking in `ios/Sources/Transactions/TransactionRowView.swift` as an SF Symbol **plus** its word, sized so both survive the accessibility text sizes and the vertical layout, and never encoded in colour (FR-018, FR-071).
-- [ ] T115 [US6] Compose the full row accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift` and assert nothing else on the row is separately focusable (FR-015, FR-072).
-- [ ] T116 [US6] Restore full contrast explicitly wherever a container would render content in a de-emphasised style across `ios/Sources/Transactions/` — the account name, the category and the date are **content**, not decoration (FR-066). This is the failure 016 paid for at four sites; it is a requirement here, not a preference.
-- [ ] T117 [US6] Confirm every tint on this screen is the app's own accent from `ios/Sources/Theme.swift`, never the system default, across `ios/Sources/Transactions/` (FR-073).
-- [ ] T118 [US6] Extend `ios/UITests/ImportFrontDoorUITests.swift` with `theEmptyTransactionListPassesTheSystemAccessibilityAudit`: from a fresh install, push the unfiltered list via the toolbar item and run `performAccessibilityAudit()` at default and at the largest accessibility text size, in Light and Dark Mode. **This is the only part of the screen an automated audit can reach** — the populated list sits behind a real file being picked, which no automated run can do, and FR-077 forbids adding a DEBUG-only seeding hook to close that gap here. The populated screen stays on the manual gate (SC-012, FR-075, FR-076).
-- [ ] T119 [US6] Audit mechanically that detection stays unwired: add a check to `scripts/import-path-audit.sh` (or a Swift test in `ios/Tests/TransactionTransferMarkingTests.swift`) failing if `detectTransfers` appears anywhere under `ios/Sources/`, and grep `ios/Tests/` and this file for a test or task name implying detection. FR-018's limitation must be impossible to lose by accident.
-- [ ] T120 [US6] **GATE** `make lint && make ios-test` — T110–T112 green, including the new UI test.
-- [ ] T121 [US6] **GATE** `make core-lint && make core-test && make import-audit` — the full PR D verification gate before the PR opens.
+- [x] T113 [US6] **Already landed in US1 — confirmed under test.** Implement `categoryLabel` as `categoryName ?? Strings.uncategorized` in `ios/Sources/Transactions/TransactionListModels.swift` — never blank, never an identifier (FR-017).
+- [x] T114 [US6] Render the category and the transfer marking in `ios/Sources/Transactions/TransactionRowView.swift` as an SF Symbol **plus** its word, sized so both survive the accessibility text sizes and the vertical layout, and never encoded in colour (FR-018, FR-071).
+- [x] T115 [US6] **Already landed in US1 — confirmed under test.** Compose the full row accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift` and assert nothing else on the row is separately focusable (FR-015, FR-072).
+- [x] T116 [US6] Restore full contrast explicitly wherever a container would render content in a de-emphasised style across `ios/Sources/Transactions/` — the account name, the category and the date are **content**, not decoration (FR-066). This is the failure 016 paid for at four sites; it is a requirement here, not a preference.
+- [x] T117 [US6] **Confirmed and pinned.** Confirm every tint on this screen is the app's own accent from `ios/Sources/Theme.swift`, never the system default, across `ios/Sources/Transactions/` (FR-073).
+- [x] T118 [US6] Extend `ios/UITests/ImportFrontDoorUITests.swift` with `theEmptyTransactionListPassesTheSystemAccessibilityAudit`: from a fresh install, push the unfiltered list via the toolbar item and run `performAccessibilityAudit()` at default and at the largest accessibility text size, in Light and Dark Mode. **This is the only part of the screen an automated audit can reach** — the populated list sits behind a real file being picked, which no automated run can do, and FR-077 forbids adding a DEBUG-only seeding hook to close that gap here. The populated screen stays on the manual gate (SC-012, FR-075, FR-076).
+- [x] T119 [US6] Audit mechanically that detection stays unwired: add a check to `scripts/import-path-audit.sh` (or a Swift test in `ios/Tests/TransactionTransferMarkingTests.swift`) failing if `detectTransfers` appears anywhere under `ios/Sources/`, and grep `ios/Tests/` and this file for a test or task name implying detection. FR-018's limitation must be impossible to lose by accident.
+- [x] T120 [US6] **GATE** `make lint && make ios-test` — T110–T112 green, including the new UI test. `make lint` 0 violations; **238 tests in 47 suites**; the new UI test passes on a wiped simulator. The rest of the UI target is still red for the front-door contrast failure that predates the slice (T069).
+- [x] T121 [US6] **GATE** `make core-lint && make core-test && make import-audit` — the full PR D verification gate before the PR opens. Green: clippy clean, **308 core tests** across 16 binaries, all **eight** audit scans.
 
 **Checkpoint**: Every field the engine already holds is on screen, announced, and never encoded in colour alone — and the transfer marking is honest about being unexercised in a real install.
+
+### US5 + US7 — RECORDED
+
+Four new suites — `TransactionAmountTests`, `TransactionCategoryTests`,
+`TransactionTransferMarkingTests`, `TransactionAccessibilityTests` — and, again, almost all of
+the *implementation* they cover had landed in US1. What is new is the proving, three source
+audits, and one contrast fix.
+
+**Breaks observed, each reverted:**
+
+1. **A `Double` and compact notation on the amount path** — ₹1,234,567.89 rendered as `−₹1.2M`,
+   and a KWD amount of 66.660 rendered as `67`. Four of the nine amount tests red.
+2. **An uncategorized row rendering a blank** — red in two suites.
+3. **The transfer marking dropped from the announcement** — red in two suites.
+4. **Copy typed straight into a view body** (`Text("Showing everything")`) — the W4 literal
+   audit red, naming the file and line.
+5. **A transfer-detection call added to the app**, and **a comment claiming detection happens** —
+   both caught by T119's new scan.
+
+**Deviations, each deliberate:**
+
+- ⚠️ **T118 as written is impossible, and the test says so instead of pretending.** It asks for
+  the unfiltered list to be pushed *from a fresh install* via the toolbar item — but that item
+  only exists once an account does, an account only exists after a real statement is imported,
+  and importing needs the system document picker, which no automated run can drive. FR-077
+  forbids the DEBUG-only seeding hook that would close the gap. The UI test therefore asserts
+  the **reachability fact** — a fresh install offers the import action and no route to an empty
+  list, in both appearances at the largest text size — and the populated list stays on the
+  manual gate, where it already was. **The transaction list has no automated appearance
+  coverage at all**, and that is now written down rather than implied.
+- **A finding, not fixed here**: because the front door hides its link until an account exists,
+  `EmptyKind.nothingImported` is **unreachable on the transaction list** in the shipped app —
+  the front door's own empty state covers that case. The branch is defensive, its test is
+  honest about being a unit test of a pure function, and removing it would be wrong the day a
+  delete path exists.
+- **T116 touches system chrome, on purpose.** A `Section` header renders de-emphasised by
+  default, and a date is *content* — it is how a person finds the day they are looking for. The
+  heading now carries an explicit `.foregroundStyle(.primary)`. This narrows T045's "system
+  `List` chrome, unmodified": colour only, no background, no font override. 016 paid for this
+  exact failure at four sites; it is a requirement here, not a preference.
+- **Three more audit scans** (six → eight): no aggregate (T104's grep half — `reduce`, and any
+  `var`/`let`/`func` named `total`, `subtotal`, `average`, `balance`, `aggregate`), no `.tint(`
+  (T117), and no `detectTransfers` call or detection claim anywhere in `ios/Sources/` or
+  `ios/Tests/` (T119). The last one **skips lines carrying a negation** — "Kaname does not
+  detect transfers" is the documentation the scan exists to protect, and a grep that tried to
+  parse English would eventually delete its own reason.
+- **T111 got its own file**, as the task asked, and its flag is set two ways: by the test
+  directly, and by the engine's own `detect_transfers` invoked **inside the test** over a real
+  store — the call the app itself never makes.
+- **The row announcement is asserted by order, not by comma count.** The first version counted
+  six comma-separated pieces and found seven: the account identity carries a comma of its own
+  ("Everyday Savings, ending 1123"). A test that counted commas would have been asserting the
+  shape of an account name.
 
 ---
 

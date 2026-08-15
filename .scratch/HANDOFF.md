@@ -72,20 +72,37 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR D — US5 (currency) and US6 (the accessibility suite), starting at T103.**
+**⬅️ NEXT: `018-transaction-list`, PR E — US8 (staying current with an import) and the perf/polish tail, starting at T122.**
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
 **PR A0 (#38) is merged**, **PR A is done — T001–T044**, **PR B is done — T045–T083, less T069**,
-and **PR C is done — T084–T102.** A person can now open the app, tap once, read their own
+**PR C is done — T084–T102**, and **PR D is done — T103–T121.** A person can now open the app, tap once, read their own
 transactions across every account newest-first and grouped by date, narrow to one account and
 clear it again in a single tap, and be told which of six true things is the case when a screen
 is empty. Importing the same statement a second time changes nothing they can see, and the
 filter is forgotten on relaunch, deliberately. **Neither PR B nor PR C has been opened as a pull
-request yet** — their commits are on `main` (`738cbe1`, `ea7ba68`, `1a8054f`, `572f0b4`, and
-PR C's).
+request yet** — nor has PR D. Their commits are all on `main` (`738cbe1`, `ea7ba68`, `1a8054f`,
+`572f0b4`, `94aa894`, and PR D's).
+
+**What PR D landed**: four suites — `TransactionAmountTests`, `TransactionCategoryTests`,
+`TransactionTransferMarkingTests`, `TransactionAccessibilityTests` — plus three more audit scans
+(no aggregate, no `.tint(`, no `detectTransfers` call **or detection claim** anywhere in
+`ios/Sources` or `ios/Tests`) and one contrast fix: a `Section` header renders de-emphasised by
+default, and a date is content, so the heading now carries an explicit `.foregroundStyle(.primary)`.
+Five breaks were watched, including a `Double` on the amount path that turned ₹1,234,567.89 into
+`−₹1.2M` and 66.660 KWD into `67`.
+
+⚠️ **Two findings worth carrying forward.** **T118 as specified is impossible**: the front door
+hides its "All transactions" link until an account exists, an account needs a real imported
+statement, and importing needs the document picker — so **no automated run can reach the
+transaction list at all**, and FR-077 forbids the DEBUG seeding hook that would fix it. The UI
+test now asserts that reachability fact instead, and the populated list has **no automated
+appearance coverage** — it is manual-gate only. Second, for the same reason,
+`EmptyKind.nothingImported` is **unreachable on the transaction list** in the shipped app; the
+branch is defensive and stays.
 
 **What PR C landed**: the **filter chrome** — a `GlassEffectContainer` on an opaque
 `.safeAreaBar(edge: .bottom)` holding a scope `Menu` and a clear button, both `.buttonStyle(.glass)`
@@ -130,8 +147,8 @@ import's transaction); the front door's rows became `NavigationLink`s and stoppe
 `LabeledContent`; **the front-door count became one `account_summaries()` call**; and the
 networking audit widened from `ios/Sources/Import` to all of `ios/Sources`.
 
-Green: `make lint` (0 violations), `make import-audit` (all **six** scans), `make core-test`
-(**308 tests**), the **unit target — 212 tests in 43 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
+Green: `make lint` (0 violations), `make import-audit` (all **eight** scans), `make core-test`
+(**308 tests**), the **unit target — 238 tests in 47 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
 exactly on. Read `tasks.md` § "US1 — RECORDED" for the five deviations before continuing; the
 two that change later work are:
 
