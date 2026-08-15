@@ -27,6 +27,14 @@ final class TransactionListViewModel {
     private(set) var filter: AccountFilter = .all
     private(set) var isLoadingMore = false
 
+    /// The row at the top of the viewport, as the view last reported it.
+    ///
+    /// Captured before a refresh and written back after, so an import cannot take a person's
+    /// place in their own history away from them (FR-056). It is a row **id**, not an offset:
+    /// an import inserts rows above, and any number would be pointing somewhere else by the
+    /// time it was restored.
+    private(set) var anchorRowID: String?
+
     private let history: any TransactionHistoryReading
     private let clock: @Sendable () -> Date
     private let pageSize: UInt32
@@ -35,6 +43,13 @@ final class TransactionListViewModel {
     private var cursor: HistoryCursor?
     private var isExhausted = false
     private var summaries: [AccountSummary] = []
+    /// How many pages have been read into what is on screen — the size of the re-read a
+    /// refresh has to do to hand back what the person already had.
+    private var pagesHeld = 0
+    /// Bumped whenever the population changes underneath an in-flight page read. A page that
+    /// was asked for before a filter change or a refresh belongs to a list that no longer
+    /// exists, and appending it would put another account's rows under this one's heading.
+    private var generation = 0
 
     // MARK: - The scope, as words
 
@@ -120,12 +135,81 @@ final class TransactionListViewModel {
 
         isLoadingMore = true
         defer { isLoadingMore = false }
+        let token = generation
         do {
-            apply(try await history.page(accountID: filter.accountID, cursor: cursor, limit: pageSize))
+            let page = try await history.page(
+                accountID: filter.accountID, cursor: cursor, limit: pageSize)
+            // The population may have been replaced while this page was in flight — by a
+            // filter, or by an import's refresh. This page describes the old one.
+            guard token == generation else { return }
+            apply(page)
         } catch {
             // A page that failed must not throw away what the person is already reading. The
             // cursor is left intact, so the next scroll retries rather than ending the list
             // early and quietly.
+        }
+    }
+
+    /// The row the person is reading, as the view reports it while they scroll.
+    func anchorChanged(to id: String?) {
+        anchorRowID = id
+    }
+
+    /// Keep the list current with whatever an import commits (FR-053).
+    ///
+    /// The loop is the caller's — the screen's `.task` — so the subscription is cancelled with
+    /// the screen and nothing outlives the view that asked for it.
+    func refreshWhenImportsComplete(_ signal: ImportCompletionSignal = .shared) async {
+        for await _ in signal.events {
+            await refreshAfterImport()
+        }
+    }
+
+    /// Re-read what is already on screen, as **one** change.
+    ///
+    /// Everything the person is holding is read again from page 1 with the same filter, and
+    /// swapped in at the end — so the list never trickles new rows in a few at a time, and a
+    /// person is never reading a sequence that is half of one moment and half of another
+    /// (FR-053, FR-054). The filter is not touched at all, which is the strongest form of
+    /// FR-056's promise, and the anchor is put back exactly as it was found.
+    ///
+    /// A failed re-read leaves the screen precisely as it was: an import is not a reason to
+    /// take a person's transactions away.
+    func refreshAfterImport() async {
+        let anchor = anchorRowID
+        let held = max(pagesHeld, 1)
+        generation += 1
+        let token = generation
+        let now = clock()
+        var fresh: [DateGroup] = []
+        var resume: HistoryCursor?
+        var read = 0
+
+        do {
+            let latest = try await history.accountSummaries()
+            repeat {
+                let page = try await history.page(
+                    accountID: filter.accountID, cursor: resume, limit: pageSize)
+                guard token == generation else { return }
+                fresh = Self.fold(page, into: fresh, now: now)
+                resume = page.cursor
+                read += 1
+                // Read past what was held only when the anchor has been pushed down by rows
+                // that arrived above it — otherwise the person's own row would be off the end
+                // of what was re-read, and restoring it would be restoring nothing.
+            } while resume != nil && (read < held || !Self.contains(anchor, in: fresh))
+
+            summaries = latest
+            groups = fresh
+            cursor = resume
+            isExhausted = resume == nil
+            pagesHeld = read
+            state = fresh.isEmpty ? .empty(EmptyKind.decide(summaries: latest, filter: filter)) : .showing
+            // Written back last, and written even when it has not changed: the write is what
+            // tells the scroll position where to go after the rows underneath it moved.
+            anchorRowID = anchor
+        } catch {
+            // Nothing is assigned on this path — the screen keeps every row it had.
         }
     }
 
@@ -135,9 +219,15 @@ final class TransactionListViewModel {
         cursor = nil
         isExhausted = false
         isLoadingMore = false
+        pagesHeld = 0
+        generation += 1
+        let token = generation
         do {
-            summaries = try await history.accountSummaries()
-            apply(try await history.page(accountID: filter.accountID, cursor: nil, limit: pageSize))
+            let latest = try await history.accountSummaries()
+            let page = try await history.page(accountID: filter.accountID, cursor: nil, limit: pageSize)
+            guard token == generation else { return }
+            summaries = latest
+            apply(page)
             state =
                 groups.isEmpty
                 ? .empty(EmptyKind.decide(summaries: summaries, filter: filter))
@@ -157,14 +247,22 @@ final class TransactionListViewModel {
     /// give the same answer, which is what makes the heading a person sees independent of how
     /// far they happened to scroll before it appeared.
     private func apply(_ page: HistoryPage) {
-        let now = clock()
-        var incoming: [DateGroup] = []
+        groups = Self.fold(page, into: groups, now: clock())
+        cursor = page.cursor
+        isExhausted = page.cursor == nil
+        pagesHeld += 1
+    }
+
+    /// One page folded onto the groups already read. Pure, so the refresh can build a whole
+    /// replacement sequence off to one side and swap it in as a single change.
+    private static func fold(_ page: HistoryPage, into groups: [DateGroup], now: Date) -> [DateGroup] {
+        var folded = groups
         for historyRow in page.rows {
             let row = TransactionRow(historyRow)
-            if let open = incoming.last, open.id == row.isoDate {
-                incoming[incoming.count - 1] = open.appending([row])
+            if let open = folded.last, open.id == row.isoDate {
+                folded[folded.count - 1] = open.appending([row])
             } else {
-                incoming.append(
+                folded.append(
                     DateGroup(
                         id: row.isoDate,
                         date: row.date,
@@ -173,22 +271,38 @@ final class TransactionListViewModel {
                     ))
             }
         }
-
-        if let first = incoming.first, let open = groups.last, open.id == first.id {
-            groups[groups.count - 1] = open.appending(first.rows)
-            groups.append(contentsOf: incoming.dropFirst())
-        } else {
-            groups.append(contentsOf: incoming)
-        }
-
-        cursor = page.cursor
-        isExhausted = page.cursor == nil
+        return folded
     }
 
+    /// Whether the row the person was reading is among the rows read back. A `nil` anchor —
+    /// nothing scrolled yet — is satisfied by anything.
+    private static func contains(_ rowID: String?, in groups: [DateGroup]) -> Bool {
+        guard let rowID else { return true }
+        return groups.contains { $0.rows.contains { $0.id == rowID } }
+    }
+
+    /// Whether this row is among the last few — asked several times a second while a person
+    /// scrolls, so it walks backwards by index over at most `prefetchDistance` rows rather
+    /// than flattening every page read so far. A list ten thousand rows deep would otherwise
+    /// allocate ten thousand ids to answer a question about ten of them (FR-057, FR-061).
+    ///
+    /// It re-decides nothing: the sequence is exactly the one the engine returned, walked from
+    /// the end it already has.
     private func isNearTheEnd(_ rowID: String) -> Bool {
-        let ids = groups.flatMap(\.rows).map(\.id)
-        guard let index = ids.lastIndex(of: rowID) else { return false }
-        return ids.count - index <= Self.prefetchDistance
+        var remaining = Self.prefetchDistance
+        var groupIndex = groups.count - 1
+        while groupIndex >= 0 {
+            let rows = groups[groupIndex].rows
+            var rowIndex = rows.count - 1
+            while rowIndex >= 0 {
+                if rows[rowIndex].id == rowID { return true }
+                remaining -= 1
+                if remaining <= 0 { return false }
+                rowIndex -= 1
+            }
+            groupIndex -= 1
+        }
+        return false
     }
 }
 
@@ -203,27 +317,13 @@ extension DateGroup {
 extension TransactionListViewModel {
     /// The real wiring: the process's one `Store`, read through an actor.
     ///
-    /// A store that cannot be opened is a screen that says so, not a crash and not an empty
-    /// list — an empty list would tell a person their transactions are gone.
+    /// The store is *opened* inside that actor too. This is called from a view body, and a
+    /// database that opens on the main thread is a screen that hitches on the way in — a
+    /// store that cannot be opened at all then reaches `.unavailable` through exactly the
+    /// same path a later read failure would, because an empty list would tell a person their
+    /// transactions are gone.
     static func live() -> TransactionListViewModel {
-        let history: any TransactionHistoryReading
-        do {
-            history = TransactionHistoryService(store: try StoreProvider.shared())
-        } catch {
-            history = UnavailableHistory()
-        }
-        return TransactionListViewModel(history: history)
-    }
-}
-
-/// Stands in when the database could not be opened at all, so the screen reaches
-/// `.unavailable` through exactly the same path a later failure would.
-private struct UnavailableHistory: TransactionHistoryReading {
-    func page(accountID: String?, cursor: HistoryCursor?, limit: UInt32) async throws -> HistoryPage {
-        throw TransactionListError.unavailable
-    }
-
-    func accountSummaries() async throws -> [AccountSummary] {
-        throw TransactionListError.unavailable
+        TransactionListViewModel(
+            history: TransactionHistoryService(opening: { try StoreProvider.shared() }))
     }
 }

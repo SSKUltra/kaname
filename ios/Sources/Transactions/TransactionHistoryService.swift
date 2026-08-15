@@ -21,15 +21,24 @@ protocol TransactionHistoryReading: Sendable {
 /// its own, and it holds no cache. Every one of those would be a second opinion about a
 /// person's transactions, and the whole point of this slice is that there is only one.
 actor TransactionHistoryService: TransactionHistoryReading {
-    private let store: Store
+    private let open: @Sendable () throws -> Store
+    private var opened: Store?
 
     init(store: Store) {
-        self.store = store
+        open = { store }
+    }
+
+    /// Opened on first use, **inside the actor**. Opening the encrypted database is the one
+    /// piece of I/O on this path that is not a read, and the list is reached from a view body
+    /// — so handing the actor a way to open rather than an open store is what keeps SQLCipher
+    /// off the main thread (FR-057).
+    init(opening open: @escaping @Sendable () throws -> Store) {
+        self.open = open
     }
 
     func page(accountID: String?, cursor: HistoryCursor?, limit: UInt32) throws -> HistoryPage {
         do {
-            return try store.historyPage(
+            return try store().historyPage(
                 query: HistoryQuery(accountId: accountID, cursor: cursor, limit: limit))
         } catch {
             // Mapped at the boundary: nothing the store says about a row travels any further
@@ -40,9 +49,18 @@ actor TransactionHistoryService: TransactionHistoryReading {
 
     func accountSummaries() throws -> [AccountSummary] {
         do {
-            return try store.accountSummaries()
+            return try store().accountSummaries()
         } catch {
             throw TransactionListError(mapping: error)
         }
+    }
+
+    /// A database that will not open is a screen that says so — reached through the same path
+    /// a later read failure takes, so there is one way for this screen to be unavailable.
+    private func store() throws -> Store {
+        if let opened { return opened }
+        let store = try open()
+        opened = store
+        return store
     }
 }

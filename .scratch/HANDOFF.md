@@ -72,20 +72,50 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR E — US8 (staying current with an import) and the perf/polish tail, starting at T122.**
+**⬅️ NEXT: `018-transaction-list` is code-complete. What is left is T139/T140 — the manual,
+release-blocking gate, on a real device, which only a person can run** (`quickstart.md`
+§ *The manual, release-blocking gate*: G1–G8 accessibility, G9–G14 device performance, then
+fill the **Record here** table). **SC-012 is satisfied by recording it, not by running it.**
+After that, the next slice is the **DEBUG-only test-seeding hook** — see below for why it now
+blocks automated coverage of every P3 screen, not just this one.
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
 **PR A0 (#38) is merged**, **PR A is done — T001–T044**, **PR B is done — T045–T083, less T069**,
-**PR C is done — T084–T102**, and **PR D is done — T103–T121.** A person can now open the app, tap once, read their own
-transactions across every account newest-first and grouped by date, narrow to one account and
-clear it again in a single tap, and be told which of six true things is the case when a screen
-is empty. Importing the same statement a second time changes nothing they can see, and the
-filter is forgotten on relaunch, deliberately. **Neither PR B nor PR C has been opened as a pull
-request yet** — nor has PR D. Their commits are all on `main` (`738cbe1`, `ea7ba68`, `1a8054f`,
-`572f0b4`, `94aa894`, and PR D's).
+**PR C is done — T084–T102**, **PR D is done — T103–T121**, and **PR E is done — T122–T138 and
+T141–T147**, i.e. everything but the two manual tasks. A person can now open the app, tap once,
+read their own transactions across every account newest-first and grouped by date, narrow to one
+account and clear it again in a single tap, be told which of six true things is the case when a
+screen is empty — and see a statement they have just imported appear in a list they are already
+reading, without losing the filter they set or the row they were on. Importing the same statement
+a second time changes nothing they can see, and the filter is forgotten on relaunch, deliberately.
+**None of PR B, C, D or E has been opened as a pull request yet.** Their commits are all on `main`
+(`738cbe1`, `ea7ba68`, `1a8054f`, `572f0b4`, `94aa894`, PR D's and PR E's).
+
+**What PR E landed**: `ImportCompletionSignal` — the process's one broadcast `AsyncStream<Void>`,
+yielded by `ImportService` **after** `import_statement` commits and on no other path — plus
+`refreshAfterImport()` (the held pages re-read from page 1 with the same filter and swapped in as
+*one* change), scroll-anchor capture and restore through `.scrollPosition(id:)`, and two
+subscribers: the list and the front door, so a count and a list can never be read from two
+different moments. Two suites — `ImportCompletionSignalTests` (I1–I4 + the cancelled-import
+no-transition case) and four new refresh invariants in `TransactionFilterTests` — and **eight
+deliberate breaks were watched going red**, including a signal sent one line early (six tests) and
+a refresh that resumed from the cursor the old read had reached.
+
+⚠️ **Two defects PR E found in shipped code, both fixed.** `TransactionListViewModel` had **no
+generation guard**: a page read still in flight when the filter changed would append the *old*
+account's rows to the *new* population — FR-040, silently. And `TransactionHistoryService` was
+handed an already-open `Store`, which meant `StoreProvider.shared()` — SQLCipher's first open —
+ran on the **main thread**, from a view body; it now takes `init(opening:)` and opens inside the
+actor. A third, smaller one: the prefetch check flattened every row read so far on **every**
+scroll tick (ten thousand ids allocated to answer a question about ten), and now walks backwards
+by index.
+
+⚠️ **`ImportService.swift` is at 393 lines** (limit 400). PR E spent the headroom T067 created by
+moving `PendingImport` and `PipelineOutcome` into `ImportModels.swift` — the file's own budget is
+now 7 lines, and the next task to touch it must move something out, not reformat.
 
 **What PR D landed**: four suites — `TransactionAmountTests`, `TransactionCategoryTests`,
 `TransactionTransferMarkingTests`, `TransactionAccessibilityTests` — plus three more audit scans
@@ -728,7 +758,49 @@ changes don't need linting/building/testing.
   contrast failures on its first run. Two rules it established: never use
   `.foregroundStyle(.secondary)` for content text, and set `.primary` explicitly on every
   `LabeledContent` value, because the system renders it secondary.
+- **`ios/Sources/Transactions/` — the transaction list (018).** `TransactionHistoryService` is
+  an **actor**, and the *only* thing in the app that reads history: it opens the store inside
+  itself (`init(opening:)`), so SQLCipher never opens on the main thread even though the screen
+  is reached from a view body. `TransactionListViewModel` owns paging, the filter, incremental
+  date grouping and the scroll anchor, and holds a `generation` token so a page read still in
+  flight when the population changes underneath it is dropped rather than appended.
+  `ImportCompletionSignal` is the process's one **broadcast `AsyncStream<Void>`**: the import
+  actor yields it *after* `import_statement` commits and on no other path, and both the list
+  and the front door re-read on it — so the count on one screen and the rows on the other can
+  never come from two different moments. It carries `Void` deliberately (a payload would be a
+  second population, arriving by a second route).
+- **The engine's two reads (018).** `Store::history_page(HistoryQuery) -> HistoryPage` —
+  keyset-paged, a k-way merge of one index-satisfied query per account, the account filter
+  being the same query with k = 1 — and `Store::account_summaries()`, which is where the front
+  door's per-account live count now comes from (it was an N+1 in Swift: 43.8 ms of Rust time
+  became 1.6 ms measured through the whole seam). Schema is **v7**: one partial descending
+  index `idx_txn_live_account_date ON transactions(account_id, date DESC) WHERE is_deleted = 0
+  AND superseded_by IS NULL`. ⚠️ The live-row rule is the single Rust constant `LIVE`, and it
+  is **byte-identical** to that index's `WHERE` clause — paraphrase either and the read loses
+  its index and `history_perf.rs`'s plan-shape test (S1/S2) goes red. `Store::list_transactions`
+  keeps its raw semantics (deleted and superseded rows included) on purpose — do not "fix" it.
+  `StoreProvider.shared()` is the process's one `Store`, which is a correctness requirement:
+  two connections would be two locks, and a page read could land inside an atomic import.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
+
+### ⚠️ Open findings carried out of 018 — evidence, not opinions
+
+- **R17 — the matcher collapses across accounts, and the same-institution guard is still
+  absent.** 018 PR A fixed only the *tie-break*: dedup's account groups are ordered by
+  `accounts.rowid`, so which row survives is now deterministic across processes
+  (`tests/store_dedup_determinism.rs`). What it did **not** change is which pairs match. Two
+  accounts *of the same kind* are now never compared at all — a blunt guard: a person with two
+  bank accounts, one of which itemises the other's card spends, would see the spend twice. The
+  narrow fix is a **source-kind** guard rather than a same-kind one; the honest fix is a
+  matcher that knows *why* two rows are the same purchase. Belongs to the slice that owns
+  dedup. Evidence: `specs/018-transaction-list/quickstart.md` § *What US1 AS-6 now asserts*.
+- **R18 — `detectTransfers()` is called from no Swift file, and nothing claims otherwise.**
+  The engine's cross-account matcher exists and is tested (`tests/store_transfer.rs`); the
+  transfer **marking** on the list is built and tested against a store where the flag is set by
+  the *test*. Wiring the detection belongs to the categorize slice. `make import-audit` and
+  `ios/Tests/TransactionTransferMarkingTests.swift` mechanically fail any task name, test name,
+  string or release note that implies the app detects transfers — keep it that way until it
+  does.
 
 ---
 

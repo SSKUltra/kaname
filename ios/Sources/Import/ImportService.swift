@@ -11,6 +11,9 @@ actor ImportService {
     /// it when it names that same document.
     private var inFlight: (url: URL, task: Task<PipelineOutcome, Error>)?
     private let pipeline: ImportPipeline
+    /// Where a committed statement is announced — and the only thing this actor tells anyone
+    /// about a finished import beyond its own return value (FR-053).
+    private let completions: ImportCompletionSignal
     /// The statement waiting on a person to say which account it belongs to. Held only until
     /// they answer or walk away — nothing has been written for it yet.
     private var pendingChoice: PendingImport?
@@ -18,11 +21,13 @@ actor ImportService {
     init(
         extractor: any StatementTextExtractor,
         store: Store,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        completions: ImportCompletionSignal = .shared
     ) {
         // The clock lives on this side, not in the core: the engine reads no wall-clock time,
         // so the timestamp is an input. Injectable so tests are deterministic.
         pipeline = ImportPipeline(extractor: extractor, store: store, now: now)
+        self.completions = completions
     }
 
     /// Import one statement. Throws `ImportFailure` and nothing else: every engine and store
@@ -52,6 +57,9 @@ actor ImportService {
         defer { inFlight = nil }
         let outcome = try await task.value
         pendingChoice = outcome.pending
+        // After the store's one transaction has committed, and only when it did: a statement
+        // still waiting on an account question wrote nothing to announce.
+        if case .finished = outcome.result { completions.send() }
         return outcome.result
     }
 
@@ -59,7 +67,9 @@ actor ImportService {
     func resolveAccount(_ decision: AccountDecision) throws -> ImportSummary {
         guard let pending = pendingChoice else { throw ImportFailure.cancelled }
         pendingChoice = nil
-        return try pipeline.finish(pending, decision: decision)
+        let summary = try pipeline.finish(pending, decision: decision)
+        completions.send()
+        return summary
     }
 
     /// Stop the running import. Every checkpoint sits before the single write, so a
@@ -74,20 +84,6 @@ actor ImportService {
     func importedAccounts() throws -> [ImportedAccount] {
         try pipeline.importedAccounts()
     }
-}
-
-/// A parse waiting on an account decision. Everything needed to finish the import without
-/// reading the file — or asking for its password — a second time.
-struct PendingImport: Sendable {
-    let issuer: Issuer
-    let parsed: ParsedStatement
-    let integrity: IntegrityOutcome
-}
-
-/// What one pipeline run produced: what to show, and what it is still waiting on.
-private struct PipelineOutcome: Sendable {
-    let result: ImportResult
-    let pending: PendingImport?
 }
 
 /// The stages themselves, as a plain value so each one stays small and separately readable.

@@ -97,8 +97,10 @@ make ios-test           # core-xcframework → tuist generate → simulator buil
 
 ## The performance measurement, and how to re-run it
 
-The engine half is automated in `core/crates/kaname-core/tests/history_perf.rs`. Two things
-about the corpus are easy to get wrong and both were measured during planning:
+The engine half is automated in `core/crates/kaname-core/tests/history_perf.rs`. **S1–S7 run
+under `make core-test` by default** — none is behind `--ignored`, a feature flag or a separate
+target, so a regression is caught by the gate everyone already runs. Two things about the corpus
+are easy to get wrong and both were measured during planning:
 
 **1. Seed by direct SQL, not through `import_statement`.** Seeding 10,000 rows through the real
 import path takes **11.77 s**; direct SQL takes **151 ms** — 78× — because `find_duplicates_in`
@@ -109,17 +111,31 @@ corpus, direct SQL for the performance corpus.
 corpus silently de-duplicated itself down to **1,250 live rows** (research R20). A performance
 test that measures an eighth of the corpus it claims to measure is worse than no test.
 
-Reference numbers on the planning machine (M-series Mac, debug build, warm cache), for
-recognising a regression rather than for pass/fail:
+Reference numbers, for recognising a regression rather than for pass/fail. The first block is
+**this build**, measured through `Store::history_page` / `Store::account_summaries` in a **debug**
+build on an M-series Mac with a simulator running — re-run it any time with
+`cd core && cargo test --test history_perf -- --nocapture`, which prints every line below:
+
+| Measurement | Value | Printed by |
+|---|---|---|
+| First page, 10,000 rows / 8 accounts, with the v7 index | 1.494 ms | S3 |
+| Worst page over a full 10,000-row walk (182 pages) | 5.020 ms | S4 |
+| Median page over that walk | 1.504 ms | S4 |
+| Per-account first-page cost, 200/2 vs 10,000/8 | 219 µs vs 186 µs — **−15%** spread (SC-008b budget: +20%) | S5 |
+| Filtered first page (one account), 10,000 rows / 8 accounts | 309 µs | S6 |
+| `account_summaries()` grouped count, 10,000 rows | 1.614 ms | S7 |
+| Database file, that corpus | 2,490,368 B | S7 |
+
+These are **whole-seam** numbers — one lock, one account list, one category catalog, the k-way
+merge and the `Decimal` conversions included — where the planning table below timed the SQL
+alone. That is why they are ~5× larger and why they are the ones to compare against next time.
+
+Retained from the planning machine, because this build has no way to re-measure them (the
+Swift-side N+1 no longer exists, and the index is not optional):
 
 | Measurement | Value |
 |---|---|
-| First page, 10,000 rows / 8 accounts, with the v7 index | 254.75 µs |
-| Same, **without** the index | 3.974 ms (and `USE TEMP B-TREE FOR ORDER BY`) |
-| Worst page over a full 10,000-row walk (335 pages) | 289 µs |
-| Median page | 10 µs |
-| Per-account first-page cost, 200/2 vs 10,000/8 | 13% spread (SC-008b budget: 20%) |
-| `account_summaries()` grouped count, 10,000 rows | 0.99 ms |
+| First-page SQL **without** the index | 3.974 ms (and `USE TEMP B-TREE FOR ORDER BY`) |
 | Today's Swift-side `importedAccounts()` count, same corpus | 43.8 ms of Rust time |
 | Index size | 282,624 B on a 2,273,280 B file (+12.4%, ≈28 B/live row) |
 | Cold `Store::open` | 180–260 µs, either corpus |
@@ -199,22 +215,42 @@ Run on a real iPhone, release build, with the 10,000-row / 8-account corpus inst
 
 ## Definition of done
 
-- [ ] The front door's account rows are tappable and lead to the list (US1)
-- [ ] The unfiltered list interleaves every account by date, newest first (US1, FR-028)
-- [ ] The order is total, deterministic and stable — proved by O1–O7 (FR-031, SC-009)
-- [ ] Re-importing a statement changes neither the count nor the list (US2, SC-003)
-- [ ] The front-door count comes from the engine, from the same rule as the list (FR-008, SC-004)
-- [ ] Deleted and superseded rows never appear anywhere (FR-007, SC-005)
-- [ ] The filter shows exactly one account, names itself, and is always clearable (US3, FR-038)
-- [ ] The filter is `.all` on every launch (FR-041)
-- [ ] Dates group across accounts, with the year shown when it is not the current year (US4)
-- [ ] No total, subtotal, balance or average exists anywhere in the code (FR-025, FR-026)
-- [ ] Each amount shows its own transaction's currency (US5, SC-011)
-- [ ] Categories and transfer markings render what the engine recorded (US6)
-- [ ] All six empty states are correct, and none of them blames the person (US7, FR-051)
-- [ ] The list keeps up with an import without losing filter or scroll position (US8, SC-010)
-- [ ] Engine perf gates green: no `SCAN`, no temp b-tree, every bound met (SC-006–SC-008a/b)
-- [ ] Every fixture synthetic; no real merchant, amount pattern or account identifier (SC-017)
-- [ ] `make core-lint && make core-test && make lint && make ios-test && make import-audit` green
+- [x] The front door's account rows are tappable and lead to the list (US1)
+- [x] The unfiltered list interleaves every account by date, newest first (US1, FR-028)
+- [x] The order is total, deterministic and stable — proved by O1–O7 (FR-031, SC-009)
+- [x] Re-importing a statement changes neither the count nor the list (US2, SC-003)
+- [x] The front-door count comes from the engine, from the same rule as the list (FR-008, SC-004)
+- [x] Deleted and superseded rows never appear anywhere (FR-007, SC-005)
+- [x] The filter shows exactly one account, names itself, and is always clearable (US3, FR-038)
+- [x] The filter is `.all` on every launch (FR-041)
+- [x] Dates group across accounts, with the year shown when it is not the current year (US4)
+- [x] No total, subtotal, balance or average exists anywhere in the code (FR-025, FR-026)
+- [x] Each amount shows its own transaction's currency (US5, SC-011)
+- [x] Categories and transfer markings render what the engine recorded (US6)
+- [x] All six empty states are correct, and none of them blames the person (US7, FR-051)
+- [x] The list keeps up with an import without losing filter or scroll position (US8, SC-010)
+- [x] Engine perf gates green: no `SCAN`, no temp b-tree, every bound met (SC-006–SC-008a/b)
+- [x] Every fixture synthetic; no real merchant, amount pattern or account identifier (SC-017)
+- [x] `make core-lint && make core-test && make lint && make ios-test && make import-audit` green
+      — with the two UI-test failures 016 already owns (see below)
 - [ ] **Manual gate recorded above** with device, build and date (SC-012, SC-008c)
-- [ ] `.scratch/HANDOFF.md` and `AGENTS.md` updated; R17 and R18 carried forward as open items
+- [x] `.scratch/HANDOFF.md` and `AGENTS.md` updated; R17 and R18 carried forward as open items
+
+### What US1 AS-6 now asserts, exactly
+
+AS-6 — *two accounts holding a transaction with the same date, description and amount each keep
+their own row* — **holds as written**, and is pinned by
+`core/crates/kaname-core/tests/store_dedup_determinism.rs`:
+
+| Test | What it fences |
+|---|---|
+| `two_credit_cards_each_keep_their_own_identical_row` (T008) | AS-6 itself, for two cards |
+| `two_bank_accounts_each_keep_their_own_identical_row` (T008c) | AS-6, for two bank ledgers |
+| `a_bank_ledger_and_a_card_still_collapse_the_same_purchase` (T008b) | 013's whole purpose — one purchase, seen twice, stays one row |
+
+⚠️ **Carried forward as an open finding, for the slice that owns dedup.** Two accounts *of the
+same kind* are now never compared at all. That is a blunt guard: a person with two bank
+accounts, one of which itemises the other's card spends, would see the same spend twice. The
+narrow fix is a **source-kind** guard rather than a same-kind one; the honest fix is a matcher
+that knows *why* two rows are the same purchase, which is a larger question than a tie-break —
+and larger than this slice, which changed only which of two matched rows wins.

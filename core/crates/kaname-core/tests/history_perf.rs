@@ -87,6 +87,7 @@ fn s3_the_first_page_of_a_large_history_is_within_budget() {
     // One warm read first: the gate is the cost of a page, not of opening the database.
     first_page(&store, None, 50);
     let elapsed = first_page(&store, None, 50);
+    eprintln!("S3 first page, 10,000 rows / 8 accounts: {elapsed:?}");
     assert!(elapsed < BUDGET, "first page took {elapsed:?}");
 }
 
@@ -95,6 +96,7 @@ fn s4_no_page_of_a_full_walk_exceeds_the_budget() {
     let (_db, store) = perf_store("s4", 8, 10_000);
 
     let mut worst = Duration::ZERO;
+    let mut every = Vec::new();
     let mut cursor: Option<HistoryCursor> = None;
     let mut pages = 0;
     loop {
@@ -106,13 +108,20 @@ fn s4_no_page_of_a_full_walk_exceeds_the_budget() {
                 limit: 50,
             })
             .expect("page");
-        worst = worst.max(started.elapsed());
+        let elapsed = started.elapsed();
+        worst = worst.max(elapsed);
+        every.push(elapsed);
         pages += 1;
         match page.cursor {
             Some(next) => cursor = Some(next),
             None => break,
         }
     }
+    every.sort();
+    eprintln!(
+        "S4 full walk of {pages} pages: worst {worst:?}, median {:?}",
+        every[every.len() / 2]
+    );
     assert!(pages > 100, "the walk must cover the whole corpus");
     assert!(worst < BUDGET, "the slowest page took {worst:?}");
 }
@@ -134,6 +143,11 @@ fn s5_the_per_account_cost_does_not_grow_with_the_history() {
     // is divided by two accounts on the small corpus and by eight on the large one. Fifty
     // times more rows making a page *dearer* per account is the regression worth catching.
     let growth = (large_cost - small_cost) / small_cost;
+    eprintln!(
+        "S5 per-account first page: {small_cost:.6}s (200/2) vs {large_cost:.6}s (10,000/8), \
+         spread {:.0}%",
+        growth * 100.0
+    );
     assert!(
         growth <= 0.20,
         "per-account first-page cost grew {:.0}% with the corpus \
@@ -147,6 +161,7 @@ fn s6_a_filtered_page_of_a_large_history_is_within_budget() {
     let (_db, store) = perf_store("s6", 8, 10_000);
     first_page(&store, Some("perf-account-05"), 50);
     let elapsed = first_page(&store, Some("perf-account-05"), 50);
+    eprintln!("S6 filtered first page, 10,000 rows / 8 accounts: {elapsed:?}");
     assert!(elapsed < BUDGET, "a filtered first page took {elapsed:?}");
 }
 
@@ -156,4 +171,18 @@ fn median(mut read: impl FnMut() -> Duration) -> Duration {
     let mut samples: Vec<Duration> = (0..9).map(|_| read()).collect();
     samples.sort();
     samples[samples.len() / 2]
+}
+
+#[test]
+fn s7_the_front_door_count_is_one_grouped_read() {
+    let (db, store) = perf_store("s7", 8, 10_000);
+    store.account_summaries().expect("warm");
+    let elapsed = median(|| {
+        let started = Instant::now();
+        store.account_summaries().expect("summaries");
+        started.elapsed()
+    });
+    let file = std::fs::metadata(&db.path).map(|m| m.len()).unwrap_or(0);
+    eprintln!("S7 account_summaries(), 10,000 rows / 8 accounts: {elapsed:?}; db file {file} B");
+    assert!(elapsed < BUDGET, "the front-door count took {elapsed:?}");
 }

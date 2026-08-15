@@ -5,115 +5,6 @@ import Testing
 
 @testable import Kaname
 
-/// A synthetic 256-bit key (64 hex chars). Test-only; never a real device key.
-private let filterKey = "0099aabbccddeeff11223344556677889900aabbccddeeff1122334455667788"
-private let filterNow = Date(timeIntervalSince1970: 1_784_000_000)  // 2026-07-16
-
-/// Three accounts with rows on shared and unshared dates, written straight to a real store.
-private struct FilterFixture {
-    let directory: URL
-    let store: Store
-    let accountIDs: [String]
-
-    init() throws {
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("kaname-filter-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        store = try Store.open(
-            path: directory.appendingPathComponent("kaname.db").path, key: filterKey)
-
-        var ids: [String] = []
-        for account in Self.accounts {
-            let id = try store.insertAccount(
-                account: NewAccount(
-                    name: account.name,
-                    bankCode: "SYNTHETIC",
-                    isCreditCard: false,
-                    last4: account.last4,
-                    currency: "INR",
-                    createdAt: "2026-08-01T00:00:00Z",
-                    updatedAt: "2026-08-01T00:00:00Z"
-                ))
-            ids.append(id)
-            for (index, date) in account.dates.enumerated() {
-                _ = try store.insertTransaction(
-                    txn: NewTransaction(
-                        accountId: id,
-                        date: date,
-                        descriptionRaw: "SYNTHETIC \(account.name.uppercased()) \(index)",
-                        amount: TransactionCorpus.decimal("100.0\(index)"),
-                        direction: .debit,
-                        currency: "INR",
-                        sourceCategory: nil,
-                        categoryId: nil,
-                        categorisedBy: nil,
-                        statementId: nil,
-                        createdAt: "2026-08-01T00:00:00Z",
-                        updatedAt: "2026-08-01T00:00:00Z"
-                    ))
-            }
-        }
-        accountIDs = ids
-    }
-
-    /// Dates deliberately overlap between accounts, so a filtered read has to be a different
-    /// *query* rather than a different slice of the same rows.
-    struct Seed {
-        let name: String
-        let last4: String?
-        let dates: [String]
-    }
-
-    private static let accounts: [Seed] = [
-        Seed(name: "Everyday Savings", last4: "1123", dates: ["2026-07-15", "2026-07-14", "2026-07-02"]),
-        Seed(name: "Travel Card", last4: "8890", dates: ["2026-07-15", "2026-07-10"]),
-        // No last-4: the scope has to name this account without one (FR-003).
-        Seed(name: "Cash Wallet", last4: nil, dates: ["2026-07-15", "2026-06-01"]),
-    ]
-
-    func cleanUp() {
-        try? FileManager.default.removeItem(at: directory)
-    }
-
-    func model(pageSize: UInt32 = 2) async -> TransactionListViewModel {
-        await TransactionListViewModel(
-            history: TransactionHistoryService(store: store),
-            clock: { filterNow },
-            pageSize: pageSize
-        )
-    }
-
-    func filter(_ index: Int) throws -> AccountFilter {
-        let account = try store.listAccounts()[index]
-        return .account(id: account.id, name: account.name, last4: account.last4)
-    }
-
-    /// A digest over every file the store owns, so a write to a journal counts as a write.
-    func digest() -> String {
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
-            .sorted()
-        var hasher = SHA256()
-        for name in names {
-            hasher.update(data: Data(name.utf8))
-            hasher.update(data: (try? Data(contentsOf: directory.appendingPathComponent(name))) ?? Data())
-        }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-}
-
-private func drain(_ model: TransactionListViewModel) async {
-    for _ in 0..<100 {
-        let rows = await model.groups.flatMap(\.rows)
-        guard let last = rows.last else { return }
-        await model.loadMoreIfNeeded(currentRowID: last.id)
-        if await model.groups.flatMap(\.rows).count == rows.count { return }
-    }
-}
-
-private func rowIDs(_ model: TransactionListViewModel) async -> [String] {
-    await model.groups.flatMap(\.rows).map(\.id)
-}
-
 /// The account filter: the same list with fewer rows in it.
 ///
 /// Three claims, and the whole story is in which of them a defect would break silently. That
@@ -344,5 +235,99 @@ struct TransactionFilterTests {
         #expect(offered.map(\.accountID) == fixture.accountIDs)
         #expect(offered.map(\.accountName) == ["Everyday Savings", "Travel Card", "Cash Wallet"])
         #expect(offered.map(\.accountLast4) == ["1123", "8890", nil])
+    }
+
+    // MARK: - V3 — an import takes nothing away from the person reading
+
+    @Test("A refresh keeps the filter and the row the person was reading")
+    func aRefreshKeepsTheFilterAndThePlace() async throws {
+        let fixture = try FilterFixture()
+        defer { fixture.cleanUp() }
+        let model = await fixture.model()
+        await model.onAppear()
+
+        let travel = try fixture.filter(1)
+        await model.setFilter(travel)
+        await drain(model)
+        let anchor = try #require(await rowIDs(model).last)
+        await model.anchorChanged(to: anchor)
+
+        // A statement lands in an account this person is not currently looking at.
+        try fixture.addRow(to: 0, date: "2026-07-16", index: 90)
+        await model.refreshAfterImport()
+
+        // The two things an import may never take: the question being asked, and the place in
+        // the answer (FR-056, SC-010).
+        #expect(await model.filter == travel)
+        #expect(await model.anchorRowID == anchor)
+        #expect(await model.scopeTitle == "Travel Card")
+    }
+
+    @Test("A refresh the import did not touch renders exactly what it rendered before")
+    func aRefreshOfAnUntouchedAccountChangesNothing() async throws {
+        let fixture = try FilterFixture()
+        defer { fixture.cleanUp() }
+        let model = await fixture.model()
+        await model.onAppear()
+        await model.setFilter(try fixture.filter(1))
+        await drain(model)
+
+        let before = await model.groups
+        try fixture.addRow(to: 2, date: "2026-07-16", index: 91)
+        await model.refreshAfterImport()
+
+        // Byte-identical: the same groups, the same headings, the same rows in the same order.
+        // A list that reshuffles itself because something happened elsewhere is a list a
+        // person stops trusting (US8 AS-6).
+        #expect(await model.groups == before)
+        #expect(await model.state == .showing)
+    }
+
+    @Test("A refresh reads from the beginning again and duplicates no row")
+    func aRefreshDuplicatesNoRow() async throws {
+        let fixture = try FilterFixture()
+        defer { fixture.cleanUp() }
+        let model = await fixture.model()
+        await model.onAppear()
+        await drain(model)
+        let before = await rowIDs(model)
+        #expect(before.count == 7)
+
+        try fixture.addRow(to: 0, date: "2026-07-16", index: 92)
+        await model.refreshAfterImport()
+
+        let after = await rowIDs(model)
+        #expect(Set(after).count == after.count, "a row was read twice")
+        #expect(after.count == before.count + 1)
+        // The new row is at the newest end, and everything the person had is still under it,
+        // in the order it was in.
+        #expect(Array(after.dropFirst()) == before)
+    }
+
+    @Test("A refresh restarts at the newest end and resumes on its own cursors")
+    func aRefreshNeverResumesFromAStaleCursor() async throws {
+        let double = HistoryDouble(
+            pages: [
+                HistoryPage(rows: [historyRow("a", "2026-07-15")], cursor: historyCursor(1)),
+                HistoryPage(rows: [historyRow("b", "2026-07-14")], cursor: historyCursor(2)),
+                HistoryPage(rows: [historyRow("new", "2026-07-16")], cursor: historyCursor(3)),
+                HistoryPage(rows: [historyRow("a", "2026-07-15")], cursor: nil),
+            ],
+            summaries: [accountSummary(2)]
+        )
+        let model = await TransactionListViewModel(history: double, clock: listClock, pageSize: 1)
+        await model.onAppear()
+        await model.loadMoreIfNeeded(currentRowID: "a")
+        await model.refreshAfterImport()
+
+        let requests = await double.requests
+        try #require(requests.count == 4)
+        // Page 1 of the refresh starts at the newest end, and page 2 resumes from the cursor
+        // *that* page returned — never from the resume point the old read had reached, which
+        // now points into a sequence that has changed underneath it.
+        #expect(requests[2].cursor == nil)
+        #expect(requests[3].cursor == historyCursor(3))
+        #expect(requests[3].cursor != requests[1].cursor)
+        #expect(await rowIDs(model) == ["new", "a"])
     }
 }

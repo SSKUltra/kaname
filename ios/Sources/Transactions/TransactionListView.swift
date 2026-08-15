@@ -37,6 +37,10 @@ struct TransactionListView: View {
                     await model.setFilter(entryFilter)
                 }
             }
+            // A second `.task`, so the subscription lives exactly as long as the screen: it is
+            // started when the list appears and cancelled when it goes away, which is the only
+            // lifetime an import signal should have (I4).
+            .task { await model.refreshWhenImportsComplete() }
     }
 
     @ViewBuilder
@@ -86,6 +90,15 @@ struct TransactionListView: View {
             }
         }
         .listStyle(.plain)
+        // The row the person is reading, in both directions: out while they scroll, and back
+        // in after an import re-reads the rows underneath them. An id, never an offset — an
+        // import inserts rows above, and an offset would point somewhere else afterwards
+        // (FR-056, research R14).
+        .scrollPosition(id: anchor, anchor: .top)
+    }
+
+    private var anchor: Binding<String?> {
+        Binding(get: { model.anchorRowID }, set: { model.anchorChanged(to: $0) })
     }
 
     // MARK: - The filter chrome

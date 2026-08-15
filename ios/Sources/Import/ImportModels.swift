@@ -145,6 +145,20 @@ enum ImportResult: Sendable {
     }
 }
 
+/// A parse waiting on an account decision. Everything needed to finish the import without
+/// reading the file — or asking for its password — a second time.
+struct PendingImport: Sendable {
+    let issuer: Issuer
+    let parsed: ParsedStatement
+    let integrity: IntegrityOutcome
+}
+
+/// What one pipeline run produced: what to show, and what it is still waiting on.
+struct PipelineOutcome: Sendable {
+    let result: ImportResult
+    let pending: PendingImport?
+}
+
 /// Every way an import can end without writing anything.
 ///
 /// No case carries an engine identifier, an error code, a bank code, a reader name, or raw

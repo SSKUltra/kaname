@@ -36,6 +36,9 @@ struct RootView: View {
                 // transactions, at any text size — from ending up underneath it.
                 .safeAreaBar(edge: .bottom) { bottomBar }
                 .task { await model.refreshAccounts() }
+                // The same signal the transaction list listens to, so the count on this screen
+                // and the rows on that one are never read from two different moments (I5).
+                .task { await model.refreshWhenImportsComplete() }
         }
         .fileImporter(
             isPresented: $isPickingFile,

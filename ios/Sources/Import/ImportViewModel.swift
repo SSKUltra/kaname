@@ -101,6 +101,15 @@ final class ImportViewModel {
         accounts = (try? await service.importedAccounts()) ?? accounts
     }
 
+    /// Keep the front door's counts current from the **same** signal the transaction list
+    /// refreshes on, so a count and a list can never be read from two different moments
+    /// (I5, FR-006, FR-057). The loop belongs to the caller's `.task`.
+    func refreshWhenImportsComplete(_ signal: ImportCompletionSignal = .shared) async {
+        for await _ in signal.events {
+            await refreshAccounts()
+        }
+    }
+
     func importStatement(at url: URL) async {
         pendingURL = url
         await run(url: url, password: nil)
