@@ -93,8 +93,16 @@ struct TransactionAccessibilityTests {
 
         // Everything visible in the row is inside the one sentence, so nothing on screen is
         // unreachable to a person who never sees it (FR-015, FR-072).
-        for visible in [row.displayDescription, row.categoryLabel, row.accountIdentity] {
+        for visible in [row.displayDescription, row.categoryLabel] {
             #expect(row.accessibilityLabel.contains(visible), "\(visible) is not announced")
+        }
+        // The account is the one thing drawn in a different *form* from the one it is spoken
+        // in — `•••• 1123 · Everyday Savings` on screen, "Everyday Savings, ending 1123" in
+        // the ear (issue 04). What is asserted is therefore the facts rather than the string:
+        // both forms carry the name and the digits, and neither may lose either.
+        for fact in ["Everyday Savings", "1123"] {
+            #expect(row.accessibilityLabel.contains(fact), "\(fact) is not announced")
+            #expect(row.accountRowIdentity.contains(fact), "\(fact) is not drawn")
         }
         #expect(row.accessibilityLabel.contains(row.amount.formatted(.currency(code: "INR"))))
         // Commas, not newlines: one sentence read at one breath, not six focus stops. The
@@ -187,6 +195,30 @@ struct TransactionAccessibilityTests {
         }
     }
 
+    // MARK: - W5 — the layout decisions are the ones the views actually draw
+
+    @Test("The row and the bar draw their decisions rather than hard-coding around them")
+    func theViewsDrawTheDecisionsTheseTestsProve() throws {
+        // Every other test in this slice proves a *decision* — a pure value, with no screen
+        // involved. That is only worth anything while the views still ask for it. These two
+        // scans are the join: they were both watched failing against the row and the bar as
+        // they shipped before issues 02 and 04 were fixed.
+        let sources = Dictionary(uniqueKeysWithValues: try Self.transactionViewSources())
+
+        let row = try #require(sources["TransactionRowView.swift"])
+        // The row draws the scannable identity — digits first — and not the spoken one, whose
+        // trailing `, ending 7742` is exactly what a one-line row truncates away (issue 04).
+        #expect(row.contains("row.accountRowIdentity"))
+        #expect(!row.contains("Text(row.accountIdentity)"))
+
+        let bar = try #require(sources["TransactionListView.swift"])
+        // The bar asks the layout which fact gets the space, rather than pinning both labels
+        // to one line and letting the string be the only thing that can give (issue 02).
+        #expect(bar.contains("chrome.scopeLines"))
+        #expect(bar.contains("chrome.clearButtonShowsTitle"))
+        #expect(bar.contains("FilterChromeLayout"))
+    }
+
     /// The view sources, read from the repository rather than the bundle — the test target
     /// runs in a simulator, so the path comes from `#filePath`, which is a compile-time
     /// constant pointing at this file.
@@ -215,7 +247,7 @@ struct TransactionAccessibilityTests {
     /// A literal that cannot reach a person's eyes: an SF Symbol name, a glass effect id, a
     /// preview's synthetic data. Anything else in a view body is copy that escaped the deck.
     private static func isPermittedLiteral(_ literal: String) -> Bool {
-        let systemImages = ["exclamationmark.triangle", "tray", "arrow.left.arrow.right"]
+        let systemImages = ["exclamationmark.triangle", "tray", "arrow.left.arrow.right", "xmark.circle"]
         let identifiers = ["scope", "clear"]
         let previewData = [
             "1", "a", "Example Bank Credit Card", "1002", "2026-07-15",

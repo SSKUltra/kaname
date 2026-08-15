@@ -74,6 +74,13 @@ struct TransactionRow: Identifiable, Equatable, Sendable {
         TransactionListStrings.accountIdentity(name: accountName, last4: accountLast4)
     }
 
+    /// The same account, in the form the row draws: the masked digits first, so that the one
+    /// line a row can give the account cannot truncate away the only part of it that tells two
+    /// cards of the same product apart (issue 04).
+    var accountRowIdentity: String {
+        TransactionListStrings.accountRowIdentity(name: accountName, last4: accountLast4)
+    }
+
     /// One sentence, so VoiceOver reads a fact rather than six loose fragments (FR-015).
     /// Always with the year: a row is announced on its own, out of reach of its heading.
     var accessibilityLabel: String {
@@ -217,6 +224,84 @@ struct TransactionRowLayout: Equatable, Sendable {
         descriptionLineLimit = isAccessibility ? 3 : 2
         accountNameLineLimit = 1
         amountYields = false
+    }
+}
+
+/// One line of the filter chrome's scope button, in the order it is drawn.
+///
+/// Top level rather than nested inside `FilterChromeLayout` only because the repo's nesting
+/// limit is one deep and its `Role` has to live somewhere.
+struct ScopeLine: Equatable, Sendable, Identifiable {
+    enum Role: Hashable, Sendable { case name, mask }
+
+    let role: Role
+    let text: String
+    /// The headline of the chip — larger, heavier, and first. Exactly one line is primary.
+    let isPrimary: Bool
+    let lineLimit: Int
+    /// Middle truncation keeps both ends of a name that cannot fit, which is worth more
+    /// than a tail: bank names share their beginnings and card products their endings.
+    let truncatesInTheMiddle: Bool
+
+    var id: Role { role }
+}
+
+/// The filter chrome's layout choice, as data — pure, for the same reason
+/// `TransactionRowLayout` is.
+///
+/// The bar shipped with both of its labels on a hard `lineLimit(1)` and its clear button on no
+/// limit at all, so at accessibility sizes the button expanded without bound and squeezed the
+/// scope chip down to four letters over `·····…`: a filter a person could not identify, and a
+/// mask degraded into a row of dots (`.scratch/018-transaction-list/issues/02`). Truncating
+/// harder is not available to us — at the largest size the widest chip this bar can offer
+/// holds a handful of characters, and no truncation of a card product's full name is a name.
+/// So the decision this type makes is **which fact gets the space**, and at accessibility
+/// sizes that is the last four digits: the only part of an account's identity that
+/// discriminates between two cards of the same product.
+struct FilterChromeLayout: Equatable, Sendable {
+    /// Whether the clear button shows its words. At accessibility sizes it does not — it
+    /// collapses to a symbol carrying the same sentence as its accessibility label, because a
+    /// button reading `Show all ac-count s` over four lines is both unreadable in itself and
+    /// the reason nothing beside it has any room (issue 02, and the bar height behind
+    /// issue 03).
+    let clearButtonShowsTitle: Bool
+
+    /// The most text lines the chip can ever grow to. The bar's height is bounded by this and
+    /// the clear button, and a bottom bar that grows without bound eats the list above it.
+    let maximumScopeLines: Int
+
+    private let isAccessibilitySize: Bool
+
+    init(dynamicTypeSize: DynamicTypeSize) {
+        isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        clearButtonShowsTitle = !isAccessibilitySize
+        maximumScopeLines = isAccessibilitySize ? 3 : 2
+    }
+
+    /// The chip's lines, in the order they are drawn.
+    ///
+    /// At standard sizes this is the shape the screen already shipped and which reads
+    /// correctly: the account's name, with its masked digits beneath. At accessibility sizes
+    /// the order inverts — the mask leads, on its own short line that always fits, and the
+    /// name follows in the space that is left. Unfiltered there is no mask and no inversion to
+    /// make: "All accounts" is the whole fact.
+    func scopeLines(title: String, subtitle: String?) -> [ScopeLine] {
+        guard let subtitle else {
+            return [
+                ScopeLine(
+                    role: .name, text: title, isPrimary: true,
+                    lineLimit: isAccessibilitySize ? maximumScopeLines : 1,
+                    truncatesInTheMiddle: isAccessibilitySize)
+            ]
+        }
+        let mask = ScopeLine(
+            role: .mask, text: subtitle, isPrimary: isAccessibilitySize, lineLimit: 1,
+            truncatesInTheMiddle: false)
+        let name = ScopeLine(
+            role: .name, text: title, isPrimary: !isAccessibilitySize,
+            lineLimit: isAccessibilitySize ? maximumScopeLines - 1 : 1,
+            truncatesInTheMiddle: isAccessibilitySize)
+        return isAccessibilitySize ? [mask, name] : [name, mask]
     }
 }
 

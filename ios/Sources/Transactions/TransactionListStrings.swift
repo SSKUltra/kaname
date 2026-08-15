@@ -34,6 +34,21 @@ enum TransactionListStrings {
         return "\(name), ending \(last4)"
     }
 
+    /// One account, named the way a **row** has to show it: the digits first.
+    ///
+    /// A row's account line is one trailing-truncated line, and the spoken form appends the
+    /// last four *last* — so truncation removed precisely the only part that discriminates,
+    /// and two cards of the same product both read `<the product name>, endin…`
+    /// (`.scratch/018-transaction-list/issues/04`). Leading with the mask spends the truncation
+    /// on the product name instead, which repeats down the whole column anyway, and it aligns
+    /// the discriminator at the same x on every row so a person can scan it rather than read
+    /// to the end of each line. The spoken form is unchanged: `accessibilityLabel` still
+    /// announces the sentence, because a sentence is what a screen reader should hear.
+    static func accountRowIdentity(name: String, last4: String?) -> String {
+        guard let last4 else { return name }
+        return "\(maskedLast4(last4)) · \(name)"
+    }
+
     /// The scope, announced. The filtered state is carried by these words and never by
     /// styling alone (FR-038, FR-071).
     static func scopeAnnouncement(name: String?, last4: String?) -> String {

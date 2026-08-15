@@ -148,6 +148,37 @@ struct TransactionRowLayoutTests {
         #expect(row.accountIdentity == "Everyday Savings")
         #expect(!row.accountIdentity.contains("ending"))
         #expect(row.accessibilityLabel.contains("Everyday Savings"))
+        // And the drawn form says nothing about a mask it does not have: no dots, no
+        // separator, no space where digits would be (FR-003).
+        #expect(row.accountRowIdentity == "Everyday Savings")
+    }
+
+    // MARK: - Issue 04 — the row's one line keeps the part that discriminates
+
+    @Test("Two cards of the same product render different account lines")
+    func twoCardsOfOneProductAreToldApartOnScreen() {
+        // The exact shape the perf corpus has and the manual gate caught: two
+        // `ICICI_AMAZONPAY_CARD` accounts, identical in every respect but their last four.
+        let product = "ICICI Amazon Pay Credit Card"
+        let one = Self.row(description: "SYNTHETIC ROW", accountName: product, last4: "1002")
+        let other = Self.row(description: "SYNTHETIC ROW", accountName: product, last4: "7742")
+
+        #expect(one.accountRowIdentity != other.accountRowIdentity)
+
+        // Different is not enough — a row truncated to `ICICI Amazon Pay Credit Card, endin…`
+        // is also "different" from nothing at all. The digits have to survive the truncation,
+        // which means they have to come before the name, which is the whole fix.
+        #expect(one.accountRowIdentity.hasPrefix(TransactionListStrings.maskedLast4("1002")))
+        #expect(other.accountRowIdentity.hasPrefix(TransactionListStrings.maskedLast4("7742")))
+
+        // The prefixes diverge inside the first dozen characters, so the two rows read
+        // differently even where the column is narrowest.
+        #expect(one.accountRowIdentity.prefix(12) != other.accountRowIdentity.prefix(12))
+
+        // The spoken form is untouched. A screen reader hears a sentence; only the drawing
+        // changed (issue 04, "the VoiceOver label must keep its current sentence form").
+        #expect(one.accessibilityLabel.contains("\(product), ending 1002"))
+        #expect(other.accessibilityLabel.contains("\(product), ending 7742"))
     }
 
     // MARK: - Purity

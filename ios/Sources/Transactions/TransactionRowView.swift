@@ -45,10 +45,13 @@ struct TransactionRowView: View {
                 .lineLimit(layout.descriptionLineLimit)
             // The account this transaction belongs to is content, not decoration: it is what
             // stops a person reading a figure against the wrong account (FR-004, FR-022), so
-            // it keeps full contrast and only the smaller size marks it as subordinate.
-            Text(row.accountIdentity)
+            // it keeps full contrast and only the smaller size marks it as subordinate. The
+            // masked digits lead, because this line gets one line and the digits are the part
+            // of it that discriminates (issue 04).
+            Text(row.accountRowIdentity)
                 .font(.footnote)
                 .foregroundStyle(.primary)
+                .monospacedDigit()
                 .lineLimit(layout.accountNameLineLimit)
             marks
         }

@@ -16,6 +16,12 @@ struct TransactionListView: View {
     /// one another rather than cross-fading — the filter changing is one control changing
     /// shape, not two controls swapping places.
     @Namespace private var filterChrome
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The filter bar's layout decision, taken from the text size and nothing else.
+    private var chrome: FilterChromeLayout {
+        FilterChromeLayout(dynamicTypeSize: dynamicTypeSize)
+    }
 
     init(filter: AccountFilter, model: TransactionListViewModel, onImport: @escaping () -> Void) {
         entryFilter = filter
@@ -116,14 +122,7 @@ struct TransactionListView: View {
                 HStack(spacing: 12) {
                     scopeMenu
                     if model.isFiltered {
-                        // One action, always in reach, never inside the menu it would have to
-                        // be hunted for in (FR-039).
-                        Button(TransactionListStrings.clearFilter) {
-                            Task { await model.clearFilter() }
-                        }
-                        .buttonStyle(.glass)
-                        .glassEffectID("clear", in: filterChrome)
-                        .transition(.opacity)
+                        clearButton
                     }
                 }
                 .padding(.horizontal, 16)
@@ -159,14 +158,13 @@ struct TransactionListView: View {
             }
         } label: {
             VStack(alignment: .leading, spacing: 1) {
-                Text(model.scopeTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                if let subtitle = model.scopeSubtitle {
-                    Text(subtitle)
-                        .font(.caption)
+                ForEach(chrome.scopeLines(title: model.scopeTitle, subtitle: model.scopeSubtitle)) { line in
+                    Text(line.text)
+                        .font(line.isPrimary ? .subheadline.weight(.semibold) : .caption)
                         .monospacedDigit()
-                        .lineLimit(1)
+                        .lineLimit(line.lineLimit)
+                        .truncationMode(line.truncatesInTheMiddle ? .middle : .tail)
+                        .multilineTextAlignment(.leading)
                 }
             }
         }
@@ -176,6 +174,29 @@ struct TransactionListView: View {
         // sentence rather than left to be inferred from a button's label (FR-038, SC-014).
         .accessibilityLabel(model.scopeAnnouncement)
         .accessibilityHint(TransactionListStrings.scopeHint)
+    }
+
+    /// The one action, always in reach, never inside the menu it would have to be hunted for
+    /// in (FR-039).
+    ///
+    /// At accessibility sizes it is a symbol. Its words are not dropped — they stay as the
+    /// sentence a screen reader speaks, stated outright rather than inferred from the style —
+    /// but they stop being four hyphenated lines that leave the scope chip beside them nothing
+    /// to be read in (issue 02) and the list above them nothing to be scrolled clear into
+    /// (issue 03).
+    private var clearButton: some View {
+        Button {
+            Task { await model.clearFilter() }
+        } label: {
+            Label(TransactionListStrings.clearFilter, systemImage: "xmark.circle")
+                .labelStyle(ClearFilterLabelStyle(showsTitle: chrome.clearButtonShowsTitle))
+        }
+        .buttonStyle(.glass)
+        .glassEffectID("clear", in: filterChrome)
+        .transition(.opacity)
+        // Stated on the button itself rather than left to the label style, so that what a
+        // person hears cannot change with the text size that hid the words.
+        .accessibilityLabel(TransactionListStrings.clearFilter)
     }
 
     @ViewBuilder
@@ -205,6 +226,25 @@ struct TransactionListView: View {
             case nil:
                 EmptyView()
             }
+        }
+    }
+}
+
+/// Whether the clear button wears its words or its symbol.
+///
+/// A style rather than two buttons, so the control keeps one identity: one `glassEffectID`,
+/// one transition, one morph out of the scope chip. Two buttons behind an `if` would be two
+/// different views to SwiftUI, and the bar would cross-fade at exactly the text size where the
+/// person can least afford to lose track of what moved.
+private struct ClearFilterLabelStyle: LabelStyle {
+    let showsTitle: Bool
+
+    @ViewBuilder
+    func makeBody(configuration: Configuration) -> some View {
+        if showsTitle {
+            configuration.title
+        } else {
+            configuration.icon
         }
     }
 }
