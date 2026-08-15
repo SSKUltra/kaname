@@ -72,16 +72,29 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR B — US4, starting at T076.**
+**⬅️ NEXT: `018-transaction-list`, PR C — US3 (the filter) and US7 (the empty states), starting at T084.**
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
-**PR A0 (#38) is merged**, **PR A is done — T001–T044**, and **PR B's design contract, US1 and
-US2 are done — T045–T075, less T069.** A person can now open the app, tap once, and read their
-own transactions across every account — and importing the same statement a second time changes
-nothing they can see.
+**PR A0 (#38) is merged**, **PR A is done — T001–T044**, and **PR B is done — T045–T083, less
+T069.** A person can now open the app, tap once, and read their own transactions across every
+account, newest first and grouped by date; importing the same statement a second time changes
+nothing they can see. **PR B has not been opened as a pull request yet** — its three commits are
+on `main` (`738cbe1`, `ea7ba68`, `1a8054f`, plus US4's).
+
+**What US4 landed**: `ios/Tests/TransactionListOrderingTests.swift` (7 tests over a real store:
+newest-first across accounts, both same-date tie-breaks, byte-identical rebuild, identical across
+a **relaunch** — a second `Store` over the same file — and a further account disturbing nothing),
+`ios/Tests/TransactionListHeadingTests.swift`, and the row-edge tests in
+`TransactionRowLayoutTests`. T078/T079/T081's *implementation* had already landed in US1, so the
+substance was the proving: **five deliberate breaks, each watched going red** (a sorted page, a
+shuffled page, `Date()` instead of the clock, a `(date, account)` grouping key, a total appended
+to a heading). ⚠️ **The ordering fixture had to be rebuilt mid-phase** because its printed order
+coincided with descending amount and let a break slip past — see `tasks.md` § "US4 — RECORDED".
+T080 pinned rather than merely confirmed: the audit now also bans `sorted`, `sort(` and
+`reversed` under `ios/Sources/Transactions/`.
 
 **What US2 landed**: `ios/Tests/TransactionListLivenessTests.swift` — six tests over the **real**
 import pipeline, a real encrypted store, the real bridge and the real view model (only extraction
@@ -101,8 +114,8 @@ import's transaction); the front door's rows became `NavigationLink`s and stoppe
 `LabeledContent`; **the front-door count became one `account_summaries()` call**; and the
 networking audit widened from `ios/Sources/Import` to all of `ios/Sources`.
 
-Green: `make lint` (0 violations), `make import-audit` (all five scans), the **unit target —
-172 tests in 38 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
+Green: `make lint` (0 violations), `make import-audit` (all five scans), `make core-test`
+(**308 tests**), the **unit target — 185 tests in 40 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
 exactly on. Read `tasks.md` § "US1 — RECORDED" for the five deviations before continuing; the
 two that change later work are:
 

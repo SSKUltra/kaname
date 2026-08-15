@@ -160,6 +160,11 @@ echo "import-audit: OK (no availability gate or material fallback under ios/Sour
 # The screen's own sources are held to more than that: re-sorting or re-filtering the rows
 # the engine returned would be a second opinion about order or membership, and a count and a
 # list that disagree is the defect this whole slice exists to prevent.
+#
+# The order is written down in exactly two places — the engine's SQL and comparator, and
+# `specs/018-transaction-list/data-model.md` §2 — so a `sorted`, `sort(` or `reversed`
+# anywhere under `ios/Sources/Transactions/` is a third (T080, FR-045). The app renders the
+# sequence it was given; it does not have an opinion about what order that should be.
 
 # A *call*, not a mention: the doc comment that explains why this read is raw must stay.
 RAW_READ_PATTERN='listTransactions\('
@@ -176,7 +181,8 @@ fi
 TRANSACTIONS_DIR="$SOURCES_DIR/Transactions"
 SECOND_OPINION=(
     'isLive' 'supersededBy' 'isDeleted'
-    '\brows\.filter' '\brows\.sorted' '\bgroups\.filter' '\bgroups\.sorted'
+    '\brows\.filter' '\bgroups\.filter'
+    '\bsorted\b' '\bsort\(' '\breversed\b'
 )
 
 if [ -d "$TRANSACTIONS_DIR" ]; then
@@ -188,7 +194,8 @@ if [ -d "$TRANSACTIONS_DIR" ]; then
         echo "import-audit: FAIL — the transaction list re-derives its own population:" >&2
         echo "$second_hits" >&2
         echo "Which rows exist, and in what order, is the engine's answer alone — the list" >&2
-        echo "renders it and never re-decides it (FR-008, FR-045)." >&2
+        echo "renders it and never re-decides it (FR-008, FR-045). The ordering key lives in" >&2
+        echo "the engine's SQL and in data-model.md §2, and nowhere else." >&2
         exit 1
     fi
 fi

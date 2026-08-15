@@ -1,4 +1,5 @@
 import Foundation
+import KanameCore
 import SwiftUI
 import Testing
 
@@ -70,8 +71,86 @@ struct TransactionRowLayoutTests {
         #expect(accessible.descriptionLineLimit == 3)
     }
 
-    // MARK: - Purity
+    // MARK: - The row's edges (FR-020, FR-021)
 
+    private static func row(
+        description: String,
+        accountName: String = "Everyday Savings",
+        last4: String? = "1123",
+        amount: String = "1234567.89"
+    ) -> TransactionRow {
+        TransactionRow(
+            HistoryRow(
+                id: "row",
+                accountId: "account-1",
+                accountName: accountName,
+                accountLast4: last4,
+                date: "2026-07-15",
+                descriptionRaw: description,
+                amount: TransactionCorpus.decimal(amount),
+                direction: .debit,
+                currency: "INR",
+                categoryName: nil,
+                isTransfer: false
+            ))
+    }
+
+    @Test("A statement that printed no description still produces a complete, announceable row")
+    func anEmptyDescriptionStillRendersAWholeRow() {
+        // Blank, and blank-looking: a statement that printed spaces is as empty as one that
+        // printed nothing, and both must be named rather than left as a gap (FR-020).
+        for printed in ["", "   ", "\n", "\t "] {
+            let row = Self.row(description: printed)
+
+            #expect(row.displayDescription == TransactionListStrings.missingDescription)
+            #expect(!row.displayDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            // Nothing else about the row is missing either: the announcement still carries the
+            // date, the amount, the direction in words, the account and the category, so a
+            // person using VoiceOver hears a complete transaction rather than a fragment.
+            let announced = row.accessibilityLabel
+            #expect(announced.contains(TransactionListStrings.missingDescription))
+            #expect(announced.contains("2026"))
+            #expect(announced.contains(TransactionListStrings.debit))
+            #expect(announced.contains(row.accountIdentity))
+            #expect(announced.contains(TransactionListStrings.uncategorized))
+            // And the amount is there in full — the one thing that may never be abbreviated.
+            #expect(announced.contains(row.amount.formatted(.currency(code: "INR"))))
+        }
+    }
+
+    @Test("A description or account name too long to lay out costs the amount nothing")
+    func longTextYieldsAndTheAmountDoesNot() {
+        let row = Self.row(
+            description: TransactionCorpus.longDescription,
+            accountName: String(repeating: "SYNTHETIC LONG ACCOUNT NAME ", count: 4)
+        )
+
+        // The row still renders both in full to a screen reader, however little room the
+        // screen has: truncation is a layout event, never a content one.
+        #expect(row.accessibilityLabel.contains(TransactionCorpus.longDescription))
+        #expect(row.accessibilityLabel.contains(row.accountIdentity))
+        #expect(row.formattedAmount.contains("1,234,567.89") || row.formattedAmount.contains("12,34,567.89"))
+
+        // And at every text size the yield order is unchanged by the length of what is in the
+        // row: the description gives way first, the account name second, the amount never.
+        for size in DynamicTypeSize.allCases {
+            let layout = TransactionRowLayout(dynamicTypeSize: size)
+            #expect(layout.amountYields == false, "the amount yielded at \(size)")
+            #expect(layout.descriptionLineLimit > layout.accountNameLineLimit, "at \(size)")
+        }
+    }
+
+    @Test("An account with no last four still identifies itself")
+    func anAccountWithoutALastFourStillIdentifiesItself() {
+        let row = Self.row(description: "SYNTHETIC ROW", last4: nil)
+
+        #expect(row.accountIdentity == "Everyday Savings")
+        #expect(!row.accountIdentity.contains("ending"))
+        #expect(row.accessibilityLabel.contains("Everyday Savings"))
+    }
+
+    // MARK: - Purity
     @Test("The decision depends on the text size and nothing else")
     func theLayoutIsAFunctionOfItsInput() {
         for size in DynamicTypeSize.allCases {

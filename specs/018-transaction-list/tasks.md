@@ -534,19 +534,63 @@ birth and proved nothing. Three deliberate breaks, each reverted:
 
 ### Tests for User Story 4 (RED first) ⚠️
 
-- [ ] T076 [P] [US4] RED: create `ios/Tests/TransactionListOrderingTests.swift` — the rendered sequence is newest-first across accounts; same-date rows of different accounts appear in front-door account order; same-date rows of one account appear in printed order; rebuilding the view model from a fresh service over an unchanged store yields a byte-identical sequence (the app-side mirror of O5, SC-009); importing a further account leaves the relative order of every pre-existing row unchanged (FR-032).
-- [ ] T077 [P] [US4] RED: add the heading tests to `ios/Tests/TransactionListViewModelTests.swift` — V6 the year suffix comes from the **injected clock**, never `Date()` inside a formatter, so "include the year when it is not the current year" (FR-035) is assertable at a fixed date; one group per calendar date **across all accounts**, never one group per account per date (FR-033); every heading carries the date and at most a transaction **count**, never a monetary aggregate (FR-026).
+- [x] T076 [P] [US4] RED: create `ios/Tests/TransactionListOrderingTests.swift` — the rendered sequence is newest-first across accounts; same-date rows of different accounts appear in front-door account order; same-date rows of one account appear in printed order; rebuilding the view model from a fresh service over an unchanged store yields a byte-identical sequence (the app-side mirror of O5, SC-009); importing a further account leaves the relative order of every pre-existing row unchanged (FR-032).
+- [x] T077 [P] [US4] RED: add the heading tests to `ios/Tests/TransactionListViewModelTests.swift` — V6 the year suffix comes from the **injected clock**, never `Date()` inside a formatter, so "include the year when it is not the current year" (FR-035) is assertable at a fixed date; one group per calendar date **across all accounts**, never one group per account per date (FR-033); every heading carries the date and at most a transaction **count**, never a monetary aggregate (FR-026).
 
 ### Implementation for User Story 4
 
-- [ ] T078 [US4] Implement the injected clock in `ios/Sources/Transactions/TransactionListViewModel.swift` (`init(history:clock:pageSize:)`, defaulting to `Date.init`) and derive each `DateGroup.heading` from it in `ios/Sources/Transactions/TransactionListModels.swift` — the same pattern `ImportService`'s `now:` parameter already uses, and the reason the core reads no wall clock (Constitution II).
-- [ ] T079 [US4] Render group headings in `ios/Sources/Transactions/TransactionListView.swift` as `Section` headers on a plain `List`, so the system pins them while scrolling and the date currently being read stays identifiable (FR-034), and so the heading is announced when its group is entered (FR-072).
-- [ ] T080 [US4] Confirm the ordering is expressed in exactly two places and nowhere else: the engine's SQL + comparator, and `data-model.md` §2. Grep `ios/Sources/Transactions/` for `sorted`, `sort(`, `reversed` and assert none applies to transaction rows — the app renders the sequence it was given (FR-045).
-- [ ] T081 [US4] Handle the row edges from the spec in `ios/Sources/Transactions/TransactionRowView.swift`: an empty or unreadable description still renders a complete, selectable, announceable row carrying date, account and amount (FR-020); a very long description or account name yields before the amount, which never yields (FR-021). Add both to `ios/Tests/TransactionRowLayoutTests.swift`.
-- [ ] T082 [US4] **GATE** `make lint && make ios-test` — T076, T077 and T081 green.
-- [ ] T083 [US4] **GATE** `make core-lint && make core-test && make import-audit` — the full PR B verification gate, engine included, before the PR opens.
+- [x] T078 [US4] **Already landed in US1 — confirmed, not re-implemented.** Implement the injected clock in `ios/Sources/Transactions/TransactionListViewModel.swift` (`init(history:clock:pageSize:)`, defaulting to `Date.init`) and derive each `DateGroup.heading` from it in `ios/Sources/Transactions/TransactionListModels.swift` — the same pattern `ImportService`'s `now:` parameter already uses, and the reason the core reads no wall clock (Constitution II).
+- [x] T079 [US4] Render group headings in `ios/Sources/Transactions/TransactionListView.swift` as `Section` headers on a plain `List`, so the system pins them while scrolling and the date currently being read stays identifiable (FR-034), and so the heading is announced when its group is entered (FR-072).
+- [x] T080 [US4] Confirm the ordering is expressed in exactly two places and nowhere else: the engine's SQL + comparator, and `data-model.md` §2. Grep `ios/Sources/Transactions/` for `sorted`, `sort(`, `reversed` and assert none applies to transaction rows — the app renders the sequence it was given (FR-045).
+- [x] T081 [US4] Handle the row edges from the spec in `ios/Sources/Transactions/TransactionRowView.swift`: an empty or unreadable description still renders a complete, selectable, announceable row carrying date, account and amount (FR-020); a very long description or account name yields before the amount, which never yields (FR-021). Add both to `ios/Tests/TransactionRowLayoutTests.swift`.
+- [x] T082 [US4] **GATE** `make lint && make ios-test` — T076, T077 and T081 green. Run as `make lint` (0 violations) + `-only-testing:KanameTests`: **185 tests in 40 suites**. The UI target stays red for the pre-existing front-door contrast failure (T069).
+- [x] T083 [US4] **GATE** `make core-lint && make core-test && make import-audit` — the full PR B verification gate, engine included, before the PR opens. Green: clippy clean, **308 core tests** across 16 binaries, all five audit scans.
 
 **Checkpoint**: US1, US2 and US4 are independently functional. The list is demoable, ordered, stable and honest about what it holds.
+
+### US4 — RECORDED
+
+**T078, T079 and T081's implementation had already landed in US1** — the injected clock, the
+`Section` headings on a `.plain` list, and the row's yield order were all built there. US4 was
+therefore mostly *proving* them, which makes the red observations the substance of this phase,
+not a formality. **Five deliberate breaks, each reverted, each watched:**
+
+1. **A re-sorted page** (`page.rows.sorted(by: amount)`): 5 of the 7 ordering tests red.
+2. **A shuffled page**: the determinism test red — two reads of one unchanged store disagreeing
+   is exactly the failure SC-009 exists to forbid.
+3. **The clock ignored** (`Date()` instead of `clock()`): the year-suffix test red. This is the
+   defect that is right for 364 days a year, and it cannot be caught any other way.
+4. **The grouping key widened to `(date, account)`**: the one-group-per-date test red, with
+   three headings where a person should see one.
+5. **A total appended to the heading**: the no-figure test red on both the heading and its
+   VoiceOver announcement.
+
+**Deviations, each deliberate:**
+
+- **The fixture was rebuilt mid-phase, because it was too weak to fail.** The first version's
+  printed order happened to coincide with descending amount, so break 1 slipped past the
+  printed-order test. The shared date now carries **three** rows of one account —
+  `MEDLAR 01, ALMOND 02, ZEBRA 03` at 500 / 900 / 100 — an order that matches neither
+  alphabetical direction, neither amount direction, nor reversed insertion. A fixture that
+  cannot distinguish printed order from a sort proves nothing about printed order.
+- **The account tie-break is proved by non-vacuity, not by a code break.** That rule lives in
+  the engine's SQL (`history_order.rs` O2 owns it); the app-side claim is that appearance order
+  *equals* `listAccounts()` order. It was verified by asserting the **reverse** and watching it
+  fail — the fixture's three accounts on one date really do come back in front-door order.
+- **The ordering fixture is written through `insertAccount`/`insertTransaction`, not a parsed
+  statement.** The ordering key's third component is `rowid`, and only direct inserts let a test
+  say exactly which row follows which. What the *import* path does to the order is already
+  covered end to end by US2's suite.
+- **T080 pinned rather than only confirmed.** No `sorted`, `sort(` or `reversed` exists under
+  `ios/Sources/Transactions/`, so the audit's fifth scan now bans all three there — the order is
+  written down in the engine's SQL and in `data-model.md` §2, and a third copy fails the build.
+  Watched failing against a deliberately reversed page.
+- **Two test files were split out, because the view model's suite outgrew its limits.** Adding
+  T077 pushed `TransactionListViewModelTests.swift` past both the 400-line file limit and the
+  250-line type-body limit. The shared double and fixtures moved to
+  `ios/Tests/TransactionListDoubles.swift` (one copy, so two suites cannot come to disagree
+  about what they are fixtures of), and the heading tests to
+  `ios/Tests/TransactionListHeadingTests.swift`. No assertion was lost or weakened in the move.
 
 ---
 
