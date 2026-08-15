@@ -27,6 +27,12 @@ A feature here is picked up by working `tasks.md` in order, respecting its PR sp
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
+**Still open on 016** (both from T129, neither release-blocking):
+- **`issues/05`** (`needs-triage`) — the summary mixes per-import figures with account-wide ones.
+  Visible on any re-import: `Transactions 6` beside `Duplicates skipped 6` under one "Imported"
+  heading. Needs a product decision, not a patch.
+- **`issues/04`** — **resolved** in `7dd9860`, and its status line was stale until 2026-08-16.
+
 ⚠️ **Open on 018, and all of it from the 2026-08-15 gate run** — `SC-012 is still not satisfied`,
 but **every accessibility gate now passes**. What is left is three timings that need a phone, one
 unreproduced hang, and one new legibility question:
@@ -450,10 +456,10 @@ Everything below is evidence, not impression.
 |---|---|
 | `016/issues/04` | ⚠️ **Fixed in this session.** `load_account_transactions` omitted `superseded_by IS NULL`, so categorization walked and counted superseded rows — the live-rule violation `3ba7890` fixed on the front door, arriving on the import summary. Now built from `live_predicate!()`; pinned by `categorization_counts_live_rows_only_after_a_reimport`, **watched failing first**. |
 | `016/issues/05` | The summary mixes per-import figures (`Transactions`, `Duplicates skipped`) with account-wide ones (`Categorized`, `Left uncategorized`) under one "Imported" heading. Needs a product decision. |
-| `016/issues/06` | The summary's nav title truncates to `Import comp…` at the **default** text size. |
-| `018/issues/02` | ⛔ **G5 fails** — at accessibility sizes the scope chip reads `ICIC…` over `·····…` and the clear button breaks as `Show all ac-count s`. The *announcement* half passes. |
-| `018/issues/03` | ⛔ **G2 fails** — the filter bar clips a row's amount mid-glyph. |
-| `018/issues/04` | A row renders `name, ending NNNN` at `lineLimit(1)`, so trailing truncation eats the **last-4** — the only discriminator. With two ICICI Amazon Pay cards imported, **VoiceOver tells them apart and the screen cannot**. |
+| `016/issues/06` | ✅ **Resolved 2026-08-16.** The summary's nav title truncated to `Import comp…` at the **default** size, because a wide "Import another" sat opposite "Done". The action moved into the content, below the notices, where it can wrap — **not** deleted, which was tried first and would have traded FR-035 ("start another import **from it**") for a cosmetic fix. |
+| `018/issues/02` | ✅ **Resolved 2026-08-16, on the second attempt.** G5 failed, was "fixed", and failed again reading `•••• 77…`. At XXXL the mask (~280 pt) and the collapsed clear button (~110 pt) plus padding cannot share a 393 pt screen at any ordering; the bar is now a `VStack` at accessibility sizes. |
+| `018/issues/03` | ✅ **Resolved 2026-08-16.** With the bar's height bounded, the last row sits entirely clear of it at XXXL with a filter applied. Needed a new six-row `gate/` corpus to be runnable at all. |
+| `018/issues/04` | ✅ **Resolved 2026-08-16.** A row rendered `name, ending NNNN` at `lineLimit(1)`, so truncation ate the **last-4** — the only discriminator. Rows now lead with the mask; confirmed on screen at both default and accessibility sizes. |
 | `018/issues/05` | A one-off 100% CPU main-thread render hang. Sampled (`DisplayList.ViewUpdater` rebuilding a huge tree inside one `CATransaction`); **not reproduced in three attempts**. `needs-info`. |
 
 **Two techniques that made this cheap — reuse them for every P3 screen:**

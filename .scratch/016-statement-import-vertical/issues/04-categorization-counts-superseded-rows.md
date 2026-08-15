@@ -1,6 +1,6 @@
 # 04 — Categorization walks and counts superseded rows, breaking the live rule
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Found:** 2026-08-15, on the simulator, running **T129** (`quickstart.md` §5) to completion for
 the second time. Importing the same 3-row statement three times made the summary read
@@ -69,3 +69,13 @@ A `cargo test` over a real store: import a statement, import the **same** statem
 assert `categorized + uncategorized` equals the account's **live** row count, not its raw one.
 That test must be watched failing against the current predicate before it is trusted — it goes
 green by accident if the fixture has no duplicates.
+
+---
+
+## Resolution — `7dd9860`
+
+**Fixed**, and the status line above was stale until 2026-08-16 — the fix and the ticket landed in
+the same commit, and only the fix got written down. `load_account_transactions` now builds its
+predicate from `live_predicate!()`, so the literal cannot drift from the v7 index again, and
+categorization no longer walks the losers of a de-duplication. Pinned by
+`categorization_counts_live_rows_only_after_a_reimport`, watched failing first.

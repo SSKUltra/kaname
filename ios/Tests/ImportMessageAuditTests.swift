@@ -70,4 +70,54 @@ struct ImportMessageAuditTests {
             #expect(sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
         }
     }
+
+    // MARK: - The summary's title has room to be read
+
+    @Test("Nothing shares the summary's title bar with it")
+    func theSummaryKeepsOneToolbarAction() throws {
+        // `ImportSummaryView` states, in four words, what just happened to a person's bank
+        // statement. It shipped rendering `Import comp…` at the **default** text size, because
+        // an inline title is given whatever width the toolbar leaves it and a wide
+        // "Import another" sat opposite "Done" (`issues/06`). The action was not removed —
+        // FR-035 requires that another import can be started from this screen — it was moved
+        // into the content, where it is a next action rather than a control competing with the
+        // title. This is the pin, and what it pins is the *toolbar*: the regression is not a
+        // typo but anything placed beside the title.
+        //
+        // Watched failing against the shipped toolbar before it was trusted.
+        let source = try Self.summaryCode()
+
+        #expect(source.contains("ToolbarItem(placement: .confirmationAction)"))
+        for competitor in [
+            ".cancellationAction", ".navigationBarLeading", ".topBarLeading", ".principal",
+        ] {
+            #expect(!source.contains(competitor), "\(competitor) is back beside the title")
+        }
+        // One `ToolbarItem`, counted rather than assumed: a second trailing item crowds the
+        // title just as surely as a leading one.
+        #expect(source.components(separatedBy: "ToolbarItem").count - 1 == 1)
+
+        // FR-035 still holds, and from this screen: the action is in the content, and the view
+        // still takes something to run. A pin that only banned the toolbar button would be
+        // satisfied by deleting the capability altogether.
+        #expect(source.contains("Button(\"Import another statement\", action: onImportAnother)"))
+        #expect(source.contains("let onImportAnother: () -> Void"))
+    }
+
+    /// The summary's **code**, with its comments removed — the test target runs in a simulator,
+    /// so the path comes from `#filePath`, a compile-time constant pointing at this file.
+    ///
+    /// Comments are stripped because the fix's own explanation names the button it removed, and
+    /// an audit that cannot tell a banned control from the sentence describing why it went is an
+    /// audit that punishes writing things down.
+    private static func summaryCode() throws -> String {
+        let sources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Import/ImportSummaryView.swift")
+        return try String(contentsOf: sources, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+    }
 }

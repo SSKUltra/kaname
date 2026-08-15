@@ -59,15 +59,25 @@ struct ImportSummaryView: View {
                         }
                     }
                 }
+                // Last, and in the content rather than the toolbar. FR-035 requires that another
+                // import can be started from this screen; it does **not** require a chrome
+                // button, and as one it cost the screen its title — "Import another" opposite
+                // "Done" left the inline title too little width to render, so the first screen
+                // after a person's first import read `Import comp…` at the *default* text size
+                // (`.scratch/016-statement-import-vertical/issues/06`). As a row it is a next
+                // action rather than a control competing with the title, it can wrap at any
+                // text size, and it sits **below** the notices, so nothing Kaname could not
+                // vouch for is skipped past on the way to importing again.
+                Section {
+                    Button("Import another statement", action: onImportAnother)
+                }
             }
             .navigationTitle("Import complete")
             .navigationBarTitleDisplayMode(.inline)
+            // **One** toolbar action, so the title has the width to say what happened.
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", action: onDismiss)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Import another", action: onImportAnother)
                 }
             }
         }

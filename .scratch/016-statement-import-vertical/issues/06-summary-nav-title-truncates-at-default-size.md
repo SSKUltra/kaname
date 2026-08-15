@@ -1,6 +1,6 @@
 # 06 — The import summary's title truncates to "Import comp…" at the default text size
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Found:** 2026-08-15, on the simulator, on the very first summary screen of **T129** — at the
 **default** Dynamic Type size, with no accessibility setting enabled.
@@ -44,3 +44,52 @@ suggests, *complete* and *company*, are not equally reassuring.
 
 A snapshot test of `ImportSummaryView` at the default size asserting the title renders in full.
 It must be watched failing against today's toolbar before it is trusted.
+
+---
+
+## Resolution — 2026-08-16, on the simulator
+
+**Fixed** by this ticket's third option: "Import another" left the toolbar and became a row in
+the content, below the figures. The title now renders **"Import complete"** in full at the
+default text size. Evidence:
+`../evidence/issue-06-resolved-title-in-full-action-in-content.png`.
+
+**It was nearly fixed by deleting the button**, on the holder's reasoning — that "Done" lands on
+the front door, whose own "Import a statement" opens the same picker, so the shortcut costs one
+tap and no capability. The reasoning is sound and the code was written that way. **It was wrong
+anyway**, because of one line in the spec:
+
+> **FR-035**: The person MUST be able to dismiss the summary **and start another import from it**.
+
+"From it" is explicit. Removing the control would have quietly traded a functional requirement
+for a cosmetic fix, which is the kind of trade that is invisible three months later. Moving it
+into the content satisfies both: FR-035 keeps its shortcut, and the title gets its width back.
+
+**Why the content is the better home anyway**, beyond the title:
+
+- It can **wrap**. A toolbar button cannot, which is why it degraded further at accessibility
+  sizes — this fix therefore closes the accessibility half of the ticket too, not just the
+  default-size half.
+- It sits **below the notices**, so an integrity warning or a "nothing recognised" notice is
+  passed on the way to importing again, rather than skipped by a control in the chrome.
+- It reads as a **next action** rather than a control competing with "Done" for the same glance.
+
+**Proof** — `ImportMessageAuditTests.theSummaryKeepsOneToolbarAction`, which pins the *cause*
+rather than the string: exactly one `ToolbarItem`, no `.cancellationAction`, no leading or
+principal placement — **and** that the action still exists in the content and the view still
+takes something to run it, because a pin that only banned the toolbar button would be satisfied
+by deleting FR-035's capability altogether. Both halves were watched failing:
+
+| Break | Went red |
+|---|---|
+| the shipped toolbar, crowding the title again | 2 issues |
+| the content row deleted instead of moved | 1 issue |
+
+⚠️ **One thing the audit had to learn.** Its first version scanned the raw source and failed
+against the fix's own comment, which names the button it moved. It now strips comment lines: an
+audit that cannot tell a banned control from the sentence explaining why it moved is an audit
+that punishes writing things down.
+
+⚠️ **`specs/016-statement-import-vertical/tasks.md` T064 still describes the button as
+toolbar-placed.** It is a completed-task record rather than a live instruction, so it was left as
+written; FR-035 in `spec.md` is unchanged and is satisfied.
