@@ -298,12 +298,12 @@ repeat, cancelling the import mid-way: **nothing** may change.
 | App build (commit) | `4a10c07` — Release configuration, free Personal Team, launched from the home screen with no debugger attached |
 | Date run | 2026-08-15 |
 | Corpus | `make perf-corpus` — 8 accounts, 10,000 live rows, **verified at generation time** by importing all eight into a throwaway store. Not re-confirmed on the device. |
-| G1–G8 result | ⛔ **Not run.** See issue 02 below before running G7. |
-| G9 / G11 | ⚠️ **Observed, not measured** — "felt instant", by eye, with no screen recording. SC-006's < 1 s bound is **not evidenced**. |
-| G10 (scroll) | ✅ No stalls or persistent blank rows reported over the full corpus |
-| G12 | ⚠️ **Observed, not measured** — SC-008's < 300 ms bound is **not evidenced**. |
+| G1–G8 result | **RUN 2026-08-15 (simulator).** 6 pass, **2 fail**. ✅ G1 amounts never truncate or ellipsise over 4+ screenfuls at `accessibility-XXXL`. ⛔ **G2 FAILS** — the filter bar clips a row's amount mid-glyph (`issues/03`). ✅ G3 the row label is one sentence with year, direction word and last-4 (verified through Accessibility Inspector). ✅ G4 both halves — a current-year heading carries no year, `28 December 2025` does. ⛔ **G5 FAILS visually** — the scope chip truncates to `ICIC…` over `·····…` and the clear button breaks as `Show all ac-count s` (`issues/02`); its **announcement** half passes. ✅ G6 Reduce Transparency: chrome goes solid, no text on text. ✅ G7 Increase Contrast + Dark Mode: direction is a leading `+`/`−` sign, never colour. ✅ G8 the date heading pins and updates while scrolling. |
+| G9 / G11 | ⚠️ **Still observed, not measured.** Unchanged by the 2026-08-15 simulator run — a simulator's frame timings are not evidence for a bound about a device, so these were deliberately **not** attempted there. |
+| G10 (scroll) | ✅ No stalls or persistent blank rows reported over the full corpus. **Re-confirmed** on the simulator over ~3,000 rows, scrolling back into December 2025. |
+| G12 | ⚠️ **Still observed, not measured** — SC-008's < 300 ms bound is **not evidenced**. Device-only, as above. |
 | G13 / G14 | ✅ **PASS.** Importing a ninth statement with the list open, scrolled and filtered: the new rows appeared **without a relaunch**, the filter was kept, the scroll position was kept, and no partially-written statement was seen. A **cancelled** import changed nothing at all. |
-| Notes | Two defects found while running it, both against 016 and neither in 018: `issues/02` (the accent measures 2.35:1 as text in Dark Mode — will fail G7) and `issues/03` (no way to give an account a last-4 the statement did not print). |
+| Notes | First run (device): two defects, both against 016 — `issues/02` (accent 2.35:1 as text in Dark Mode) and `issues/03` (no way to give an account an unprinted last-4). Second run (2026-08-15, simulator, G1–G8): **four** more — `018/issues/02` (G5 chrome), `018/issues/03` (G2 clipping), `018/issues/04` (the row truncates away the last-4, so two cards of one product are indistinguishable on screen while VoiceOver tells them apart), `018/issues/05` (a one-off 100% CPU main-thread render hang, sampled, not reproduced). |
 
 **What this record does and does not close.**
 
@@ -312,18 +312,27 @@ that US8 works on a device: T118 established that no automated run can reach a p
 transaction list at all, so "an import lands in a list you are already reading, without taking
 away your filter or your place in it" was, until this run, untested outside unit doubles.
 
-**SC-012 is not yet satisfied.** G9, G11 and G12 were judged by eye. "Felt instant" is a real
-signal — a screen that took two seconds would not feel instant — but it is not 60 frames, and
-the whole point of writing the bound down was to stop a later regression hiding behind a
-judgement. Closing it needs one screen recording and about ten minutes: tap in, filter, clear,
-then step the video frame by frame (§ *How to run G9–G14*, step 4). G11 additionally needs the
-app deleted and reinstalled with the 200-row corpus alone.
+**SC-012 is not yet satisfied**, and after the 2026-08-15 simulator run the reason has changed.
+It is no longer "nobody has looked": **G1–G8 have now been run, and two of them fail** —
+`issues/02` (G5: the active filter is unreadable at accessibility sizes) and `issues/03` (G2: the
+filter bar clips row content). Those are defects to fix, not gates to schedule.
 
-**G1–G8 have not been run at all.** Both halves of what remains are deferred **knowingly**, and
-tracked as `.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md` so the
-gap is a ticket rather than a memory. One thing G7 would have found — the accent's Dark Mode
-contrast — was found by eye during this run instead, fixed, and is now covered by
-`ios/Tests/ThemeContrastTests.swift`, which computes the ratios from the tokens themselves.
+What remains un-**measured** is G9, G11 and G12. They were judged by eye on the device and were
+deliberately not attempted on the simulator, because a simulator's frame timings are not evidence
+for a bound about a phone. "Felt instant" is a real signal — a screen that took two seconds would
+not feel instant — but it is not 60 frames, and the whole point of writing the bound down was to
+stop a later regression hiding behind a judgement. Closing them needs one screen recording and
+about ten minutes: tap in, filter, clear, then step the video frame by frame (§ *How to run
+G9–G14*, step 4). G11 additionally needs the app deleted and reinstalled with the 200-row corpus
+alone.
+
+**What the simulator turned out to be enough for.** Everything except the three timing bounds.
+`xcrun simctl ui booted` drives `appearance`, `increase_contrast` and `content_size` directly, so
+Dark Mode, Increase Contrast and every Dynamic Type size can be set from a script rather than
+remembered; **Reduce Transparency** still cannot (no `simctl` control, no test API) and needs
+Settings by hand. For G3 and G5's announcements, **Accessibility Inspector** reads an element's
+label straight off the simulator — far more reliable than driving VoiceOver by gesture, and it
+reaches every screen behind an import that `performAccessibilityAudit` cannot.
 
 ---
 

@@ -593,6 +593,95 @@ fn importing_the_same_statement_twice_does_not_double_history() {
     );
 }
 
+/// Categorization counts the rows a person has, not the ones a re-import superseded.
+///
+/// `link_reimported_rows_in` runs *before* `categorize_account_in` inside one
+/// `import_statement` transaction, so by the time categorization loads its candidates the
+/// repeats are already pointed at their winners via `superseded_by`. A candidate load that
+/// filters only `is_deleted = 0` walks those losers, writes categories to rows no screen will
+/// ever show, and reports a total larger than the account holds — the same live-rule violation
+/// `3ba7890` fixed on the front door, arriving on the import summary instead.
+#[test]
+fn categorization_counts_live_rows_only_after_a_reimport() {
+    let db = TestDb::new("categorize-live-only");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+    store
+        .insert_source_category_mapping(SourceCategoryMapping {
+            bank_code: "HDFC".to_string(),
+            source_category: "FOOD".to_string(),
+            category: CategoryRef::Builtin {
+                code: "FOOD_AND_DINING".to_string(),
+            },
+        })
+        .expect("source category map");
+
+    let rows = || {
+        vec![
+            import_txn("POS SWIGGY BANGALORE RRN1234", Some("FOOD")),
+            import_txn("UNKNOWN MERCHANT", None),
+        ]
+    };
+
+    let first = store
+        .import_statement(import_request(
+            ImportAccountTarget::New {
+                name: "HDFC Credit Card".to_string(),
+                bank_code: "HDFC".to_string(),
+                is_credit_card: true,
+                last4: Some("1234".to_string()),
+                currency: "INR".to_string(),
+            },
+            rows(),
+        ))
+        .expect("first import");
+    assert_eq!(first.categorized, 1);
+    assert_eq!(first.uncategorized, 1);
+
+    // The very same statement a second time. Two rows are inserted and immediately superseded,
+    // so the account still holds exactly two live rows.
+    let second = store
+        .import_statement(import_request(
+            ImportAccountTarget::Existing {
+                id: first.account_id.clone(),
+                last4: Some("1234".to_string()),
+            },
+            rows(),
+        ))
+        .expect("second import");
+    assert_eq!(second.duplicates_linked, 2);
+
+    let all = store
+        .list_transactions(first.account_id.clone())
+        .expect("transactions");
+    let live = all
+        .iter()
+        .filter(|txn| !txn.is_deleted && txn.superseded_by.is_none())
+        .count();
+    assert_eq!(all.len(), 4, "the losers are linked, never deleted");
+    assert_eq!(live, 2);
+
+    // The figures the import summary puts in front of a person describe the account they have.
+    assert_eq!(
+        second.categorized + second.uncategorized,
+        live as u32,
+        "categorization walked superseded rows: {} + {} for {} live rows",
+        second.categorized,
+        second.uncategorized,
+        live
+    );
+    assert_eq!(second.categorized, 1);
+    assert_eq!(second.uncategorized, 1);
+
+    // A superseded row is never given a category: it is not part of anyone's history.
+    for txn in all.iter().filter(|txn| txn.superseded_by.is_some()) {
+        assert_eq!(
+            txn.category_id, None,
+            "a superseded row was categorized: {:?}",
+            txn.id
+        );
+    }
+}
+
 #[test]
 fn two_identical_rows_in_one_statement_are_both_kept() {
     let db = TestDb::new("same-statement-twins");

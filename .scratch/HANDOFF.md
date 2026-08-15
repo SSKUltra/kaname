@@ -286,9 +286,11 @@ Read, in order: `spec.md` → `plan.md` → `research.md` (R1–R20, with measur
 - **A determinism proof must re-exec the test binary.** A single-process assertion passes against
   that defect whenever luck holds — it did, on the first run.
 
-**Also still open, and release-blocking: 016's two manual gates.** T129 is ready to re-run and
-tick (see below); **T123 has never been run** — Reduce Transparency, VoiceOver, and the five
-screens behind an import all need a person.
+**016's two manual gates are now RUN — 2026-08-15, on the simulator, and both pass.** T129
+(smoke + failure matrix) and T123 (Reduce Transparency, VoiceOver, the five screens behind an
+import) are no longer blockers. 018's **G1–G8 were run in the same session** — 6 pass, 2 fail.
+What came out of it is **seven tickets**; read § *The 2026-08-15 gate run* below before picking
+anything up.
 
 **What 017 settled — don't re-litigate it:**
 
@@ -379,13 +381,54 @@ split"):
 | **D** | T070–T097, T137–T139 | Honest failures & account attribution (US2–US4) | ✅ **merged** (#34) |
 | **E** | T098–T136 | Trust, responsiveness, front door (US5–US7 + polish) | ✅ **merged** (#35) |
 
-**⬅️ NEXT: the two manual gates, which no agent can run.** Both are on the simulator, both
-are release-blocking:
+**016's two manual gates are DONE — both run 2026-08-15 on the simulator, both pass.**
 
-- **T123** — `quickstart.md` §6: largest Dynamic Type, Dark Mode, **Reduce Transparency**,
-  **Increase Contrast**, VoiceOver across every screen in the flow. The automated audit
-  (`ios/UITests/`) covers only the front door; the summary, failure, password and
-  account-picker screens need eyes and ears.
+- **T123** — `quickstart.md` §6: ✅ **PASS.** Largest Dynamic Type, Dark Mode, Reduce
+  Transparency, Increase Contrast and VoiceOver, across the summary, failure, password,
+  account-picker and accounts-list screens. One defect against 016 came out of it
+  (`issues/06` — the summary's title truncates to `Import comp…` at the **default** size).
+- **T129** — `quickstart.md` §5: ✅ **PASS.** The 4-tap path, force-quit/relaunch, the same-file
+  re-import and all six failure sentences. Two defects came out of it (`issues/04`, `issues/05`).
+
+### The 2026-08-15 gate run — what it proved and what it cost
+
+Both 016 gates and 018's **G1–G8** were run in one session, from a fresh install, against the
+`make perf-corpus` corpus. **Eleven gates pass, two fail**, and **seven tickets** were filed.
+Everything below is evidence, not impression.
+
+**What the gates actually caught — none of it reachable by any automated gate in this repo:**
+
+| Ticket | What |
+|---|---|
+| `016/issues/04` | ⚠️ **Fixed in this session.** `load_account_transactions` omitted `superseded_by IS NULL`, so categorization walked and counted superseded rows — the live-rule violation `3ba7890` fixed on the front door, arriving on the import summary. Now built from `live_predicate!()`; pinned by `categorization_counts_live_rows_only_after_a_reimport`, **watched failing first**. |
+| `016/issues/05` | The summary mixes per-import figures (`Transactions`, `Duplicates skipped`) with account-wide ones (`Categorized`, `Left uncategorized`) under one "Imported" heading. Needs a product decision. |
+| `016/issues/06` | The summary's nav title truncates to `Import comp…` at the **default** text size. |
+| `018/issues/02` | ⛔ **G5 fails** — at accessibility sizes the scope chip reads `ICIC…` over `·····…` and the clear button breaks as `Show all ac-count s`. The *announcement* half passes. |
+| `018/issues/03` | ⛔ **G2 fails** — the filter bar clips a row's amount mid-glyph. |
+| `018/issues/04` | A row renders `name, ending NNNN` at `lineLimit(1)`, so trailing truncation eats the **last-4** — the only discriminator. With two ICICI Amazon Pay cards imported, **VoiceOver tells them apart and the screen cannot**. |
+| `018/issues/05` | A one-off 100% CPU main-thread render hang. Sampled (`DisplayList.ViewUpdater` rebuilding a huge tree inside one `CATransaction`); **not reproduced in three attempts**. `needs-info`. |
+
+**Two techniques that made this cheap — reuse them for every P3 screen:**
+
+- **`xcrun simctl ui booted` drives three of the five accessibility axes.** `appearance`,
+  `increase_contrast` and `content_size` are all settable from a script, so Dark Mode, Increase
+  Contrast and every Dynamic Type size stop depending on anyone remembering. **Reduce
+  Transparency still cannot be set this way** and needs Settings by hand.
+- **Accessibility Inspector beats driving VoiceOver by gesture.** It reads an element's label
+  straight off the simulator, reaches every screen behind an import, and yields a string you can
+  paste into a ticket.
+- **Hash the store around a failure path.** `shasum` on `…/Application Support/Kaname/kaname.db`
+  before and after turns T129's "leaves the store byte-identical" from an eyeball into evidence.
+  It held across all five failure documents.
+
+⚠️ **Two gaps in the manual test kit itself**, both worth fixing before the next run:
+`scripts/make-manual-test-kit.swift` writes a supported statement that prints **no period**, so
+§5 step 4's "the period" is unobservable; and `7-long-for-cancel.pdf` parses far too fast on an
+M-series simulator to cancel — a 1,250-row `make perf-corpus` statement is what actually works.
+
+**⬅️ What is still genuinely open on 018: G9, G11 and G12 only** — the three timing bounds. They
+need a Release build on a device and a frame-stepped screen recording; a simulator's timings are
+not evidence for them. See `.scratch/018-transaction-list/issues/01-…`.
 
 ### T123 — what is now automated, and what a person still has to do
 

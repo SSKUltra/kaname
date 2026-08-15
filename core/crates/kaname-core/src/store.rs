@@ -1709,11 +1709,16 @@ fn load_account_transactions(
     bank_code: &str,
     is_credit_card: bool,
 ) -> Result<Vec<(String, CategoryTxn)>, StoreError> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(concat!(
         "SELECT id, source_category, description_raw, amount, direction \
          FROM transactions \
-         WHERE account_id = ?1 AND is_deleted = 0 AND is_transfer = 0 ORDER BY rowid",
-    )?;
+         WHERE account_id = ?1 AND ",
+        // Built from the same literal as the v7 index and `PAGE_SQL`, because this load ran for
+        // a long time with only half the rule and reported superseded losers as part of the
+        // account (`.scratch/016-statement-import-vertical/issues/04`).
+        live_predicate!(),
+        " AND is_transfer = 0 ORDER BY rowid",
+    ))?;
     let raw = stmt
         .query_map(params![account_id], |row| {
             Ok((
