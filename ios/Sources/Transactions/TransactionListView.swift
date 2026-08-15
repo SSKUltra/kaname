@@ -192,7 +192,7 @@ struct TransactionListView: View {
                 // is on screen, and two prominent controls make prominence meaningless.
                 if model.emptyActionIsProminent {
                     Button(ImportEmptyStateView.actionTitle, action: onImport)
-                        .buttonStyle(.glassProminent)
+                        .prominentAction()
                 } else {
                     Button(ImportEmptyStateView.actionTitle, action: onImport)
                         .buttonStyle(.glass)

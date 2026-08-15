@@ -107,7 +107,7 @@ struct RootView: View {
             // bar is opaque for the same reason it is on the empty state: a glass label over
             // a scrolling list of rows is where contrast goes.
             Button("Import a statement") { isPickingFile = true }
-                .buttonStyle(.glassProminent)
+                .prominentAction()
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity)
                 .background(.background)

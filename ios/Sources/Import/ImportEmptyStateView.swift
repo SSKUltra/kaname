@@ -66,7 +66,7 @@ struct ImportEmptyStateView: View {
         // holding contrast.
         .safeAreaInset(edge: .bottom) {
             Button(Self.actionTitle, action: onImport)
-                .buttonStyle(.glassProminent)
+                .prominentAction()
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity)
                 .background(.background)

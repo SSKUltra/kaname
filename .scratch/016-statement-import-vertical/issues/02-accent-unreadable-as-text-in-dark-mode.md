@@ -1,6 +1,6 @@
 # 02 — The accent is unreadable as text in Dark Mode (2.35:1)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Found:** 2026-08-15, on a real iPhone 17 Pro Max (iOS 26.6), during 018's manual gate — the
 holder read the import summary sheet in Dark Mode and could barely see "Done" and
@@ -67,3 +67,35 @@ Ratios above are WCAG 2.1 relative luminance, computed from the two literals in
 `ios/Sources/Theme.swift:14–15` against the system's own dark surfaces. The holder's report is
 the ground truth they confirm: *"In dark mode the text on import another or Done in green is not
 very visible."*
+
+---
+
+## Resolved — 2026-08-15
+
+**Option 1 was taken: two tokens.** `ios/Sources/Theme.swift` now carries
+`UIColor.kanameAccentText` (the app tint, everything drawn as text or a symbol) and
+`UIColor.kanameAccentFill` (the fill behind a prominent action's white label, values unchanged).
+
+| Appearance | Text token | Worst surface | Was |
+|---|---|---|---|
+| Light | `#134E4A` | 8.49:1 on `#F2F2F7` | 8.49:1 |
+| Light + Increase Contrast | `#0B3634` | higher | — |
+| **Dark** | **`#3FBFAF`** | **5.02:1 on `#3A3A3C`** | **2.35:1** ❌ |
+| **Dark + Increase Contrast** | **`#5EEAD4`** | **7.67:1** | — |
+
+The palette now also answers Increase Contrast, which it did not before.
+
+**Two guards, so it cannot come back:**
+
+1. `ios/Tests/ThemeContrastTests.swift` computes WCAG 2.1 ratios **from the tokens themselves**,
+   over every appearance × contrast the system can produce, and asserts the two tokens are
+   distinct in Dark Mode and that each *fails* the other's job — which is the argument for having
+   two, written as a test. Reverting the Dark Mode value reproduces the reported defect exactly:
+   **2.3475:1**, the same number, watched going red.
+2. `scripts/import-path-audit.sh` gained a ninth scan: `.buttonStyle(.glassProminent)` may appear
+   only in `Theme.swift`. Everywhere else uses `prominentAction()`, which applies the style and
+   the fill token **together** — a bare `.glassProminent` would inherit the app tint, which is now
+   the *text* token, and put a white label on light teal at 2.26:1. Also watched failing.
+
+⚠️ **Not verified on a device yet.** The ratios are computed, not photographed; the holder should
+re-check the import summary sheet in Dark Mode, and this is a prerequisite for 018's G7.

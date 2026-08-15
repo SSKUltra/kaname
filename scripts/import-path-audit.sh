@@ -147,6 +147,30 @@ fi
 echo "import-audit: OK (no availability gate or material fallback under ios/Sources)"
 
 # ---------------------------------------------------------------------------
+# Palette audit — the prominent fill and the style that needs it travel together.
+#
+# The accent is two tokens, because one colour cannot both be a fill carrying white text and a
+# foreground read against a dark background: those want opposite things from Dark Mode, and
+# using one for both shipped a 2.35:1 failure that a person found on a device
+# (.scratch/016-statement-import-vertical/issues/02-accent-unreadable-as-text-in-dark-mode.md).
+#
+# `.buttonStyle(.glassProminent)` inherits the app tint, which is now the *text* token — filling
+# a button with it puts a white label on light teal. `prominentAction()` applies the style and
+# the fill token as a pair, so the only way to get one is to get both.
+PROMINENT="$(grep -rIn 'buttonStyle(\.glassProminent)' "$SOURCES_DIR" | grep -v '/Theme.swift:' || true)"
+
+if [ -n "$PROMINENT" ]; then
+    echo "import-audit: FAIL - a prominent button is styled without the fill it was measured for:" >&2
+    echo "$PROMINENT" >&2
+    echo "Use prominentAction(), which applies .glassProminent and .kanameAccentFill together." >&2
+    echo "Bare .glassProminent inherits the app tint - the text token - and a white label on" >&2
+    echo "that measures 2.26:1 (ios/Tests/ThemeContrastTests.swift)." >&2
+    exit 1
+fi
+
+echo "import-audit: OK (every prominent action carries the fill it was measured for)"
+
+# ---------------------------------------------------------------------------
 # Population audit (FR-006, FR-008, FR-045) — one definition of "the transactions a person
 # has", and it lives in the engine.
 #

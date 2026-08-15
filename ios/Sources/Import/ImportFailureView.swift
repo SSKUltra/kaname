@@ -13,7 +13,7 @@ struct ImportFailureView: View {
             Text(failure.message)
         } actions: {
             Button("Try another file", action: onRetry)
-                .buttonStyle(.glassProminent)
+                .prominentAction()
         }
         .accessibilityElement(children: .contain)
     }
