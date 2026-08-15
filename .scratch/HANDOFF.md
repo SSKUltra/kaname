@@ -28,14 +28,27 @@ per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
 ⚠️ **Open on 018, and all of it from the 2026-08-15 gate run** — `SC-012 is still not satisfied`,
-but every part of it is now a named ticket rather than a gap:
+but **every code defect it found is now fixed**, and what is left needs a person with a phone,
+not an agent with a keyboard:
 
-- **`issues/02`** (`ready-for-agent`) — ⛔ **G5 fails**: at accessibility sizes the scope chip
-  reads `ICIC…` over `·····…`, so the active filter is unidentifiable.
-- **`issues/03`** (`ready-for-agent`) — ⛔ **G2 fails**: the filter bar clips a row's amount
-  mid-glyph.
-- **`issues/04`** (`ready-for-agent`) — a row truncates away the last-4, so **VoiceOver can tell
-  two cards of one product apart and the screen cannot**.
+- **`issues/02`** — **resolved** (`3151e5b`). G5's code half: the filter bar now takes a
+  *decision* (`FilterChromeLayout`) instead of letting the string be the only thing that can
+  give. At accessibility sizes the chip **inverts** — the mask leads on a line that always fits,
+  the name follows middle-truncated — and the clear button collapses to `xmark.circle`, keeping
+  its words as the sentence VoiceOver speaks. ⚠️ The **visual** half still needs the re-run
+  booked under `03`.
+- **`issues/04`** — **resolved** (`3151e5b`). The row draws `accountRowIdentity` —
+  `•••• 7742 · <name>` — so trailing truncation eats the product name that repeats down the
+  column instead of the four digits that discriminate. `accessibilityLabel` is untouched: a
+  screen reader still hears the sentence. A sighted person can now tell two cards of one product
+  apart, which is the screen's whole premise.
+- **`issues/03`** (`ready-for-human`) — **cause fixed, verdict pending.** The bar can no longer
+  grow without bound (`maximumScopeLines` ≤ 3, held at all twelve text sizes), which was the
+  mechanism that sliced a row's amount mid-glyph. But no automated run can reach a populated list
+  (FR-077) and no unit test can measure a frame (FR-075), so **G2 closes on a manual re-run at
+  XXXL with a filter applied** — an unfiltered bar is shorter and passes either way. ⚠️ **Do it
+  in the same sitting as G5's visual half**: same screen, same size, same filter, two gates one
+  setup.
 - **`issues/05`** (`needs-info`) — a one-off 100% CPU main-thread render hang; sampled, not
   reproduced in three attempts.
 - **`issues/06`** (`ready-for-human`) — **G9, G11, G12 have never been measured.** ~20 minutes
@@ -44,6 +57,16 @@ but every part of it is now a named ticket rather than a gap:
 - **`issues/01`** — **resolved.** T139's accessibility half (G1–G8) and G10 were run on the
   simulator: 6 pass, 2 fail. It is kept for what the run cost and the two techniques that made
   it cheap.
+
+⚠️ **One lesson from `3151e5b`'s own working session, because it cost a rebuild.** The repo's
+"watch it fail" discipline needs a way to revert a deliberate break, and
+`git checkout -- ios/Sources` is **not** it while the fix itself is uncommitted — it reverts to
+`HEAD` and takes the fix with it. Copy the tree aside, or commit first, then break.
+
+⚠️ **`core/tests/history_perf.rs::s5` is wall-clock and flaky under CPU contention.** It failed
+once during this session purely because `make core-test` and `make ios-test` were running at the
+same time, and passed alone immediately after. Do not run the two gates concurrently, and do not
+chase an `s5` failure before re-running it on a quiet machine.
 
 **Resolved during 018's manual gate**, kept for the reasoning:
 - **`issues/01-front-door-contrast-dark-mode-largest-text.md`** — **resolved**, and
