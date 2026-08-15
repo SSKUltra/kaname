@@ -1,21 +1,21 @@
 # 01 — The manual accessibility gate has never been run, and the timed ones were eyeballed
 
-**Status:** ready-for-human
+**Status:** resolved
 
 **Deferred:** 2026-08-15, by the holder, explicitly and knowingly — *"lets skip this but add it
 to a future ticket much later"* — after G9–G14 were exercised.
-**Partly closed:** 2026-08-15, later the same day, on the simulator. **G1–G8 and G10 have now
-been run.** What remains is G9, G11 and G12 only — the three *timing* bounds, which a simulator
-cannot evidence.
+**Resolved:** 2026-08-15, later the same day, on the simulator. **G1–G8 and G10 were run.** The
+accessibility half — this ticket's subject — is closed. The three *timing* bounds it also
+carried (G9, G11, G12) were **split out into `issues/06`**, because a simulator cannot evidence
+them: they need a phone, not an audit.
 **Belongs to:** `018-transaction-list` — T139, § *The manual, release-blocking gate* in
 `specs/018-transaction-list/quickstart.md`. What it says about seeding applies to every P3 screen
 after it.
-**Severity:** ⚠️ **SC-012 is still not satisfied**, but for a different reason than when this was
-filed: the accessibility half is no longer unrun, it is **run and partly failing**. See
-`issues/02` and `issues/03`, which are the actual blockers now. This ticket is reduced to the
-three unmeasured timing bounds.
+**Severity:** ⚠️ **SC-012 is still not satisfied**, but nothing about it is *unrun* any more.
+What blocks it is now concrete and separately tracked: two failing gates (`issues/02`,
+`issues/03`) and three unmeasured timings (`issues/06`).
 
-## What was run, and what was not
+## Outcome
 
 | Gate | State |
 |---|---|
@@ -29,36 +29,17 @@ three unmeasured timing bounds.
 | **G6** — Reduce Transparency | ✅ **Pass** — chrome goes solid, no text on text |
 | **G7** — Increase Contrast + Dark Mode | ✅ **Pass** — direction is a sign, never colour |
 | **G8** — the date in view stays identifiable | ✅ **Pass** — the heading pins and updates |
-| **G9** — first screenful < 1 s | ⚠️ *"Felt instant."* Observed, **not measured**. Device-only. |
-| **G11** — the 200-row comparison | ⚠️ Same, and the delete-and-reinstall it needs was not done. Device-only. |
-| **G12** — filter apply/clear < 300 ms | ⚠️ Observed, **not measured**. Device-only. |
+| **G9, G11, G12** — the timing bounds | ➡️ **Moved to `issues/06`.** Device-only; a simulator's frame timings are not evidence for them, so they were deliberately not attempted here. |
 
-## Why "it felt instant" is not enough to close SC-012
+## What still stands between this and SC-012
 
-It is a real signal — a screen that took two seconds would not feel instant — and it is recorded
-as one. But 900 ms also feels instant, and **the reason the bound was written down was to stop a
-later regression hiding behind a judgement**. A number is a thing the next person can compare
-against; an impression is not.
+Nothing here is unrun; three things are unfixed or unmeasured, and each has its own ticket:
 
-G12's 300 ms is past what an unaided eye can time at all: it is eighteen frames.
-
-## What closing it takes
-
-**Roughly twenty minutes on a device, and no code.** Only the three timing gates remain;
-`quickstart.md` § *How to run G9–G14* has the runbook.
-
-1. `make perf-corpus DIR=~/kaname-corpus` → eight statements, self-verifying.
-2. `TUIST_DEVELOPMENT_TEAM=… make ios-gen`, then a **Release** build installed on a device,
-   **launched from the home screen** — a session under Xcode's debugger pays a frame-budget tax
-   that G9's one-second bound cannot afford.
-3. **G9 / G12**: iOS Screen Recording, then step the video frame by frame in QuickTime. At 60 fps,
-   one second is 60 frames and 300 ms is 18.
-4. **G11**: delete the app — which deletes the encrypted store with it — reinstall, and import
-   `200-rows/01-icici-1002.pdf` alone.
-5. Fill § *Record here*, which is what actually satisfies SC-012.
-
-⚠️ **A free Personal Team build expires after seven days.** The one installed on 2026-08-15 is
-dead after **2026-08-22**; re-install before running.
+| | |
+|---|---|
+| `issues/02` | ⛔ G5 — the active filter is unreadable at accessibility sizes |
+| `issues/03` | ⛔ G2 — the filter bar clips a row's amount mid-glyph |
+| `issues/06` | ⚠️ G9, G11, G12 — the three device timing bounds, never measured |
 
 ## What the accessibility half cost, and what it found
 

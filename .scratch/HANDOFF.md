@@ -27,11 +27,23 @@ A feature here is picked up by working `tasks.md` in order, respecting its PR sp
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
-⚠️ **One thing is open**: **`.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md`**
-(`ready-for-human`) — **T139's accessibility half (G1–G8) has never been run**, and G9/G11/G12
-were judged by eye rather than measured, so **SC-012 is not satisfied**. Deferred knowingly by
-the holder on 2026-08-15. Closing it is ~30 minutes with a device and no code; the ticket carries
-the runbook. ⚠️ A free-team build expires seven days after install.
+⚠️ **Open on 018, and all of it from the 2026-08-15 gate run** — `SC-012 is still not satisfied`,
+but every part of it is now a named ticket rather than a gap:
+
+- **`issues/02`** (`ready-for-agent`) — ⛔ **G5 fails**: at accessibility sizes the scope chip
+  reads `ICIC…` over `·····…`, so the active filter is unidentifiable.
+- **`issues/03`** (`ready-for-agent`) — ⛔ **G2 fails**: the filter bar clips a row's amount
+  mid-glyph.
+- **`issues/04`** (`ready-for-agent`) — a row truncates away the last-4, so **VoiceOver can tell
+  two cards of one product apart and the screen cannot**.
+- **`issues/05`** (`needs-info`) — a one-off 100% CPU main-thread render hang; sampled, not
+  reproduced in three attempts.
+- **`issues/06`** (`ready-for-human`) — **G9, G11, G12 have never been measured.** ~20 minutes
+  with a device, a Release build and a frame-stepped screen recording; the ticket carries the
+  whole runbook. ⚠️ A free-team build expires seven days after install.
+- **`issues/01`** — **resolved.** T139's accessibility half (G1–G8) and G10 were run on the
+  simulator: 6 pass, 2 fail. It is kept for what the run cost and the two techniques that made
+  it cheap.
 
 **Resolved during 018's manual gate**, kept for the reasoning:
 - **`issues/01-front-door-contrast-dark-mode-largest-text.md`** — **resolved**, and
@@ -95,8 +107,10 @@ reach a populated transaction list at all.** The list is behind an import, the i
 the system document picker, and FR-077 forbids a seeding hook in the shipping app — so every P3
 screen that shows a person's own data is manual-gate-only, half an hour of somebody's afternoon
 each, and 018's own SC-012 is still open because of it. Read
-`.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md` first: it is the
-concrete bill for not having this. ⚠️ **This slice has not been specified** — it is the one place
+`.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md` first — now
+**resolved**, it is the itemised bill for not having this: forty minutes by hand, and four
+defects (`issues/02`–`05`) that no automated gate in this repo could have caught, on a screen no
+automated run can even reach. ⚠️ **This slice has not been specified** — it is the one place
 in this handoff where `speckit.specify` is the right next command.
 
 **What 017's reference pass measured** (13 real statements, on the holder's machine, counts
@@ -426,9 +440,11 @@ Everything below is evidence, not impression.
 §5 step 4's "the period" is unobservable; and `7-long-for-cancel.pdf` parses far too fast on an
 M-series simulator to cancel — a 1,250-row `make perf-corpus` statement is what actually works.
 
-**⬅️ What is still genuinely open on 018: G9, G11 and G12 only** — the three timing bounds. They
-need a Release build on a device and a frame-stepped screen recording; a simulator's timings are
-not evidence for them. See `.scratch/018-transaction-list/issues/01-…`.
+**⬅️ What is still genuinely open on 018: G9, G11 and G12 only** — the three timing bounds, now
+their own ticket: `.scratch/018-transaction-list/issues/06-device-timing-gates-never-measured.md`.
+They need a Release build on a device and a frame-stepped screen recording; a simulator's timings
+are not evidence for them. **~20 minutes, no code.** Issue `01` is **resolved** — its subject,
+the unrun accessibility gate, is done.
 
 ### T123 — what is now automated, and what a person still has to do
 
