@@ -256,6 +256,18 @@ number, so Kaname will **ask which account it belongs to** — name it and carry
 designed behaviour (FR-024), not a defect. Check the front door reads **8 accounts** before
 starting, and that the counts add to 10,000.
 
+⚠️ **Pairing, before any of this works.** A device has to be trusted over a **cable** once, with
+the phone **unlocked**, and iOS 16+ needs **Developer Mode** (Settings → Privacy & Security →
+Developer Mode → on → restart). Until then `xcrun devicectl list devices` can report the phone
+as `available` — it is discoverable over the network — while Xcode still calls it unpaired and
+`xcrun xctrace list devices` files it under *Devices Offline*. That disagreement is the
+signature of a phone that has never been trusted, not of a broken cable.
+
+⚠️ **Launch the app from the phone, not from Xcode.** A build run under the debugger is not the
+build a person uses: the debug server, the memory graph instrumentation and the console pipe all
+cost frame budget, and G9's bound is one second. Install it, stop the Xcode session, then tap the
+icon on the home screen and start recording.
+
 **4. Take the measurements from a screen recording, not a stopwatch.** Start iOS Screen Recording
 (Control Centre), perform the action, stop, AirDrop the video to the Mac and step it frame by
 frame in QuickTime with the arrow keys. At 60 fps one frame is 17 ms, so:
