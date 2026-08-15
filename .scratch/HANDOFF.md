@@ -27,10 +27,18 @@ A feature here is picked up by working `tasks.md` in order, respecting its PR sp
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
-⚠️ **One thing *is* open here**: `.scratch/016-statement-import-vertical/issues/01-front-door-contrast-dark-mode-largest-text.md`
-(`Status: ready-for-human`) — **`make ios-test` is red on unmodified `main`**, and every slice
-after 016 inherits a gate it cannot pass. Read it before running any iOS gate and concluding
-you broke something.
+⚠️ **Three things *are* open here**, all against `016-statement-import-vertical`:
+- **`issues/01-front-door-contrast-dark-mode-largest-text.md`** (`ready-for-human`) —
+  **`make ios-test` is red on unmodified `main`**, and every slice after 016 inherits a gate it
+  cannot pass. Read it before running any iOS gate and concluding you broke something.
+- **`issues/02-accent-unreadable-as-text-in-dark-mode.md`** (`ready-for-agent`) — found on a
+  real device during 018's manual gate. The one accent is measured at **2.35:1 as text on a
+  Dark Mode sheet** (4.5:1 required) because it was tuned as a *fill* carrying white text and is
+  also used as a *foreground*. Will fail 018's G7.
+- **`issues/03-no-way-to-state-an-unprinted-last-4.md`** (`needs-triage`) — an SBI statement
+  prints only two digits, so the account is created with no last-4 and **nothing in the app can
+  ever set one**. The code matches FR-024; the requirement is what is thin, so it wants a human
+  decision, not a fix.
 
 ⚠️ **Don't conclude "no work left" from an empty `.scratch/` queue** — that is the older
 tracker. Check §3.
