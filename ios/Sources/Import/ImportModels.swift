@@ -130,7 +130,11 @@ struct AccountChoice: Equatable, Sendable {
 /// What the person decided when asked.
 enum AccountDecision: Equatable, Sendable {
     case existing(id: String)
-    case new(name: String)
+    /// A new account, named — and optionally carrying the last four digits the person read off
+    /// the card, for the statements whose own text prints too few of them to recover
+    /// (FR-024). `nil` means they did not say, which stays a legitimate answer: an account with
+    /// no digits names itself by name alone (FR-003).
+    case new(name: String, last4: String?)
 }
 
 /// Where an import ended: with a summary, or with a question only a person can answer.

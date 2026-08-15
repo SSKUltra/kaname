@@ -1,6 +1,6 @@
 # 03 — A person cannot give an account the last-4 the statement did not print
 
-**Status:** needs-triage
+**Status:** resolved
 
 **Found:** 2026-08-15, on a real iPhone, importing a synthetic SBI card statement during 018's
 manual gate: *"for SBI it asked me to create account but no option to put the account last 4
@@ -54,3 +54,35 @@ Whichever way it goes changes what an account *is* — `data-model`'s Account ga
 or a provenance — so it wants a human decision first. If a field is added it must also answer:
 what does it validate (4 digits? the 2 the statement did show?), and does an account created
 with a stated last-4 still match a later statement that prints a different one.
+
+---
+
+## Resolved — 2026-08-15
+
+**Decided by the holder: let the person type it.** *"Let the user type, we'll have update flows
+later."*
+
+`AccountPickerView`'s "add a new one" section now takes an **optional** last-4 beside the name,
+and `AccountDecision.new(name:last4:)` carries it to `ImportService`.
+
+The rule that makes typed digits safe to store next to read ones — and the one the tests hold:
+
+> **What the document printed wins.** `last4: parsed.cardLast4 ?? statedLast4`.
+
+A person's typo can therefore leave an account without digits, but it can never *overwrite*
+digits the statement itself carried — which is the failure mode this ticket was worried about,
+because a later statement for the real card would then stop matching its own account.
+
+Three further guards, small but deliberate:
+
+- **Four digits or none.** "Add account" is disabled at one, two or three: half an identifier is
+  worse than none, since it would be stored as though it had been read off a document.
+- **Text, not a number.** `0042` is not forty-two, and leading zeroes are real.
+- Non-digits are stripped as they are typed, and the field is capped at four.
+
+Pinned by `ios/Tests/ImportStatedLast4Tests.swift` — three tests, and **both** breaks watched
+going red: ignoring the typed digits, and letting them outrank the document.
+
+⚠️ **Still nothing edits an account after the fact.** A person who mistypes, or who skips the
+field, has no way back — that is the "update flows later" this decision defers, and it should be
+picked up with the account-management slice.

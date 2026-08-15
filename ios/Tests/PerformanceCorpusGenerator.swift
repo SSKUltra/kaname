@@ -139,7 +139,7 @@ struct PerformanceCorpusGenerator {
             if case .needsAccount = result {
                 // The document carries no readable card number, so Kaname asks rather than
                 // guessing — which is what the person will have to answer on the device too.
-                _ = try await service.resolveAccount(.new(name: "Synthetic Card"))
+                _ = try await service.resolveAccount(.new(name: "Synthetic Card", last4: nil))
                 print("perf-corpus:   \(file.lastPathComponent) asks which account it belongs to")
             }
             let seconds = Date().timeIntervalSince(started)

@@ -143,8 +143,12 @@ private struct ImportPipeline: Sendable {
         switch decision {
         case .existing(let id):
             target = .existing(id: id, last4: pending.parsed.cardLast4)
-        case .new(let name):
-            target = Self.newAccount(named: name, issuer: pending.issuer, parsed: pending.parsed)
+        case .new(let name, let last4):
+            // The document wins when it printed digits of its own: those were read, not
+            // remembered. The typed ones are for the statements that print too few.
+            target = Self.newAccount(
+                named: name, issuer: pending.issuer, parsed: pending.parsed,
+                statedLast4: last4)
         }
         return try persist(pending, target: target) { _ in }
     }
@@ -316,13 +320,14 @@ private struct ImportPipeline: Sendable {
     private static func newAccount(
         named name: String,
         issuer: Issuer,
-        parsed: ParsedStatement
+        parsed: ParsedStatement,
+        statedLast4: String? = nil
     ) -> ImportAccountTarget {
         .new(
             name: name,
             bankCode: issuer.bankCode,
             isCreditCard: issuer.kind == .creditCard,
-            last4: parsed.cardLast4,
+            last4: parsed.cardLast4 ?? statedLast4,
             currency: parsed.lines.first?.currency ?? "INR"
         )
     }

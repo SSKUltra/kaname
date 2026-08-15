@@ -12,6 +12,10 @@ struct AccountPickerView: View {
     let onCancel: () -> Void
 
     @State private var newAccountName: String = ""
+    /// What the person read off the card, when the statement printed too little of it. Held as
+    /// text because it is an identifier, not a number: leading zeroes are real, and `0042` is
+    /// not forty-two.
+    @State private var newAccountLast4: String = ""
 
     var body: some View {
         NavigationStack {
@@ -46,10 +50,23 @@ struct AccountPickerView: View {
                 Section("Or add a new one") {
                     TextField("Account name", text: $newAccountName)
                         .textInputAutocapitalization(.words)
+
+                    // Optional, and only ever asked for because the statement itself printed
+                    // too few digits to recover — some issuers mask all but the last two. It is
+                    // what the person can see on the card in their hand, and without it the
+                    // account can never be told apart from another on the same issuer.
+                    TextField("Last 4 digits (optional)", text: $newAccountLast4)
+                        .keyboardType(.numberPad)
+                        .monospacedDigit()
+                        .onChange(of: newAccountLast4) { _, typed in
+                            newAccountLast4 = String(typed.filter(\.isNumber).prefix(4))
+                        }
+                        .accessibilityLabel("Last four digits of the card, optional")
+
                     Button("Add account") {
-                        onPick(.new(name: trimmedName))
+                        onPick(.new(name: trimmedName, last4: statedLast4))
                     }
-                    .disabled(trimmedName.isEmpty)
+                    .disabled(trimmedName.isEmpty || !last4IsUsable)
                 }
             }
             .navigationTitle("Which account?")
@@ -65,6 +82,17 @@ struct AccountPickerView: View {
                 }
             }
         }
+    }
+
+    /// Four digits or nothing. A person who has typed one or two has not finished, and
+    /// half an identifier is worse than none: it would be stored as though it were read off the
+    /// document, and matched against future statements.
+    private var last4IsUsable: Bool {
+        newAccountLast4.isEmpty || newAccountLast4.count == 4
+    }
+
+    private var statedLast4: String? {
+        newAccountLast4.count == 4 ? newAccountLast4 : nil
     }
 
     private var trimmedName: String {

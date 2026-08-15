@@ -41,10 +41,12 @@ per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
   `ThemeContrastTests` computes the ratios from the tokens, and `import-audit`'s ninth scan
   confines `.glassProminent` to `Theme.swift` so the fill and its style cannot come apart. Not
   yet confirmed by eye on a device.
-- **`issues/03-no-way-to-state-an-unprinted-last-4.md`** (`needs-triage`) — an SBI statement
-  prints only two digits, so the account is created with no last-4 and **nothing in the app can
-  ever set one**. The code matches FR-024; the requirement is what is thin, so it wants a human
-  decision, not a fix.
+- **`issues/03-no-way-to-state-an-unprinted-last-4.md`** — **resolved**. The account picker now
+  takes an optional last-4 beside the name, under one rule: **what the document printed wins**
+  (`parsed.cardLast4 ?? statedLast4`), so a typo can leave an account without digits but can
+  never overwrite digits a statement carried. Four digits or none. ⚠️ **Nothing edits an account
+  after the fact** — the "update flows later" this defers belongs to the account-management
+  slice.
 
 ⚠️ **Don't conclude "no work left" from an empty `.scratch/` queue** — that is the older
 tracker. Check §3.
