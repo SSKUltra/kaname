@@ -19,13 +19,40 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/018-transaction-list/`, resuming at T013.**
+**The live one is `specs/018-transaction-list/`, resuming at T071 (PR B, US2).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
 `Status:` line (`needs-triage`/`needs-info`/`ready-for-agent`/`ready-for-human`/`wontfix`,
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
+
+⚠️ **One thing is open**: **`.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md`**
+(`ready-for-human`) — **T139's accessibility half (G1–G8) has never been run**, and G9/G11/G12
+were judged by eye rather than measured, so **SC-012 is not satisfied**. Deferred knowingly by
+the holder on 2026-08-15. Closing it is ~30 minutes with a device and no code; the ticket carries
+the runbook. ⚠️ A free-team build expires seven days after install.
+
+**Resolved during 018's manual gate**, kept for the reasoning:
+- **`issues/01-front-door-contrast-dark-mode-largest-text.md`** — **resolved**, and
+  **`make ios-test` is green again** (256 unit tests, 6 UI tests). It was an auditor artifact:
+  at the largest text size the explanation is 621 pt tall on an 852 pt screen, so the contrast
+  verdict was computed over pixels never drawn. Proved by dropping one text size — same
+  colours, only the height changes — and watching both tests pass. The suppression is narrow
+  (`.contrast` only, only when the element's frame escapes the window, only on the two
+  largest-text tests) and was watched failing against a real in-window contrast break.
+- **`issues/02-accent-unreadable-as-text-in-dark-mode.md`** — **resolved**. The accent is now
+  two tokens (`kanameAccentText` / `kanameAccentFill`), Dark Mode text goes from **2.35:1 to
+  5.02:1** at its worst surface, Increase Contrast is answered, and two guards hold it:
+  `ThemeContrastTests` computes the ratios from the tokens, and `import-audit`'s ninth scan
+  confines `.glassProminent` to `Theme.swift` so the fill and its style cannot come apart.
+  **Confirmed by eye on the device** by the holder who reported it.
+- **`issues/03-no-way-to-state-an-unprinted-last-4.md`** — **resolved**. The account picker now
+  takes an optional last-4 beside the name, under one rule: **what the document printed wins**
+  (`parsed.cardLast4 ?? statedLast4`), so a typo can leave an account without digits but can
+  never overwrite digits a statement carried. Four digits or none. ⚠️ **Nothing edits an account
+  after the fact** — the "update flows later" this defers belongs to the account-management
+  slice.
 
 ⚠️ **Don't conclude "no work left" from an empty `.scratch/` queue** — that is the older
 tracker. Check §3.
@@ -49,7 +76,8 @@ Orientation in one line: the deterministic engine (10 readers + balance-chain, r
 dedup, coverage, transfer, categorize), the UniFFI bridge, and the SQLCipher encrypted store
 are all in and fully wired together — **P2 is done; P3 (the SwiftUI app) is now the work**.
 The import vertical and the front door have landed (016, 017); **the transaction list is
-under way (018, PR A0 merged)** and the accounts/dashboard/budgets screens have not started.
+under way (018 — PR A0 merged, PR A's engine done)** and the accounts/dashboard/budgets screens
+have not started.
 
 ---
 
@@ -66,16 +94,152 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR A, resuming at T013.**
+**⬅️ NEXT: `018-transaction-list` is code-complete. What is left is T139/T140 — the manual,
+release-blocking gate, on a real device, which only a person can run** (`quickstart.md`
+§ *The manual, release-blocking gate*: G1–G8 accessibility, G9–G14 device performance, then
+fill the **Record here** table). **SC-012 is satisfied by recording it, not by running it.**
+After that, the next slice is the **DEBUG-only test-seeding hook** — see below for why it now
+blocks automated coverage of every P3 screen, not just this one.
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
-**PR A0 (#38) is merged** — the design artifacts plus one complete engine fix (T004–T012). PR A
-continues at **T013**: schema v7's partial index, the `LIVE` constant, `history_page`,
-`account_summaries`, the six records, the `ffi.rs` exports, and the O/L/P/F/S suites. It must
-merge before any interface work, because it crosses the FFI.
+**PR A0 (#38) is merged**, **PR A is done — T001–T044**, **PR B is done — T045–T083, less T069**,
+**PR C is done — T084–T102**, **PR D is done — T103–T121**, and **PR E is done — T122–T138 and
+T141–T147**, i.e. everything but the two manual tasks. A person can now open the app, tap once,
+read their own transactions across every account newest-first and grouped by date, narrow to one
+account and clear it again in a single tap, be told which of six true things is the case when a
+screen is empty — and see a statement they have just imported appear in a list they are already
+reading, without losing the filter they set or the row they were on. Importing the same statement
+a second time changes nothing they can see, and the filter is forgotten on relaunch, deliberately.
+**None of PR B, C, D or E has been opened as a pull request yet.** Their commits are all on `main`
+(`738cbe1`, `ea7ba68`, `1a8054f`, `572f0b4`, `94aa894`, PR D's and PR E's).
+
+**What PR E landed**: `ImportCompletionSignal` — the process's one broadcast `AsyncStream<Void>`,
+yielded by `ImportService` **after** `import_statement` commits and on no other path — plus
+`refreshAfterImport()` (the held pages re-read from page 1 with the same filter and swapped in as
+*one* change), scroll-anchor capture and restore through `.scrollPosition(id:)`, and two
+subscribers: the list and the front door, so a count and a list can never be read from two
+different moments. Two suites — `ImportCompletionSignalTests` (I1–I4 + the cancelled-import
+no-transition case) and four new refresh invariants in `TransactionFilterTests` — and **eight
+deliberate breaks were watched going red**, including a signal sent one line early (six tests) and
+a refresh that resumed from the cursor the old read had reached.
+
+⚠️ **Two defects PR E found in shipped code, both fixed.** `TransactionListViewModel` had **no
+generation guard**: a page read still in flight when the filter changed would append the *old*
+account's rows to the *new* population — FR-040, silently. And `TransactionHistoryService` was
+handed an already-open `Store`, which meant `StoreProvider.shared()` — SQLCipher's first open —
+ran on the **main thread**, from a view body; it now takes `init(opening:)` and opens inside the
+actor. A third, smaller one: the prefetch check flattened every row read so far on **every**
+scroll tick (ten thousand ids allocated to answer a question about ten), and now walks backwards
+by index.
+
+⚠️ **`ImportService.swift` is at 393 lines** (limit 400). PR E spent the headroom T067 created by
+moving `PendingImport` and `PipelineOutcome` into `ImportModels.swift` — the file's own budget is
+now 7 lines, and the next task to touch it must move something out, not reformat.
+
+**What PR D landed**: four suites — `TransactionAmountTests`, `TransactionCategoryTests`,
+`TransactionTransferMarkingTests`, `TransactionAccessibilityTests` — plus three more audit scans
+(no aggregate, no `.tint(`, no `detectTransfers` call **or detection claim** anywhere in
+`ios/Sources` or `ios/Tests`) and one contrast fix: a `Section` header renders de-emphasised by
+default, and a date is content, so the heading now carries an explicit `.foregroundStyle(.primary)`.
+Five breaks were watched, including a `Double` on the amount path that turned ₹1,234,567.89 into
+`−₹1.2M` and 66.660 KWD into `67`.
+
+⚠️ **Two findings worth carrying forward.** **T118 as specified is impossible**: the front door
+hides its "All transactions" link until an account exists, an account needs a real imported
+statement, and importing needs the document picker — so **no automated run can reach the
+transaction list at all**, and FR-077 forbids the DEBUG seeding hook that would fix it. The UI
+test now asserts that reachability fact instead, and the populated list has **no automated
+appearance coverage** — it is manual-gate only. Second, for the same reason,
+`EmptyKind.nothingImported` is **unreachable on the transaction list** in the shipped app; the
+branch is defensive and stays.
+
+**What PR C landed**: the **filter chrome** — a `GlassEffectContainer` on an opaque
+`.safeAreaBar(edge: .bottom)` holding a scope `Menu` and a clear button, both `.buttonStyle(.glass)`
+with `glassEffectID` in one `@Namespace` — plus the view model's scope surface (`scopeTitle`,
+`scopeSubtitle`, `scopeAnnouncement`, `isFiltered`, `availableFilters`, `showsFilterChrome`,
+`emptyActionIsProminent`) and three test suites: `TransactionFilterTests`,
+`TransactionEmptyStateTests`, `TransactionListStringsTests`. **Six deliberate breaks were watched
+going red**, including the one T093 demanded. ⚠️ **T098 found and fixed a real defect**:
+`.glassProminent` was being applied to *every* empty state with an import action, but design note
+D2 permits it only where there is no filter bar — state 3 was shipping two prominent glass
+elements. And the audit gained a **sixth scan**: `UserDefaults`, `@AppStorage`, `@SceneStorage`,
+`NSUbiquitousKeyValueStore`, `NSUserActivity` and `FileManager` are banned under
+`ios/Sources/Transactions/`, because FR-041 is a promise about what the app *cannot* do.
+
+**What US4 landed**: `ios/Tests/TransactionListOrderingTests.swift` (7 tests over a real store:
+newest-first across accounts, both same-date tie-breaks, byte-identical rebuild, identical across
+a **relaunch** — a second `Store` over the same file — and a further account disturbing nothing),
+`ios/Tests/TransactionListHeadingTests.swift`, and the row-edge tests in
+`TransactionRowLayoutTests`. T078/T079/T081's *implementation* had already landed in US1, so the
+substance was the proving: **five deliberate breaks, each watched going red** (a sorted page, a
+shuffled page, `Date()` instead of the clock, a `(date, account)` grouping key, a total appended
+to a heading). ⚠️ **The ordering fixture had to be rebuilt mid-phase** because its printed order
+coincided with descending amount and let a break slip past — see `tasks.md` § "US4 — RECORDED".
+T080 pinned rather than merely confirmed: the audit now also bans `sorted`, `sort(` and
+`reversed` under `ios/Sources/Transactions/`.
+
+**What US2 landed**: `ios/Tests/TransactionListLivenessTests.swift` — six tests over the **real**
+import pipeline, a real encrypted store, the real bridge and the real view model (only extraction
+and the clock are stubbed). Every one of them was **watched failing** against three deliberate
+breaks before it was trusted, including the 016 defect put back on purpose; the count went *front
+door 8, list 4*, exactly as it did to a person. T073 found nothing to delete, so it pinned:
+`scripts/import-path-audit.sh` gained a **fifth scan** banning a `listTransactions(` call anywhere
+under `ios/Sources` and any second opinion (`isLive`, `supersededBy`, `isDeleted`,
+`rows.filter`/`sorted`) under `ios/Sources/Transactions/`. Read `tasks.md` § "US2 — RECORDED"
+for the three deviations; the one that carries forward is that **SC-004's "after a deletion" is
+still unreachable from Swift** and stays pinned engine-side (`history_live.rs` L1, L4, L5).
+
+**What US1 landed** (`ea7ba68`): `ios/Sources/Transactions/` — the models, the copy deck, the
+`actor TransactionHistoryService`, the paging + incremental-grouping view model, the row and the
+screen; `StoreProvider` (one `Store` per process, so a page read can never land inside an
+import's transaction); the front door's rows became `NavigationLink`s and stopped being
+`LabeledContent`; **the front-door count became one `account_summaries()` call**; and the
+networking audit widened from `ios/Sources/Import` to all of `ios/Sources`.
+
+Green: `make lint` (0 violations), `make import-audit` (all **eight** scans), `make core-test`
+(**308 tests**), the **unit target — 238 tests in 47 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
+exactly on. Read `tasks.md` § "US1 — RECORDED" for the five deviations before continuing; the
+two that change later work are:
+
+- ⚠️ **US7's empty states landed early** (`EmptyKind.decide` = T096, the rendering = T098),
+  because "shippable on its own" and "blank screen when you have nothing" cannot both be true.
+  **T093 must still be written, and must be observed failing against a deliberately broken
+  decision** — a suite that has only ever been green proves nothing about what it would catch.
+- **The Swift corpus cannot build a deleted row.** `is_deleted` has no write path in the store's
+  API, so `LivenessParityTests` proves the *superseded* half of the live rule end to end and
+  names the gap; the `!isDeleted` half stays pinned engine-side (`history_live.rs` L1–L5).
+
+⚠️ **T069 is unchecked, and not because of this slice.** `make ios-test` also runs the UI target,
+where the **front door** fails a Dark Mode contrast audit at the largest text size — **verified
+identical on a stashed, clean `main`**. Filed as
+`.scratch/016-statement-import-vertical/issues/01-front-door-contrast-dark-mode-largest-text.md`
+(`Status: ready-for-human`), with the two fixes already tried and reverted so nobody spends that
+time twice. **Use `-only-testing:KanameTests` to gate 018's own work** until it is settled.
+
+**What PR A settled, and the two things it found:**
+
+- **The live rule is structural.** `live_predicate!()` is one literal, and `concat!` builds both
+  the v7 index's `WHERE` clause and `PAGE_SQL` from it *at compile time*. A read that paraphrases
+  the rule loses its index and the plan-shape gates go red; L6 re-reads the predicate out of
+  `sqlite_master` and compares it to `LIVE` byte for byte.
+- **A filter is `k = 1` over the same statement**, and a first page binds the identity cursor
+  `('9999-12-31', 0)` — no separate filtered path, no separate first-page path. F3 proves it by
+  running `PAGE_SQL` by hand and reproducing both reads.
+- ⚠️ **A parse failure printed the row.** `invalid stored amount "1234.56"` put a person's money
+  into an error string, in *every* path rather than just this one. Z2 caught it; both
+  `amount_from_sql` and `date_from_sql` now name the column and nothing else.
+- ⚠️ **S5 cannot be two-sided through `history_page`.** A page's fixed cost — one lock, one
+  account list, one category catalog — divides by 2 accounts on the small corpus and by 8 on the
+  large one, so the large corpus measures ~37% *cheaper* per account (research R9 measured 13% in
+  the same direction, and called it correct). The gate asserts the claim it means: cost must not
+  **grow** with the corpus.
+- **Two deliberate deviations from `tasks.md`**: `SCHEMA_V7`/`PAGE_SQL` are `concat!`-built
+  consts rather than a runtime `format!` (byte-identity at compile time is the stronger form of
+  T018), and the two reads are exported from `store.rs`'s existing `#[uniffi::export] impl Store`
+  block, where every other `Store` method lives — `ffi.rs` carries no `Store` code (T036).
 
 Read, in order: `spec.md` → `plan.md` → `research.md` (R1–R20, with measured evidence) →
 `contracts/` → **`tasks.md`** (the queue) → `quickstart.md` (build order + 14 traps).
@@ -173,12 +337,19 @@ screens behind an import all need a person.
 all on `main`. What remains there is the two manual gates only a person can run (T123 and
 T129); they are release-blocking but they do not block 017.
 
-⚠️ **One finding parked for 016's T123**: the accessibility audit, run by accident against the
-accounts list at the largest text size, reported a contrast failure on a `StaticText '1'` at
-`{32, 724}` — consistent with `LabeledContent` switching to a vertical layout at accessibility
-sizes and dropping the transaction count to the leading edge under the bottom bar. No
-automated test covers that screen (the audit only reaches the front door). Unverified, and out
-of 017's scope.
+⚠️ **Two findings now belong to 016's T123.**
+
+1. **Filed, and blocking every iOS gate**:
+   `.scratch/016-statement-import-vertical/issues/01-front-door-contrast-dark-mode-largest-text.md`
+   — the front door's explanation fails the Dark Mode contrast audit at the largest text size,
+   and **`make ios-test` is red on unmodified `main`** because of it. Verified pre-existing from
+   018. Two fixes tried and reverted; the ticket records both.
+2. **Parked, and still unverified**: the accessibility audit, run by accident against the
+   accounts list at the largest text size, reported a contrast failure on a `StaticText '1'` at
+   `{32, 724}` — consistent with `LabeledContent` switching to a vertical layout at accessibility
+   sizes and dropping the transaction count to the leading edge under the bottom bar. 018 removed
+   the suspected cause (`ImportedAccountsView` is no longer a `LabeledContent`), but the finding
+   was never reproduced, so it is not closed by that. No automated test covers that screen.
 
 P3 (the Core SwiftUI app) has begun. Its first slice is fully specified, planned and
 broken into tasks; **do not re-run `speckit.specify`/`plan`/`tasks` for it** — the design is
@@ -609,7 +780,49 @@ changes don't need linting/building/testing.
   contrast failures on its first run. Two rules it established: never use
   `.foregroundStyle(.secondary)` for content text, and set `.primary` explicitly on every
   `LabeledContent` value, because the system renders it secondary.
+- **`ios/Sources/Transactions/` — the transaction list (018).** `TransactionHistoryService` is
+  an **actor**, and the *only* thing in the app that reads history: it opens the store inside
+  itself (`init(opening:)`), so SQLCipher never opens on the main thread even though the screen
+  is reached from a view body. `TransactionListViewModel` owns paging, the filter, incremental
+  date grouping and the scroll anchor, and holds a `generation` token so a page read still in
+  flight when the population changes underneath it is dropped rather than appended.
+  `ImportCompletionSignal` is the process's one **broadcast `AsyncStream<Void>`**: the import
+  actor yields it *after* `import_statement` commits and on no other path, and both the list
+  and the front door re-read on it — so the count on one screen and the rows on the other can
+  never come from two different moments. It carries `Void` deliberately (a payload would be a
+  second population, arriving by a second route).
+- **The engine's two reads (018).** `Store::history_page(HistoryQuery) -> HistoryPage` —
+  keyset-paged, a k-way merge of one index-satisfied query per account, the account filter
+  being the same query with k = 1 — and `Store::account_summaries()`, which is where the front
+  door's per-account live count now comes from (it was an N+1 in Swift: 43.8 ms of Rust time
+  became 1.6 ms measured through the whole seam). Schema is **v7**: one partial descending
+  index `idx_txn_live_account_date ON transactions(account_id, date DESC) WHERE is_deleted = 0
+  AND superseded_by IS NULL`. ⚠️ The live-row rule is the single Rust constant `LIVE`, and it
+  is **byte-identical** to that index's `WHERE` clause — paraphrase either and the read loses
+  its index and `history_perf.rs`'s plan-shape test (S1/S2) goes red. `Store::list_transactions`
+  keeps its raw semantics (deleted and superseded rows included) on purpose — do not "fix" it.
+  `StoreProvider.shared()` is the process's one `Store`, which is a correctness requirement:
+  two connections would be two locks, and a page read could land inside an atomic import.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
+
+### ⚠️ Open findings carried out of 018 — evidence, not opinions
+
+- **R17 — the matcher collapses across accounts, and the same-institution guard is still
+  absent.** 018 PR A fixed only the *tie-break*: dedup's account groups are ordered by
+  `accounts.rowid`, so which row survives is now deterministic across processes
+  (`tests/store_dedup_determinism.rs`). What it did **not** change is which pairs match. Two
+  accounts *of the same kind* are now never compared at all — a blunt guard: a person with two
+  bank accounts, one of which itemises the other's card spends, would see the spend twice. The
+  narrow fix is a **source-kind** guard rather than a same-kind one; the honest fix is a
+  matcher that knows *why* two rows are the same purchase. Belongs to the slice that owns
+  dedup. Evidence: `specs/018-transaction-list/quickstart.md` § *What US1 AS-6 now asserts*.
+- **R18 — `detectTransfers()` is called from no Swift file, and nothing claims otherwise.**
+  The engine's cross-account matcher exists and is tested (`tests/store_transfer.rs`); the
+  transfer **marking** on the list is built and tested against a store where the flag is set by
+  the *test*. Wiring the detection belongs to the categorize slice. `make import-audit` and
+  `ios/Tests/TransactionTransferMarkingTests.swift` mechanically fail any task name, test name,
+  string or release note that implies the app detects transfers — keep it that way until it
+  does.
 
 ---
 

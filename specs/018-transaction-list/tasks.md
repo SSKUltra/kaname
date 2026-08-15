@@ -60,9 +60,9 @@ Two-layer repo (`plan.md` → Project Structure):
 
 **Purpose**: A green baseline and a synthetic corpus that measures what it claims to measure — before a line of engine code changes.
 
-- [ ] T001 Establish the green pre-change baseline: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"` then run `make core-lint && make core-test && make core-privacy-audit && make import-audit` from the repo-root `Makefile`; record the passing test count in the PR description so any later regression is attributable.
-- [ ] T002 [P] Create `core/crates/kaname-core/tests/common/mod.rs` — the synthetic corpus builders every engine suite shares, per `data-model.md` §7 and research R20. `correctness_corpus(store)` writes through the **real** `Store::import_statement` and must satisfy the fixture contract: ≥ 3 accounts; ≥ 2 currencies including one `en_IN` does not localise; a **globally unique amount and a globally unique description per row**; ≥ 1 date carrying rows from more than one account **with different amounts**; ≥ 1 account whose statement parsed zero rows; ≥ 1 account whose every row is superseded; ≥ 1 deleted row; ≥ 1 date group larger than one page; ≥ 1 empty description, ≥ 1 very long description, ≥ 1 amount with 7+ integer digits. `perf_corpus(conn, accounts, rows)` writes by **direct SQL** (151 ms versus 11.8 s through the import path) and builds both the 10,000-row/8-account corpus and its 200-row/2-account twin. Synthetic throughout — no real merchant, no real account identifier.
-- [ ] T003 [P] Prove the corpus does not de-duplicate itself before anything measures it: add `the_correctness_corpus_supersedes_exactly_the_rows_it_means_to` to `core/crates/kaname-core/tests/common/mod.rs`'s own test module, asserting `SELECT count(*) FROM transactions WHERE superseded_by IS NOT NULL` equals the number the fixture deliberately supersedes. R20's first attempt silently collapsed 8,750 of 10,000 rows; a perf gate over an eighth of its claimed corpus is worse than no gate.
+- [x] T001 Establish the green pre-change baseline: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"` then run `make core-lint && make core-test && make core-privacy-audit && make import-audit` from the repo-root `Makefile`; record the passing test count in the PR description so any later regression is attributable.
+- [x] T002 [P] Create `core/crates/kaname-core/tests/common/mod.rs` — the synthetic corpus builders every engine suite shares, per `data-model.md` §7 and research R20. `correctness_corpus(store)` writes through the **real** `Store::import_statement` and must satisfy the fixture contract: ≥ 3 accounts; ≥ 2 currencies including one `en_IN` does not localise; a **globally unique amount and a globally unique description per row**; ≥ 1 date carrying rows from more than one account **with different amounts**; ≥ 1 account whose statement parsed zero rows; ≥ 1 account whose every row is superseded; ≥ 1 deleted row; ≥ 1 date group larger than one page; ≥ 1 empty description, ≥ 1 very long description, ≥ 1 amount with 7+ integer digits. `perf_corpus(conn, accounts, rows)` writes by **direct SQL** (151 ms versus 11.8 s through the import path) and builds both the 10,000-row/8-account corpus and its 200-row/2-account twin. Synthetic throughout — no real merchant, no real account identifier.
+- [x] T003 [P] Prove the corpus does not de-duplicate itself before anything measures it: add `the_correctness_corpus_supersedes_exactly_the_rows_it_means_to` to `core/crates/kaname-core/tests/common/mod.rs`'s own test module, asserting `SELECT count(*) FROM transactions WHERE superseded_by IS NOT NULL` equals the number the fixture deliberately supersedes. R20's first attempt silently collapsed 8,750 of 10,000 rows; a perf gate over an eighth of its claimed corpus is worse than no gate.
 - [x] T004 [P] Establish the R17 change list before touching it: `grep -rn "created_at" core/crates/kaname-core/src/store.rs core/crates/kaname-core/tests` and confirm that `load_dedup_candidates_groups_by_account_oldest_first_and_excludes_linked` (`core/crates/kaname-core/src/store.rs:2168`) is the **only** shipped test pinning the `a.created_at, a.id` tie-break. Record the finding in the PR description; T009 depends on the list being complete.
 
 **Checkpoint**: Baseline green, corpus builders exist and are proven honest, the R17 blast radius is known.
@@ -93,46 +93,46 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Phase 2B — Schema v7 and the `LIVE` constant
 
-- [ ] T013 RED: add `migrating_v6_to_v7_preserves_existing_rows` to the `#[cfg(test)] mod tests` block in `core/crates/kaname-core/src/store.rs`, mirroring `migrating_v5_to_v6_preserves_existing_rows`: build a **populated** v6 database (accounts + transactions + statements), open it, assert `PRAGMA user_version == 7`, every pre-existing row is byte-identical, and `idx_txn_live_account_date` exists in `sqlite_master` carrying its partial `WHERE` clause (M1, M2).
-- [ ] T014 RED: add `reopening_a_v7_store_is_a_no_op` to `core/crates/kaname-core/tests/store.rs` beside `migration_is_idempotent_across_reopens` — a re-open must not re-run the migration, re-create the index, or alter a row (M3).
-- [ ] T015 GREEN: add `const SCHEMA_V7: &str` to `core/crates/kaname-core/src/store.rs` (after `SCHEMA_V6` at `store.rs:172`) exactly as `data-model.md` §1 states — `CREATE INDEX idx_txn_live_account_date ON transactions(account_id, date DESC) WHERE is_deleted = 0 AND superseded_by IS NULL;` — and bump `const SCHEMA_VERSION: i64` from `6` to `7` at `store.rs:41`. `DESC` and `partial` are both load-bearing and measured (research R4): an ASC index costs `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`.
-- [ ] T016 GREEN: add the `7 => { tx.execute_batch(SCHEMA_V7).map_err(StoreError::migration) }` arm to `apply_migration` in `core/crates/kaname-core/src/store.rs:1201`, following the shipped v2–v6 pattern exactly. Forward-only; no table rebuild, no foreign-key disable, no row read or written.
-- [ ] T017 RED: add the L6 structural assertion `the_live_constant_is_byte_identical_to_the_v7_index_predicate` to the `#[cfg(test)] mod tests` block in `core/crates/kaname-core/src/store.rs` (it lives here, not in an integration test, because `LIVE` is private): read `sql` for `idx_txn_live_account_date` out of `sqlite_master`, extract the text after `WHERE`, and compare it to `LIVE` **byte for byte**. If someone paraphrases either one, this goes red before anyone sees wrong rows.
-- [ ] T018 GREEN: add `const LIVE: &str = "is_deleted = 0 AND superseded_by IS NULL";` to `core/crates/kaname-core/src/store.rs` with the doc comment from `contracts/engine-history.md` §5, and build `SCHEMA_V7`'s `WHERE` clause from `LIVE` (`format!`/`const_format`-free concatenation is fine) so the two cannot drift.
-- [ ] T019 **GATE** `make core-fmt && make core-test` — T013, T014 and T017 green; every shipped store test unchanged.
+- [x] T013 RED: add `migrating_v6_to_v7_preserves_existing_rows` to the `#[cfg(test)] mod tests` block in `core/crates/kaname-core/src/store.rs`, mirroring `migrating_v5_to_v6_preserves_existing_rows`: build a **populated** v6 database (accounts + transactions + statements), open it, assert `PRAGMA user_version == 7`, every pre-existing row is byte-identical, and `idx_txn_live_account_date` exists in `sqlite_master` carrying its partial `WHERE` clause (M1, M2).
+- [x] T014 RED: add `reopening_a_v7_store_is_a_no_op` to `core/crates/kaname-core/tests/store.rs` beside `migration_is_idempotent_across_reopens` — a re-open must not re-run the migration, re-create the index, or alter a row (M3).
+- [x] T015 GREEN: add `const SCHEMA_V7: &str` to `core/crates/kaname-core/src/store.rs` (after `SCHEMA_V6` at `store.rs:172`) exactly as `data-model.md` §1 states — `CREATE INDEX idx_txn_live_account_date ON transactions(account_id, date DESC) WHERE is_deleted = 0 AND superseded_by IS NULL;` — and bump `const SCHEMA_VERSION: i64` from `6` to `7` at `store.rs:41`. `DESC` and `partial` are both load-bearing and measured (research R4): an ASC index costs `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`.
+- [x] T016 GREEN: add the `7 => { tx.execute_batch(SCHEMA_V7).map_err(StoreError::migration) }` arm to `apply_migration` in `core/crates/kaname-core/src/store.rs:1201`, following the shipped v2–v6 pattern exactly. Forward-only; no table rebuild, no foreign-key disable, no row read or written.
+- [x] T017 RED: add the L6 structural assertion `the_live_constant_is_byte_identical_to_the_v7_index_predicate` to the `#[cfg(test)] mod tests` block in `core/crates/kaname-core/src/store.rs` (it lives here, not in an integration test, because `LIVE` is private): read `sql` for `idx_txn_live_account_date` out of `sqlite_master`, extract the text after `WHERE`, and compare it to `LIVE` **byte for byte**. If someone paraphrases either one, this goes red before anyone sees wrong rows.
+- [x] T018 GREEN: add `const LIVE: &str = "is_deleted = 0 AND superseded_by IS NULL";` to `core/crates/kaname-core/src/store.rs` with the doc comment from `contracts/engine-history.md` §5, and build `SCHEMA_V7`'s `WHERE` clause from `LIVE` (`format!`/`const_format`-free concatenation is fine) so the two cannot drift.
+- [x] T019 **GATE** `make core-fmt && make core-test` — T013, T014 and T017 green; every shipped store test unchanged.
 
 ### Phase 2C — `history_page` and `account_summaries`
 
 > One prepared statement per account, k already-sorted streams merged in Rust, `self.lock()` taken **exactly once** per call with `*_in(&conn, …)` helpers thereafter. `std::sync::Mutex` is not reentrant — 016 learned this the hard way and it is why the lazy-handle design was rejected outright (research R1).
 
-- [ ] T020 [P] RED: create `core/crates/kaname-core/tests/history_order.rs` with O1–O7 over T002's correctness corpus — O1 rows non-increasing by date; O2 same-date rows of **different** accounts in `list_accounts()` order; O3 same-date rows of the **same** account in insertion (printed) order; O4 the concatenation of every page equals a brute-force sort of every live row by `(date DESC, account_position ASC, rowid ASC)`; O5 ten consecutive full reads return byte-identical sequences; O6 importing a further account leaves the relative order of every pre-existing row unchanged; O7 `history_page`'s account sequence equals `list_accounts()`'s id sequence.
-- [ ] T021 [P] RED: create `core/crates/kaname-core/tests/history_live.rs` with L1–L5 — L1 a deleted row never appears in any page, filtered or not; L2 a superseded row never appears, filtered or not; L3 importing the same statement twice leaves the full page sequence identical in contents, count **and** order; L4 `sum(account_summaries().live_transaction_count)` equals the row count of a full unfiltered read; L5 per account, `live_transaction_count` equals the row count of a read filtered to it.
-- [ ] T022 [P] RED: create `core/crates/kaname-core/tests/history_paging.rs` with P1–P5 — P1 pages of 1, 7, 30 and 200 concatenate to the same sequence; P2 no row appears twice and none is skipped; P3 `rows.len() < limit` ⇒ `cursor == None`; P4 an import **between** two page reads neither duplicates nor skips a row already returned (keyset, not offset); P5 an `account_id` naming no account yields an empty page with `cursor == None`, not an error.
-- [ ] T023 RED: append F1–F3 to `core/crates/kaname-core/tests/history_paging.rs` — F1 a filtered read returns exactly that account's live rows; F2 a filtered read's order is the unfiltered order with the other accounts removed; F3 the filtered and unfiltered reads execute the **same SQL text** (assert against the exported `PAGE_SQL` constant — structural proof that a filter is not a second code path).
-- [ ] T024 [P] RED: create `core/crates/kaname-core/tests/history_perf.rs` with the plan-shape gates S1–S2 over **both** corpora from T002 — S1 `EXPLAIN QUERY PLAN` of the page query contains no `SCAN` and no `USE TEMP B-TREE`; S2 the plan names `idx_txn_live_account_date`. These are the assertions that make the live rule structural rather than remembered.
-- [ ] T025 RED: append the wall-clock gates S3–S6 to `core/crates/kaname-core/tests/history_perf.rs` — S3 first page < 25 ms on 10,000/8; S4 max page over a full walk < 25 ms; S5 per-account first-page cost varies ≤ 20% between the 200/2 and 10,000/8 corpora (SC-008b; measured at 13%); S6 a filtered (`k = 1`) page < 25 ms on 10,000/8. The 25 ms bound is ~100× the measured 254.75 µs deliberately: it catches a lost index or an N+1, not a loaded CI machine.
-- [ ] T026 GREEN: add `HistoryCursor`, `AccountMark` and `HistoryQuery` as `uniffi::Record`s to `core/crates/kaname-core/src/store.rs`, exactly per `contracts/engine-history.md` §1. `HistoryCursor.marks` holds one resume point per account **still producing rows** — an exhausted account is absent, so the cursor shrinks as the person scrolls.
-- [ ] T027 GREEN: add `HistoryRow`, `HistoryPage` and `AccountSummary` as `uniffi::Record`s to `core/crates/kaname-core/src/store.rs`. `HistoryRow` carries **no** `superseded_by`, `dedup_layer`, `statement_id`, `categorised_by`, `transfer_group_id`, `is_deleted`, `rowid`, `created_at` or `updated_at` — they are absent so they cannot leak into a view (FR-019, SC-016). `AccountSummary.has_only_excluded_rows` is a **bool, not a count**, deliberately: a count that does not use the live rule would violate FR-008 the moment someone rendered it.
-- [ ] T028 GREEN: implement the ordering comparator as a private pure function over `(date, account_position, rowid)` in `core/crates/kaname-core/src/store.rs`, and unit-test it directly in the file's `#[cfg(test)] mod tests` — totality, antisymmetry and the three tie-break levels. This is the **only** place the order is expressed outside SQL, and `data-model.md` §2 is the other; a test pins them to each other (O4).
-- [ ] T029 GREEN: add `const PAGE_SQL: &str` to `core/crates/kaname-core/src/store.rs` — the per-account keyset statement from `contracts/engine-history.md` §5 verbatim, with its `WHERE` built from `LIVE` — and prepare it once per call. A first page binds `?2 = '9999-12-31'`, `?3 = 0`: the identity cursor, so there is no separate first-page code path.
-- [ ] T030 GREEN: resolve `account_name`, `account_last4` and `category_name` in Rust from two maps read once per call via `*_in(&conn, …)` helpers in `core/crates/kaname-core/src/store.rs`. **No JOIN** — a join changes the plan and defeats S1/S2.
-- [ ] T031 GREEN: implement `Store::history_page(&self, query: HistoryQuery) -> Result<HistoryPage, StoreError>` in `core/crates/kaname-core/src/store.rs`: take `self.lock()` **once**, run `PAGE_SQL` once per account in scope, merge the k already-sorted buffers with T028's comparator, emit `limit` rows, and build the resume cursor from the last row emitted per account. Clamp `limit` to `1..=200` — clamped, never an error: a page of 0 is an infinite scroll loop in the caller.
-- [ ] T032 GREEN: implement the filter as `k = 1` over the same `PAGE_SQL` in `core/crates/kaname-core/src/store.rs` — an `account_id` naming no account yields an empty page and `cursor == None`. There is no second query, no second ordering and no second population (F1–F3, FR-042).
-- [ ] T033 GREEN: implement `Store::account_summaries(&self) -> Result<Vec<AccountSummary>, StoreError>` in `core/crates/kaname-core/src/store.rs`: `list_accounts()` order, one grouped count under the `LIVE` predicate and the v7 index, `has_only_excluded_rows` true iff the account has ≥ 1 row in `transactions` and `live_transaction_count == 0`. Same single `self.lock()` discipline.
-- [ ] T034 GREEN: map every failure to `StoreError::Sql` in `core/crates/kaname-core/src/store.rs` — a corrupt amount, date or direction surfaces as an error and never panics, exactly as `map_transaction` already does. Add the Z2 assertion `no_history_error_carries_a_description_amount_date_or_account_id` to `core/crates/kaname-core/tests/history_live.rs`, forcing each failure and asserting the rendered error string contains none of the corpus's descriptions, amounts, dates or account ids (FR-063).
-- [ ] T035 GREEN: re-export `HistoryQuery`, `HistoryCursor`, `AccountMark`, `HistoryRow`, `HistoryPage` and `AccountSummary` from `core/crates/kaname-core/src/lib.rs`.
-- [ ] T036 GREEN: export both reads across the FFI from `core/crates/kaname-core/src/ffi.rs` — `#[uniffi::export] impl Store { history_page, account_summaries }`. `Decimal` and `NaiveDate` use the custom types already registered at `ffi.rs:60` and `ffi.rs:67` (base-10 `String` → `Foundation.Decimal`, ISO-8601 `String`); money never becomes a float.
-- [ ] T037 **GATE** `make core-fmt && make core-test` — the O, L, P, F and S suites all green, `Store::list_transactions` still returning its raw view with `ORDER BY rowid` and its existing tests untouched (`contracts/engine-history.md` §3).
+- [x] T020 [P] RED: create `core/crates/kaname-core/tests/history_order.rs` with O1–O7 over T002's correctness corpus — O1 rows non-increasing by date; O2 same-date rows of **different** accounts in `list_accounts()` order; O3 same-date rows of the **same** account in insertion (printed) order; O4 the concatenation of every page equals a brute-force sort of every live row by `(date DESC, account_position ASC, rowid ASC)`; O5 ten consecutive full reads return byte-identical sequences; O6 importing a further account leaves the relative order of every pre-existing row unchanged; O7 `history_page`'s account sequence equals `list_accounts()`'s id sequence.
+- [x] T021 [P] RED: create `core/crates/kaname-core/tests/history_live.rs` with L1–L5 — L1 a deleted row never appears in any page, filtered or not; L2 a superseded row never appears, filtered or not; L3 importing the same statement twice leaves the full page sequence identical in contents, count **and** order; L4 `sum(account_summaries().live_transaction_count)` equals the row count of a full unfiltered read; L5 per account, `live_transaction_count` equals the row count of a read filtered to it.
+- [x] T022 [P] RED: create `core/crates/kaname-core/tests/history_paging.rs` with P1–P5 — P1 pages of 1, 7, 30 and 200 concatenate to the same sequence; P2 no row appears twice and none is skipped; P3 `rows.len() < limit` ⇒ `cursor == None`; P4 an import **between** two page reads neither duplicates nor skips a row already returned (keyset, not offset); P5 an `account_id` naming no account yields an empty page with `cursor == None`, not an error.
+- [x] T023 RED: append F1–F3 to `core/crates/kaname-core/tests/history_paging.rs` — F1 a filtered read returns exactly that account's live rows; F2 a filtered read's order is the unfiltered order with the other accounts removed; F3 the filtered and unfiltered reads execute the **same SQL text** (assert against the exported `PAGE_SQL` constant — structural proof that a filter is not a second code path).
+- [x] T024 [P] RED: create `core/crates/kaname-core/tests/history_perf.rs` with the plan-shape gates S1–S2 over **both** corpora from T002 — S1 `EXPLAIN QUERY PLAN` of the page query contains no `SCAN` and no `USE TEMP B-TREE`; S2 the plan names `idx_txn_live_account_date`. These are the assertions that make the live rule structural rather than remembered.
+- [x] T025 RED: append the wall-clock gates S3–S6 to `core/crates/kaname-core/tests/history_perf.rs` — S3 first page < 25 ms on 10,000/8; S4 max page over a full walk < 25 ms; S5 per-account first-page cost varies ≤ 20% between the 200/2 and 10,000/8 corpora (SC-008b; measured at 13%); S6 a filtered (`k = 1`) page < 25 ms on 10,000/8. The 25 ms bound is ~100× the measured 254.75 µs deliberately: it catches a lost index or an N+1, not a loaded CI machine.
+- [x] T026 GREEN: add `HistoryCursor`, `AccountMark` and `HistoryQuery` as `uniffi::Record`s to `core/crates/kaname-core/src/store.rs`, exactly per `contracts/engine-history.md` §1. `HistoryCursor.marks` holds one resume point per account **still producing rows** — an exhausted account is absent, so the cursor shrinks as the person scrolls.
+- [x] T027 GREEN: add `HistoryRow`, `HistoryPage` and `AccountSummary` as `uniffi::Record`s to `core/crates/kaname-core/src/store.rs`. `HistoryRow` carries **no** `superseded_by`, `dedup_layer`, `statement_id`, `categorised_by`, `transfer_group_id`, `is_deleted`, `rowid`, `created_at` or `updated_at` — they are absent so they cannot leak into a view (FR-019, SC-016). `AccountSummary.has_only_excluded_rows` is a **bool, not a count**, deliberately: a count that does not use the live rule would violate FR-008 the moment someone rendered it.
+- [x] T028 GREEN: implement the ordering comparator as a private pure function over `(date, account_position, rowid)` in `core/crates/kaname-core/src/store.rs`, and unit-test it directly in the file's `#[cfg(test)] mod tests` — totality, antisymmetry and the three tie-break levels. This is the **only** place the order is expressed outside SQL, and `data-model.md` §2 is the other; a test pins them to each other (O4).
+- [x] T029 GREEN: add `const PAGE_SQL: &str` to `core/crates/kaname-core/src/store.rs` — the per-account keyset statement from `contracts/engine-history.md` §5 verbatim, with its `WHERE` built from `LIVE` — and prepare it once per call. A first page binds `?2 = '9999-12-31'`, `?3 = 0`: the identity cursor, so there is no separate first-page code path.
+- [x] T030 GREEN: resolve `account_name`, `account_last4` and `category_name` in Rust from two maps read once per call via `*_in(&conn, …)` helpers in `core/crates/kaname-core/src/store.rs`. **No JOIN** — a join changes the plan and defeats S1/S2.
+- [x] T031 GREEN: implement `Store::history_page(&self, query: HistoryQuery) -> Result<HistoryPage, StoreError>` in `core/crates/kaname-core/src/store.rs`: take `self.lock()` **once**, run `PAGE_SQL` once per account in scope, merge the k already-sorted buffers with T028's comparator, emit `limit` rows, and build the resume cursor from the last row emitted per account. Clamp `limit` to `1..=200` — clamped, never an error: a page of 0 is an infinite scroll loop in the caller.
+- [x] T032 GREEN: implement the filter as `k = 1` over the same `PAGE_SQL` in `core/crates/kaname-core/src/store.rs` — an `account_id` naming no account yields an empty page and `cursor == None`. There is no second query, no second ordering and no second population (F1–F3, FR-042).
+- [x] T033 GREEN: implement `Store::account_summaries(&self) -> Result<Vec<AccountSummary>, StoreError>` in `core/crates/kaname-core/src/store.rs`: `list_accounts()` order, one grouped count under the `LIVE` predicate and the v7 index, `has_only_excluded_rows` true iff the account has ≥ 1 row in `transactions` and `live_transaction_count == 0`. Same single `self.lock()` discipline.
+- [x] T034 GREEN: map every failure to `StoreError::Sql` in `core/crates/kaname-core/src/store.rs` — a corrupt amount, date or direction surfaces as an error and never panics, exactly as `map_transaction` already does. Add the Z2 assertion `no_history_error_carries_a_description_amount_date_or_account_id` to `core/crates/kaname-core/tests/history_live.rs`, forcing each failure and asserting the rendered error string contains none of the corpus's descriptions, amounts, dates or account ids (FR-063).
+- [x] T035 GREEN: re-export `HistoryQuery`, `HistoryCursor`, `AccountMark`, `HistoryRow`, `HistoryPage` and `AccountSummary` from `core/crates/kaname-core/src/lib.rs`.
+- [x] T036 GREEN: export both reads across the FFI from `core/crates/kaname-core/src/ffi.rs` — `#[uniffi::export] impl Store { history_page, account_summaries }`. `Decimal` and `NaiveDate` use the custom types already registered at `ffi.rs:60` and `ffi.rs:67` (base-10 `String` → `Foundation.Decimal`, ISO-8601 `String`); money never becomes a float.
+- [x] T037 **GATE** `make core-fmt && make core-test` — the O, L, P, F and S suites all green, `Store::list_transactions` still returning its raw view with `ORDER BY rowid` and its existing tests untouched (`contracts/engine-history.md` §3).
 
 ### Phase 2D — Engine verification gate and FFI regeneration
 
-- [ ] T038 **GATE** `make core-lint` — `cargo fmt --check` + `clippy -D warnings` (repo-root `Makefile`).
-- [ ] T039 **GATE** `make core-test` — the whole engine suite: the new O/L/P/F/S files, the v6→v7 migration test, the R17 determinism suite, and every shipped test unchanged.
-- [ ] T040 **GATE** `make core-privacy-audit` (Z1) — zero new crates and zero new dependencies were added, so this must stay green **unchanged**. If it moved, something was added that should not have been.
-- [ ] T041 ⚠️ **FFI ordering** `make core-xcframework` — regenerates `ios/Generated/` and `KanameCoreFFI.xcframework` for the six new records and two new methods. This **must** run before any `tuist generate`.
-- [ ] T042 Confirm no shipped Swift call site broke: the engine change is purely additive (no existing signature changed), so `ios/Tests/StoreTests.swift`, `ios/Tests/StoreTransferTests.swift` and `ios/Sources/Import/ImportService.swift` must compile untouched. If any of them needs an edit, stop — something non-additive was changed.
-- [ ] T043 **GATE** `make ios-gen && make ios-test` — never a bare `tuist generate`. Every shipped Swift suite must be green against the regenerated bindings **before** a line of new Swift is written.
-- [ ] T044 **GATE** `make import-audit` — unchanged in this PR; the networking-scan widening lands in PR B with the directory it guards (T052, research R19).
+- [x] T038 **GATE** `make core-lint` — `cargo fmt --check` + `clippy -D warnings` (repo-root `Makefile`).
+- [x] T039 **GATE** `make core-test` — the whole engine suite: the new O/L/P/F/S files, the v6→v7 migration test, the R17 determinism suite, and every shipped test unchanged.
+- [x] T040 **GATE** `make core-privacy-audit` (Z1) — zero new crates and zero new dependencies were added, so this must stay green **unchanged**. If it moved, something was added that should not have been.
+- [x] T041 ⚠️ **FFI ordering** `make core-xcframework` — regenerates `ios/Generated/` and `KanameCoreFFI.xcframework` for the six new records and two new methods. This **must** run before any `tuist generate`.
+- [x] T042 Confirm no shipped Swift call site broke: the engine change is purely additive (no existing signature changed), so `ios/Tests/StoreTests.swift`, `ios/Tests/StoreTransferTests.swift` and `ios/Sources/Import/ImportService.swift` must compile untouched. If any of them needs an edit, stop — something non-additive was changed.
+- [x] T043 **GATE** `make ios-gen && make ios-test` — never a bare `tuist generate`. Every shipped Swift suite must be green against the regenerated bindings **before** a line of new Swift is written.
+- [x] T044 **GATE** `make import-audit` — unchanged in this PR; the networking-scan widening lands in PR B with the directory it guards (T052, research R19).
 
 **Checkpoint**: 🔒 The engine is complete, gated and regenerated. The order is total, the live rule is structural, the dedup tie-break is deterministic across processes, and no test is disabled. Platform work may begin.
 
@@ -146,9 +146,229 @@ Two-layer repo (`plan.md` → Project Structure):
 
 **Purpose**: Fix the visual and copy contract before building. Kaname has no Figma tooling; the visual contract of record is `contracts/platform-seams.md` §3–§4 plus research R12/R13 and `.github/skills/swiftui-liquid-glass/SKILL.md`.
 
-- [ ] T045 [Design] Walk the glass application points for this screen against `.github/skills/swiftui-liquid-glass/SKILL.md`: glass on **exactly one** element — the filter chrome, in a `GlassEffectContainer`, on an **opaque** bar via `.safeAreaBar(edge: .bottom)`; **never** under rows or numbers ("the transaction list, statement rows, and any table of numbers stay on opaque backgrounds" is the skill's own words); the app's accent (`ios/Sources/Theme.swift`), never the system default. Record any deviation as a note in this file **before** building — do not edit the FINAL design artifacts.
-- [ ] T046 [Design] Write the copy deck: the exact user-facing sentence for each of the **six** empty states (`data-model.md` §6), the direction words ("debit" / "credit"), the uncategorized label, the transfer marking, the filter chrome's wording and the row accessibility sentence's shape. Every sentence is hand-written. The only engine-supplied strings permitted on screen are the account name, the description as printed, and the category name. **No sentence may imply transfers are detected** (FR-018).
-- [ ] T047 [Design] Trace the state machine in `data-model.md` §5 and the empty-state table in §6 against the six rows: confirm every branch has a destination, that rows 4–6 are distinguishable from row 1 with only `[AccountSummary]` and the filter in hand, and that nothing needs a field `AccountSummary` does not carry. If a branch cannot be decided from those two inputs, stop and raise it rather than adding a count that breaks FR-008.
+- [x] T045 [Design] Walk the glass application points for this screen against `.github/skills/swiftui-liquid-glass/SKILL.md`: glass on **exactly one** element — the filter chrome, in a `GlassEffectContainer`, on an **opaque** bar via `.safeAreaBar(edge: .bottom)`; **never** under rows or numbers ("the transaction list, statement rows, and any table of numbers stay on opaque backgrounds" is the skill's own words); the app's accent (`ios/Sources/Theme.swift`), never the system default. Record any deviation as a note in this file **before** building — do not edit the FINAL design artifacts.
+- [x] T046 [Design] Write the copy deck: the exact user-facing sentence for each of the **six** empty states (`data-model.md` §6), the direction words ("debit" / "credit"), the uncategorized label, the transfer marking, the filter chrome's wording and the row accessibility sentence's shape. Every sentence is hand-written. The only engine-supplied strings permitted on screen are the account name, the description as printed, and the category name. **No sentence may imply transfers are detected** (FR-018).
+- [x] T047 [Design] Trace the state machine in `data-model.md` §5 and the empty-state table in §6 against the six rows: confirm every branch has a destination, that rows 4–6 are distinguishable from row 1 with only `[AccountSummary]` and the filter in hand, and that nothing needs a field `AccountSummary` does not carry. If a branch cannot be decided from those two inputs, stop and raise it rather than adding a count that breaks FR-008.
+
+### Design contract — RECORDED (T045–T047)
+
+*Written before any UI, per T045's instruction. The FINAL artifacts (`spec.md`, `plan.md`,
+`data-model.md`, `contracts/`) are **not** edited; everything this walk found is recorded here.
+T056, T060, T061, T088, T096, T098 and their RED suites build from this section.*
+
+---
+
+#### T045 — The glass walk
+
+**Application points, element by element.** Glass appears on exactly one *region* of this
+screen, and never on anything a figure is read against.
+
+| Element | Glass? | Why |
+|---|---|---|
+| Transaction rows, amounts, dates, account names | **No** — opaque `List` rows | FR-068, W1; the skill's own words: "the transaction list, statement rows, and any table of numbers stay on opaque backgrounds" |
+| Date group headers (`Section` headers) | **No** — system `List` chrome, unmodified | skill: don't re-skin system chrome |
+| Navigation bar + back affordance | **System** — gets Liquid Glass for free | skill: let the system own its chrome |
+| The filter bar's **background** | **No** — opaque `.background(.background)`, pinned by `.safeAreaBar(edge: .bottom)` | FR-069, W3 |
+| The scope button + the clear button **inside** that bar | **Yes** — `.buttonStyle(.glass)`, both in one `GlassEffectContainer(spacing: 12)` | the screen's only glass |
+| The transfer marker, the uncategorized label, the direction sign | **No** | they live inside rows; a static badge never gets glass (skill: `.interactive()` only where there is interaction) |
+| An empty state's action button | **Glass, non-prominent** — except the one state where it is the only glass on screen (see D2) | at most one prominent element per screen |
+
+**Rules this screen commits to:**
+
+- **`.buttonStyle(.glass)`, never a hand-glassed `Text` with a tap gesture**, and never an
+  additional `.glassEffect(.regular.interactive())` on top of a `Button` — the built-in style
+  already carries interactivity.
+- **One container, one shape.** Both bar buttons are `.capsule` (the default). Mixed radii inside
+  one container is the single most common way a glass screen reads wrong.
+- **Morphing, not cross-fading.** The clear button appears and disappears with the filter, so it
+  and the scope button carry `@Namespace` + `.glassEffectID(_:in:)`, and the filter change happens
+  inside `withAnimation`.
+- **No tint anywhere in `ios/Sources/Transactions/`.** `KanameApp.swift:10` already applies
+  `.tint(.kanameAccent)` app-wide, so the app's accent is structural: a view in this directory
+  that passes **any** `.tint(...)` is the only way the system default could come back, and none
+  will. Debit/credit colour is **redundant** (the sign glyph and the a11y word are the carriers,
+  FR-013/FR-071) and rows are never glassed, so the skill's "never a red/green amount on tinted
+  glass" rule cannot be violated here.
+- **Reduce Transparency / Increase Contrast** are handled by the native material substitution;
+  nothing on this screen carries meaning through the material itself (FR-070). The filtered state
+  is carried by **words** — the account's name in the scope button — never by the glass.
+- **Order.** If any raw `.glassEffect(...)` is ever added, it goes **after** padding/frame/font.
+
+**Deviations, recorded before building:**
+
+- **D1 — Glass on an opaque bar refracts the bar, not content.** The skill says glass "needs
+  content behind it to refract"; here there is deliberately nothing behind it. FR-068/FR-069
+  outrank that guidance on this screen: the glass buys the native control treatment and touch
+  response, not a material effect. Accepted as a deliberate trade, not an oversight.
+- **D2 — `.buttonStyle(.glassProminent)` is permitted in exactly one state**: empty state 1
+  ("nothing imported yet"), where the filter bar is absent (D3) and the import action is therefore
+  the *only* glass element on screen. Every other empty state's action is `.buttonStyle(.glass)`,
+  because the filter bar is on screen with it and two prominent elements make prominence
+  meaningless. This narrows "exactly one glass element", it does not widen it.
+- **D3 — The filter bar is hidden when `summaries.isEmpty`.** FR-038 ("the filtered account named
+  at all times") is vacuous when there are no accounts and no filter can be set; a bar reading
+  "All accounts" above a screen that says nothing was imported is a contradiction.
+- **D4 / D5** — two model-shaped deviations, recorded under T047 as **E3** and **E4**.
+
+---
+
+#### T046 — The copy deck
+
+Every sentence below is hand-written and belongs in `TransactionListStrings.swift` (T056). The
+only engine-supplied strings that reach the screen are the **account name**, the **description as
+printed**, and the **category name**. The masked last-4 is rendered through the app's own
+`"•••• %@"` template — the same identity shape the front door already shows (FR-003) — never as
+raw engine text. Dates and amounts are formatted by the app.
+
+**Screen and navigation**
+
+| Key | String |
+|---|---|
+| `title` | `Transactions` |
+| `frontDoorLinkTitle` (N3 toolbar item) | `All transactions` |
+| `loadingAnnouncement` | `Loading transactions` |
+
+**Filter chrome** (FR-003, FR-038, FR-039)
+
+| Key | String |
+|---|---|
+| `scopeAll` | `All accounts` |
+| `scopeAccount(name:last4:)` | `<name>` with `•••• <last4>` beneath it; `<name>` alone when no last-4 |
+| `menuHeader` | `Show transactions from` |
+| `clearFilter` | `Show all accounts` |
+| `scopeAccessibilityAll` | `Showing all accounts` |
+| `scopeAccessibilityAccount` | `Showing <name>, ending <last4> only` — `Showing <name> only` without a last-4 |
+| `scopeAccessibilityHint` | `Choose which account to show` |
+
+**A row** (FR-012–FR-021)
+
+| Key | String / shape |
+|---|---|
+| `directionWordDebit` | `debit` |
+| `directionWordCredit` | `credit` |
+| direction glyph on the amount | `−` (U+2212 MINUS SIGN) for a debit, `+` for a credit — **the** at-a-glance carrier, so colour is never the only one (FR-013). It is rendered from the recorded `Direction`, never from the sign of the amount (FR-014). |
+| `uncategorized` | `Uncategorized` |
+| `transferMarker` | `Transfer` (with `arrow.left.arrow.right`, so the marking is never colour alone) |
+| `missingDescription` | `No description` — so an empty description still yields a complete, announceable row (FR-020) |
+| `accountIdentity(name:last4:)` | `<name> ending <last4>` / `<name>` |
+| `rowAccessibilityLabel` | **`<date>, <description>, <amount> <direction word>, <account identity>, <category>`**, plus `, transfer` when the flag is set. Example: `12 August 2026, Coffee shop, ₹450.00 debit, Example Bank Credit Card ending 1002, Uncategorized, transfer` |
+
+⚠️ **Nothing here claims transfers are detected** (FR-018). The word is the bare noun `Transfer`
+and the announcement is the bare `transfer` — never "detected", "found", "matched" or
+"automatically". The app does not run detection today (research R18), and no string may imply
+otherwise, in the UI, a test name or a release note.
+
+**Date groups** (FR-026, FR-033–FR-035, FR-052, FR-072)
+
+| Key | String |
+|---|---|
+| visible heading, current year | `12 August` |
+| visible heading, any other year | `12 August 2025` |
+| `groupAccessibilityLabel` | `12 August, 3 transactions` — singular `1 transaction` at one |
+
+- **The visible heading carries no count and no figure.** FR-026 permits a count; leaving it off
+  the *visible* heading keeps "a heading can never hold a sum" obvious at a glance.
+- **The count moves to the heading's accessibility label**, where it is genuinely useful (it tells
+  a VoiceOver reader how large the group is) and where it is unambiguously a count of
+  transactions, not money. **This is the pluralisation helper's real, tested user** (FR-052,
+  SC-013) — without it, the helper and its singular/plural test would be vacuous in this slice.
+  The front door's existing count sentence (`ImportedAccountsView.announcement`) stays where it
+  is: routing it through `TransactionListStrings` would breach H5's layering.
+- The "current year" comes from the **injected clock** (V6), never `Date()` inside a formatter.
+
+**The six empty states** (`data-model.md` §6 → FR-047–FR-052)
+
+| # | Title | Message | Action |
+|---|---|---|---|
+| 1 | `Nothing imported yet` | `Import a statement and the transactions in it will appear here.` | `Import a statement` (D2: the one prominent button; wired to `RootView`'s existing picker, T099) |
+| 2 | `No transactions` | `The statements you imported didn't have any transactions in them.` | — |
+| 3 | `Nothing to show` | `There's nothing to show here yet. Import another statement to see transactions.` | `Import a statement` |
+| 4 | `No transactions` | `The statement you imported for <name> didn't have any transactions in it.` | — |
+| 5 | `Nothing to show` | `There's nothing to show for <name>.` | `Show all accounts` |
+| 6 | `No transactions for <name>` | row 4's or row 5's sentence, followed by `Other accounts have transactions.` (see E3) | `Show all accounts` |
+
+Wording rules these are written to satisfy, each asserted by a test rather than reviewed:
+
+- **No empty-state string contains** `lost`, `missing`, `gone`, `error` or `failed` (FR-051).
+  None of the six does. Row 4 is phrased as a fact about the statement, never as a failure, and
+  never as "nothing imported yet" (FR-048).
+- **No string contains an id, an internal code or a layer name** (FR-019, SC-016).
+- **The only interpolations are** the account name and the masked last-4.
+
+**The unavailable state** (H4, FR-063 — not an empty state)
+
+| Key | String |
+|---|---|
+| `unavailableTitle` | `Transactions are unavailable` |
+| `unavailableMessage` | `Kaname couldn't open your transactions just now. Everything is still stored on this device.` |
+| `unavailableRetry` | `Try again` (see E4) |
+
+No raw error text, no identifier, no description, amount, date or account crosses into it — the
+`TransactionListError` it is rendered from carries none of those (H4).
+
+---
+
+#### T047 — The state-machine and empty-state trace
+
+**Sufficiency — the question T047 exists to answer.** Every branch decides from
+`[AccountSummary]` and `AccountFilter` alone:
+
+```text
+if summaries.isEmpty                                  -> 1  nothingImported
+if filter == .account(id, name, last4):
+    others = summaries.contains { $0.id != id && $0.liveTransactionCount > 0 }
+    guard let mine = summaries.first(where: { $0.id == id }) else { -> E4 }
+    if others  -> 6  accountEmptyOthersHaveRows(name, statementWasEmpty: !mine.hasOnlyExcludedRows)
+    if mine.hasOnlyExcludedRows -> 5  accountNothingToShow(name)
+    else                        -> 4  accountStatementEmpty(name)
+else (.all):
+    if summaries.contains(\.hasOnlyExcludedRows) -> 3  nothingToShowAnywhere
+    else                                         -> 2  noTransactionsAnywhere
+```
+
+- **E6 — No field is missing.** Rows 4/5 need `hasOnlyExcludedRows`; row 6 needs
+  `liveTransactionCount > 0` on *another* summary; rows 2/3 need `hasOnlyExcludedRows` across the
+  set; naming needs `name` + `last4`. `AccountSummary` carries all of them, and **no count beyond
+  `liveTransactionCount` is required** — so nothing here tempts a second population and FR-008
+  holds structurally.
+- **E7 — Rows 4–6 can never be confused with row 1.** Row 1 is `summaries.isEmpty`; rows 4–6 all
+  require a filter over a non-empty `summaries`. The two conditions are mutually exclusive by
+  construction, not by ordering.
+
+**Findings raised (none required a change to a FINAL artifact):**
+
+- **E1 — `data-model.md` §5's diagram says `empty (4 kinds)`; §6's table has six rows**, and both
+  `contracts/platform-seams.md` V8 and T093 say six. **The table is authoritative — six cases.**
+  The diagram's parenthetical is stale; recorded rather than edited.
+- **E2 — `empty` and `unavailable` are drawn as terminal, and must not be.** Both must accept the
+  same `filter changed` and `import completed` edges that `showing` accepts, or a person who lands
+  on "Nothing imported yet", imports a statement, and stays stuck on it. Both edges re-enter
+  `loading`. T058 implements it; the US7 suite pins it.
+- **E3 (D4) — Row 6's precedence over rows 4–5 was ambiguous.** Read as *replaces*, FR-048's
+  distinct "this statement had no transactions" state becomes nearly unreachable, since it would
+  additionally require every *other* account to be empty — which inverts FR-048's intent. §6's own
+  sentence resolves it: "row 6 **refines** rows 4–5 rather than replacing them". So case 6 keeps
+  the account's own reason and *adds* the filter as a reason plus the clear action, carried as an
+  associated **`statementWasEmpty: Bool`**. Still six cases, one per table row (T093 holds); the
+  Bool is derived from `hasOnlyExcludedRows` and can never be rendered as a count.
+- **E4 (D5) — A filter naming an account absent from `summaries` has no row in §6.** It is
+  unreachable today (there is no delete path, and `data-model.md` §3 makes an unknown `account_id`
+  an **empty page, not an error**), but the decision must be total. It resolves to **case 6** —
+  named from the filter's own payload, with the clear action — when any other account has rows,
+  and otherwise to case 2/3 with the clear action offered. No new field, no throw, no
+  silently-cleared filter (which would breach FR-038's "named at all times").
+- **E5 — `loadingMore` and `refreshing` in §5 are phases, not `State` cases.** The contract's enum
+  is `.loading | .showing | .empty(EmptyKind) | .unavailable` with a separate `isLoadingMore: Bool`
+  and a `refreshAfterImport()` that stays in `showing`. **T058 must not add enum cases for them** —
+  a `.refreshing` case would make V3's "the filter and the anchor survive a refresh" a transition
+  to prove rather than an invariant that cannot be broken.
+- **E8 — `unavailable` had no outgoing edge at all.** `Try again` (T046) gives it one, re-entering
+  `loading`. Nothing in the spec requires the action; a dead-end screen behind a transient store
+  error is worse than one extra string, and it costs no new state.
+
+**Checkpoint**: The visual contract, the copy and the state machine are fixed. UI may be built.
+
+---
 
 ## Phase 3: User Story 1 — See everything I have, across every account (Priority: P1) 🎯 MVP
 
@@ -158,34 +378,94 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 1 (RED first) ⚠️
 
-- [ ] T048 [P] [US1] RED: create `ios/Tests/TransactionHistoryServiceTests.swift` (Swift Testing) — integration over the bridge against a temp SQLCipher store seeded with the correctness corpus: page 1's rows match the fixture exactly (date, description as printed, **exact `Decimal`** amount, recorded direction, currency, account name and last-4); concatenating every page equals the fixture's live rows and nothing else; a thrown `StoreError` becomes a `TransactionListError` carrying **no** description, amount, date or account identifier (H4).
-- [ ] T049 [P] [US1] RED: create `ios/Tests/TransactionListViewModelTests.swift` driven by an in-memory `TransactionHistoryReading` double — `onAppear` reaches `.showing` with the first screenful; V5 `loadMoreIfNeeded` is idempotent per cursor (two calls before the first returns issue one request); V7 `DateGroup` has no total, subtotal, balance or average member and no code path computes one; rows arrive in the engine's order and the view model re-sorts nothing (H2).
-- [ ] T050 [P] [US1] RED: create `ios/Tests/TransactionRowLayoutTests.swift` — A1 `amountYields == false` for **all twelve** `DynamicTypeSize` cases, iterating `DynamicTypeSize.allCases`; A2 `axis == .vertical` iff `dynamicTypeSize.isAccessibilitySize`; A3 `descriptionLineLimit` shrinks before `accountNameLineLimit` (the description yields first, the account name second, the amount never).
-- [ ] T051 [P] [US1] RED: create `ios/Tests/LivenessParityTests.swift` — against a store seeded with both deleted and superseded rows, `listTransactions(accountId:).filter(\.isLive).count` equals `accountSummaries()`'s `liveTransactionCount` for every account, and the id set of a full unfiltered `historyPage` walk equals the union of the `isLive` rows. This is the cross-language mirror of the engine's `LIVE` constant, and the reason `StoredTransaction.isLive` is retained rather than deleted.
-- [ ] T052 [US1] RED: widen the networking audit in `scripts/import-path-audit.sh` — point the `hits` and `import_hits` greps (`scripts/import-path-audit.sh:40–41`) at `$SOURCES_DIR` instead of `$IMPORT_DIR`, update the OK message to name `ios/Sources`, and prove it by dropping a temp file containing `URLSession` under `ios/Sources/Transactions/` and confirming `make import-audit` **fails**, then removing it. Today the glass and bank-literal scans cover all of `ios/Sources` and the networking scan does not, so a file at `ios/Sources/Transactions/TransactionHistoryService.swift` would ship with no networking audit at all (research R19, FR-062, SC-015). This lands in the same PR as the directory.
+- [x] T048 [P] [US1] RED: create `ios/Tests/TransactionHistoryServiceTests.swift` (Swift Testing) — integration over the bridge against a temp SQLCipher store seeded with the correctness corpus: page 1's rows match the fixture exactly (date, description as printed, **exact `Decimal`** amount, recorded direction, currency, account name and last-4); concatenating every page equals the fixture's live rows and nothing else; a thrown `StoreError` becomes a `TransactionListError` carrying **no** description, amount, date or account identifier (H4).
+- [x] T049 [P] [US1] RED: create `ios/Tests/TransactionListViewModelTests.swift` driven by an in-memory `TransactionHistoryReading` double — `onAppear` reaches `.showing` with the first screenful; V5 `loadMoreIfNeeded` is idempotent per cursor (two calls before the first returns issue one request); V7 `DateGroup` has no total, subtotal, balance or average member and no code path computes one; rows arrive in the engine's order and the view model re-sorts nothing (H2).
+- [x] T050 [P] [US1] RED: create `ios/Tests/TransactionRowLayoutTests.swift` — A1 `amountYields == false` for **all twelve** `DynamicTypeSize` cases, iterating `DynamicTypeSize.allCases`; A2 `axis == .vertical` iff `dynamicTypeSize.isAccessibilitySize`; A3 `descriptionLineLimit` shrinks before `accountNameLineLimit` (the description yields first, the account name second, the amount never).
+- [x] T051 [P] [US1] RED: create `ios/Tests/LivenessParityTests.swift` — against a store seeded with both deleted and superseded rows, `listTransactions(accountId:).filter(\.isLive).count` equals `accountSummaries()`'s `liveTransactionCount` for every account, and the id set of a full unfiltered `historyPage` walk equals the union of the `isLive` rows. This is the cross-language mirror of the engine's `LIVE` constant, and the reason `StoredTransaction.isLive` is retained rather than deleted.
+- [x] T052 [US1] RED: widen the networking audit in `scripts/import-path-audit.sh` — point the `hits` and `import_hits` greps (`scripts/import-path-audit.sh:40–41`) at `$SOURCES_DIR` instead of `$IMPORT_DIR`, update the OK message to name `ios/Sources`, and prove it by dropping a temp file containing `URLSession` under `ios/Sources/Transactions/` and confirming `make import-audit` **fails**, then removing it. Today the glass and bank-literal scans cover all of `ios/Sources` and the networking scan does not, so a file at `ios/Sources/Transactions/TransactionHistoryService.swift` would ship with no networking audit at all (research R19, FR-062, SC-015). This lands in the same PR as the directory.
 
 ### Implementation for User Story 1
 
-- [ ] T053 [US1] Create `ios/Sources/Persistence/StoreProvider.swift`: `static func shared() throws -> Store` — **one `Store` per process**, memoised, opened through the existing `StoreLocator(keyStore: KeychainKeyStore())`, with an injection point so tests can hand in a temporary one. Two `Store` instances over one file would be two connections with two independent locks, and a page read could land inside `import_statement`'s transaction; one `Store` makes the engine's own mutex serialise reads against the atomic import, which is what makes FR-054 structural instead of timing-dependent.
-- [ ] T054 [US1] Rewire `ImportViewModel.liveService()` (`ios/Sources/Import/ImportViewModel.swift:47–51`) to take its store from `StoreProvider.shared()` rather than opening its own. Net line change ≤ 0; `ios/Sources/Import/ImportService.swift` is not touched.
-- [ ] T055 [P] [US1] Create `ios/Sources/Transactions/TransactionListModels.swift`: `TransactionRow` (mirroring `HistoryRow` plus the derived presentation facts as **pure functions** — `formattedAmount`, `directionWord`, `categoryLabel`, `accessibilityLabel`), `DateGroup` (`date`, `heading`, `rows` — **no amount member, and no member that could hold one**), `AccountFilter`, `EmptyKind`, `TransactionRowLayout` and `TransactionListError`.
-- [ ] T056 [P] [US1] Create `ios/Sources/Transactions/TransactionListStrings.swift` — every user-visible string of this slice, in one file, from the T046 copy deck. No string literal may appear in a view body; T112 asserts it.
-- [ ] T057 [P] [US1] Create `ios/Sources/Transactions/TransactionHistoryService.swift`: the `TransactionHistoryReading` protocol and the `actor TransactionHistoryService(store:)` with `page(accountID:cursor:limit:)` and `accountSummaries()`. An actor, so no engine call happens on the main thread (H1). A **transport**: no filtering, sorting, grouping, de-duplication or counting of its own (H2), no cache (H3), and `StoreError` mapped at the boundary (H4). It imports nothing from `Import/` (H5).
-- [ ] T058 [US1] Implement `TransactionListViewModel`'s paging in `ios/Sources/Transactions/TransactionListViewModel.swift`: `@MainActor @Observable`, `State` of `.loading | .showing | .empty(EmptyKind) | .unavailable`, page size 50, cursor held by the view model and nowhere else, `loadMoreIfNeeded(currentRowID:)` idempotent per cursor, every engine call awaited off the main actor.
-- [ ] T059 [US1] Implement **incremental** date grouping in `ios/Sources/Transactions/TransactionListViewModel.swift`: fold the flat page sequence into `[DateGroup]` as pages arrive, seeded with the open group's date, so a page boundary falling inside a date appends to the open group rather than starting a second group with the same heading. Extend `ios/Tests/TransactionListViewModelTests.swift` with V4 — page at size 1 across a 5-row date and assert exactly one group, and assert folding pages of 30 yields the same groups as folding the whole sequence at once (research R13).
-- [ ] T060 [US1] Implement `TransactionRowLayout(dynamicTypeSize:)` in `ios/Sources/Transactions/TransactionListModels.swift`: `.vertical` iff `dynamicTypeSize.isAccessibilitySize`, description line limit 2 horizontal / 3 vertical, account-name line limit 1, `amountYields` **always false**. Pure — no `View`, no environment, no rendering — so T050 can prove it with nothing on screen.
-- [ ] T061 [US1] Create `ios/Sources/Transactions/TransactionRowView.swift` driven by `TransactionRowLayout`: standard sizes an `HStack` (leading `VStack` of description then account name, trailing amount), accessibility sizes a single `VStack` with the amount last and full width. The amount takes `.fixedSize(horizontal: true, vertical: false)`, `.layoutPriority(1)` and `.monospacedDigit()`; **never** `minimumScaleFactor`, never `.truncationMode`, never an abbreviation. **Not `LabeledContent`** — it chooses its own axis and renders its value `.secondary`, which is the exact shape the parked `StaticText '1'` at `{32, 724}` occlusion finding is consistent with (research R12, A4). One `.accessibilityElement(children: .combine)` per row with the T055 sentence as its label.
-- [ ] T062 [US1] Create `ios/Sources/Transactions/TransactionListView.swift`: a `List` of `Section`s with `.listStyle(.plain)` so headings pin while scrolling (FR-034), rows on an **opaque** surface with no material and no glass anywhere near them, and the whole screen inside the existing `NavigationStack`. Direction is carried by a word and a glyph, never by colour alone (W5).
-- [ ] T063 [US1] Add the destination to `ios/Sources/RootView.swift`: one `NavigationStack` destination for the list — not a sheet, not a tab (a sheet's dismissal is not the standard back affordance and makes FR-056's scroll preservation a dismissal problem) — plus a toolbar item that pushes the **unfiltered** list, so the combined history is reachable without picking an account first (FR-001, N3). Switch `RootView.swift:15`'s `.safeAreaInset(edge: .bottom)` to `.safeAreaBar(edge: .bottom)` (W3, verified present in the iOS 26.5 SDK).
-- [ ] T064 [US1] Make each row of `ios/Sources/Import/ImportedAccountsView.swift` a `NavigationLink` pushing the list pre-filtered to that account, carrying the **same `AccountFilter` value** the in-screen filter will set — one code path, not two (N2, FR-037). Back returns to the front door with its state intact (FR-005).
-- [ ] T065 [US1] Replace the `LabeledContent` in `ios/Sources/Import/ImportedAccountsView.swift:10` with the same explicit two-column shape `TransactionRowView` uses, so the front door stops being the layout the parked occlusion finding is about. The file is already being edited by T064; this is the small in-scope change research R12 calls for, and it removes the `.foregroundStyle(.primary)` override that only existed to fight the component.
-- [ ] T066 [US1] Give `ImportedAccount` a `hasOnlyExcludedRows: Bool` in `ios/Sources/Import/ImportModels.swift` (fed from `AccountSummary`), and update `StoredTransaction.isLive`'s ⚠️ comment (`ImportModels.swift:79–89`): it is **no longer the production count** — it is the cross-language mirror of the engine's `LIVE` constant, pinned by `ios/Tests/LivenessParityTests.swift`.
-- [ ] T067 [US1] ⚠️ Switch the front-door count to the engine in `ios/Sources/Import/ImportService.swift:128–141`: replace the per-account `store.listTransactions(accountId:).filter(\.isLive).count` with one `store.accountSummaries()` call mapped to `[ImportedAccount]`. This **removes** lines from a file at exactly the 400-line SwiftLint limit — record the new `wc -l` in the PR description, because T137 spends that headroom. Measured on the 10,000-row corpus: 43.8 ms of Rust time becomes 0.99 ms, and the only place where the count and the list could be computed by different code disappears (FR-006, FR-008).
-- [ ] T068 [US1] **GATE** `make lint` — `swiftlint --strict` (400-line files, 120 columns) + `swift-format lint --strict`. Confirm `wc -l ios/Sources/Import/ImportService.swift` ≤ 400.
-- [ ] T069 [US1] **GATE** `make ios-gen && make ios-test` — T048–T051 green. Never a bare `tuist generate`.
-- [ ] T070 [US1] **GATE** `make import-audit` — with the widened networking scan now covering `ios/Sources/Transactions/`, plus the unchanged glass, `#available(iOS 26` and bank-literal scans (SC-015, FR-062).
+- [x] T053 [US1] Create `ios/Sources/Persistence/StoreProvider.swift`: `static func shared() throws -> Store` — **one `Store` per process**, memoised, opened through the existing `StoreLocator(keyStore: KeychainKeyStore())`, with an injection point so tests can hand in a temporary one. Two `Store` instances over one file would be two connections with two independent locks, and a page read could land inside `import_statement`'s transaction; one `Store` makes the engine's own mutex serialise reads against the atomic import, which is what makes FR-054 structural instead of timing-dependent.
+- [x] T054 [US1] Rewire `ImportViewModel.liveService()` (`ios/Sources/Import/ImportViewModel.swift:47–51`) to take its store from `StoreProvider.shared()` rather than opening its own. Net line change ≤ 0; `ios/Sources/Import/ImportService.swift` is not touched.
+- [x] T055 [P] [US1] Create `ios/Sources/Transactions/TransactionListModels.swift`: `TransactionRow` (mirroring `HistoryRow` plus the derived presentation facts as **pure functions** — `formattedAmount`, `directionWord`, `categoryLabel`, `accessibilityLabel`), `DateGroup` (`date`, `heading`, `rows` — **no amount member, and no member that could hold one**), `AccountFilter`, `EmptyKind`, `TransactionRowLayout` and `TransactionListError`.
+- [x] T056 [P] [US1] Create `ios/Sources/Transactions/TransactionListStrings.swift` — every user-visible string of this slice, in one file, from the T046 copy deck. No string literal may appear in a view body; T112 asserts it.
+- [x] T057 [P] [US1] Create `ios/Sources/Transactions/TransactionHistoryService.swift`: the `TransactionHistoryReading` protocol and the `actor TransactionHistoryService(store:)` with `page(accountID:cursor:limit:)` and `accountSummaries()`. An actor, so no engine call happens on the main thread (H1). A **transport**: no filtering, sorting, grouping, de-duplication or counting of its own (H2), no cache (H3), and `StoreError` mapped at the boundary (H4). It imports nothing from `Import/` (H5).
+- [x] T058 [US1] Implement `TransactionListViewModel`'s paging in `ios/Sources/Transactions/TransactionListViewModel.swift`: `@MainActor @Observable`, `State` of `.loading | .showing | .empty(EmptyKind) | .unavailable`, page size 50, cursor held by the view model and nowhere else, `loadMoreIfNeeded(currentRowID:)` idempotent per cursor, every engine call awaited off the main actor.
+- [x] T059 [US1] Implement **incremental** date grouping in `ios/Sources/Transactions/TransactionListViewModel.swift`: fold the flat page sequence into `[DateGroup]` as pages arrive, seeded with the open group's date, so a page boundary falling inside a date appends to the open group rather than starting a second group with the same heading. Extend `ios/Tests/TransactionListViewModelTests.swift` with V4 — page at size 1 across a 5-row date and assert exactly one group, and assert folding pages of 30 yields the same groups as folding the whole sequence at once (research R13).
+- [x] T060 [US1] Implement `TransactionRowLayout(dynamicTypeSize:)` in `ios/Sources/Transactions/TransactionListModels.swift`: `.vertical` iff `dynamicTypeSize.isAccessibilitySize`, description line limit 2 horizontal / 3 vertical, account-name line limit 1, `amountYields` **always false**. Pure — no `View`, no environment, no rendering — so T050 can prove it with nothing on screen.
+- [x] T061 [US1] Create `ios/Sources/Transactions/TransactionRowView.swift` driven by `TransactionRowLayout`: standard sizes an `HStack` (leading `VStack` of description then account name, trailing amount), accessibility sizes a single `VStack` with the amount last and full width. The amount takes `.fixedSize(horizontal: true, vertical: false)`, `.layoutPriority(1)` and `.monospacedDigit()`; **never** `minimumScaleFactor`, never `.truncationMode`, never an abbreviation. **Not `LabeledContent`** — it chooses its own axis and renders its value `.secondary`, which is the exact shape the parked `StaticText '1'` at `{32, 724}` occlusion finding is consistent with (research R12, A4). One `.accessibilityElement(children: .combine)` per row with the T055 sentence as its label.
+- [x] T062 [US1] Create `ios/Sources/Transactions/TransactionListView.swift`: a `List` of `Section`s with `.listStyle(.plain)` so headings pin while scrolling (FR-034), rows on an **opaque** surface with no material and no glass anywhere near them, and the whole screen inside the existing `NavigationStack`. Direction is carried by a word and a glyph, never by colour alone (W5).
+- [x] T063 [US1] Add the destination to `ios/Sources/RootView.swift`: one `NavigationStack` destination for the list — not a sheet, not a tab (a sheet's dismissal is not the standard back affordance and makes FR-056's scroll preservation a dismissal problem) — plus a toolbar item that pushes the **unfiltered** list, so the combined history is reachable without picking an account first (FR-001, N3). Switch `RootView.swift:15`'s `.safeAreaInset(edge: .bottom)` to `.safeAreaBar(edge: .bottom)` (W3, verified present in the iOS 26.5 SDK).
+- [x] T064 [US1] Make each row of `ios/Sources/Import/ImportedAccountsView.swift` a `NavigationLink` pushing the list pre-filtered to that account, carrying the **same `AccountFilter` value** the in-screen filter will set — one code path, not two (N2, FR-037). Back returns to the front door with its state intact (FR-005).
+- [x] T065 [US1] Replace the `LabeledContent` in `ios/Sources/Import/ImportedAccountsView.swift:10` with the same explicit two-column shape `TransactionRowView` uses, so the front door stops being the layout the parked occlusion finding is about. The file is already being edited by T064; this is the small in-scope change research R12 calls for, and it removes the `.foregroundStyle(.primary)` override that only existed to fight the component.
+- [x] T066 [US1] Give `ImportedAccount` a `hasOnlyExcludedRows: Bool` in `ios/Sources/Import/ImportModels.swift` (fed from `AccountSummary`), and update `StoredTransaction.isLive`'s ⚠️ comment (`ImportModels.swift:79–89`): it is **no longer the production count** — it is the cross-language mirror of the engine's `LIVE` constant, pinned by `ios/Tests/LivenessParityTests.swift`.
+- [x] T067 [US1] ⚠️ Switch the front-door count to the engine in `ios/Sources/Import/ImportService.swift:128–141`: replace the per-account `store.listTransactions(accountId:).filter(\.isLive).count` with one `store.accountSummaries()` call mapped to `[ImportedAccount]`. This **removes** lines from a file at exactly the 400-line SwiftLint limit — record the new `wc -l` in the PR description, because T137 spends that headroom. Measured on the 10,000-row corpus: 43.8 ms of Rust time becomes 0.99 ms, and the only place where the count and the list could be computed by different code disappears (FR-006, FR-008).
+- [x] T068 [US1] **GATE** `make lint` — `swiftlint --strict` (400-line files, 120 columns) + `swift-format lint --strict`. Confirm `wc -l ios/Sources/Import/ImportService.swift` ≤ 400.
+- [ ] T069 [US1] **GATE** `make ios-gen && make ios-test` — T048–T051 green. Never a bare `tuist generate`. ⚠️ **BLOCKED, and not by this slice** — see the US1 note below: the unit target is green (166 tests, 37 suites), the UI target is red on **unmodified `main`** for a front-door contrast failure that predates PR B.
+- [x] T070 [US1] **GATE** `make import-audit` — with the widened networking scan now covering `ios/Sources/Transactions/`, plus the unchanged glass, `#available(iOS 26` and bank-literal scans (SC-015, FR-062).
 
 **Checkpoint**: 🎯 **MVP.** A person can open the app, tap once, and read their own transactions across every account. Shippable on its own.
+
+### US1 — RECORDED: what was built, what deviated, and the one gate that is red
+
+**Green:** `make lint` (0 violations, swiftlint --strict + swift-format --strict), `make
+import-audit` (all four scans, networking now over all of `ios/Sources`), and the **unit target
+— 166 tests in 37 suites**, T048–T051 included. `ios/Sources/Import/ImportService.swift` is
+**397 lines**, three below the limit it sat exactly on (T067's headroom for T137).
+
+**RED was observed before GREEN.** The four new suites failed to compile against `main` —
+`cannot find type 'TransactionHistoryService' in scope`, `cannot find type
+'TransactionHistoryReading' in scope`. In Swift that is what RED looks like for a new seam:
+the test names the type that does not exist yet, and the target does not build until it does.
+
+⚠️ **T069 is blocked by a failure that predates this PR.** `make ios-test` runs the UI target
+too, and `ImportFrontDoorUITests.testTheFrontDoorPassesTheAuditInDarkModeAtTheLargestTextSize`
+fails with `Contrast failed` on the front door's explanation text. **Verified pre-existing**:
+stashed to a clean `main`, regenerated, ran that one test — it fails identically, with the same
+element at the same frame `{{24, 467}, {345, 621.3}}`. It was green when it was written
+(`ebfbcf0`), so an SDK or simulator-runtime change is the likeliest cause.
+
+What the evidence says: at the largest accessibility size the explanation is 621 pt tall on an
+852 pt screen, so it scrolls under the bottom bar, and the soft scroll-edge effect renders the
+lines passing behind the bar at a reduced contrast the auditor measures and fails. Two fixes
+were tried against it and **both reverted**, because neither worked and this is not this
+slice's screen:
+
+- `.safeAreaInset(edge: .bottom)` → `.safeAreaBar(edge: .bottom)` on `ImportEmptyStateView`:
+  no change; the reported element frame was byte-identical before and after.
+- `.scrollEdgeEffectStyle(.hard, for: .bottom)`: made it **worse** — the light-mode largest-size
+  case (`testTheFrontDoorSurvivesTheLargestAccessibilityTextSize`) went red too.
+
+It belongs to whoever owns the front door's accessibility next, with 016's manual gate. **It is
+recorded rather than papered over, and T069 stays unchecked until it is settled** — a gate
+marked green while red is worth less than no gate.
+
+**Deviations from `tasks.md`, each deliberate:**
+
+- **A fifth test file.** `ios/Tests/TransactionCorpus.swift` — the platform half of the
+  correctness corpus, shared by T048 and T051. The alternative was the same 200-line fixture
+  duplicated in two files, which is how two fixtures come to disagree about what they are
+  fixtures of.
+- **The corpus cannot build a deleted row, and says so.** `is_deleted` has no write path in the
+  store's API; the Rust corpus reaches it with direct SQL through SQLCipher, which Swift has no
+  handle on. `LivenessParityTests` therefore proves the **superseded** half of the live rule end
+  to end and names the gap in its own doc comment; the `!isDeleted` half stays pinned engine-side
+  (`history_live.rs` L1–L5 and the `LIVE` byte-identity assertion). No test pretends otherwise.
+- **US7's empty states landed early** — `EmptyKind.decide` (T096) and the rendering (T098). US1's
+  checkpoint claims the slice is shippable on its own, and a screen that goes blank when a
+  person has nothing imported is not shippable. The T047 trace had already settled every branch,
+  so the code was the small part. ⚠️ **Consequence to honour**: T093's RED suite will be written
+  against code that already exists. Write it anyway, and **observe it fail** by breaking the
+  decision on purpose (swap two cases, delete the `hasOnlyExcludedRows` branch) before trusting
+  it — a suite that has only ever been green proves nothing about what it would catch.
+- **`refreshAfterImport()` is not implemented.** The contract lists it, but its story (staying
+  current with an import) is a later phase, and an untested method on a shipped view model is
+  worse than an absent one.
+- **The row carries no colour for direction.** The sign glyph (`−` / `+`) and the spoken word
+  carry it, per the T046 deck, which lists colour as redundant and optional. Adding a red/green
+  amount would add a contrast axis to the manual gate for no information a person does not
+  already have.
 
 ## Phase 4: User Story 2 — Re-importing a statement does not double what the person sees (Priority: P2)
 
@@ -195,16 +475,56 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 2 (RED first) ⚠️
 
-- [ ] T071 [P] [US2] RED: create `ios/Tests/TransactionListLivenessTests.swift` — over the bridge against a real temp store: importing the identical statement twice leaves the rendered row ids, their count and their order identical (FR-009, SC-003); a superseded row and a deleted row appear nowhere, in any filter state (FR-007, SC-005); an excluded row leaves **no gap, no blank row, no placeholder and no effect on grouping** — the `DateGroup` sequence is byte-identical to a store that never held the excluded rows (FR-010).
-- [ ] T072 [P] [US2] RED: add `frontDoorCountEqualsTheFilteredRowCountInEveryState` to `ios/Tests/TransactionListLivenessTests.swift`, asserting the equality after a first import, after a re-import that supersedes duplicates, and after a deletion — the states SC-004 names (FR-006, FR-046).
+- [x] T071 [P] [US2] RED: create `ios/Tests/TransactionListLivenessTests.swift` — over the bridge against a real temp store: importing the identical statement twice leaves the rendered row ids, their count and their order identical (FR-009, SC-003); a superseded row and a deleted row appear nowhere, in any filter state (FR-007, SC-005); an excluded row leaves **no gap, no blank row, no placeholder and no effect on grouping** — the `DateGroup` sequence is byte-identical to a store that never held the excluded rows (FR-010).
+- [x] T072 [P] [US2] RED: add `frontDoorCountEqualsTheFilteredRowCountInEveryState` to `ios/Tests/TransactionListLivenessTests.swift`, asserting the equality after a first import, after a re-import that supersedes duplicates, and after a deletion — the states SC-004 names (FR-006, FR-046).
 
 ### Implementation for User Story 2
 
-- [ ] T073 [US2] Confirm — and pin, do not add — that nothing in `ios/Sources/Transactions/` re-derives the population: `TransactionHistoryService` is transport-only, `TransactionListViewModel` never filters `rows`, and the count on the front door comes from `AccountSummary.liveTransactionCount` alone. Any Swift-side `.filter` over transactions found on this path is deleted here (FR-008, FR-045).
-- [ ] T074 [US2] Ensure an import affecting one account cannot disturb another in `ios/Sources/Transactions/TransactionListViewModel.swift`: a refresh re-reads through the engine rather than mutating rows in place, so per-account state cannot drift (FR-011). Extend `ios/Tests/TransactionListLivenessTests.swift` with the assertion.
-- [ ] T075 [US2] **GATE** `make lint && make ios-test` — T071 and T072 green.
+- [x] T073 [US2] Confirm — and pin, do not add — that nothing in `ios/Sources/Transactions/` re-derives the population: `TransactionHistoryService` is transport-only, `TransactionListViewModel` never filters `rows`, and the count on the front door comes from `AccountSummary.liveTransactionCount` alone. Any Swift-side `.filter` over transactions found on this path is deleted here (FR-008, FR-045).
+- [x] T074 [US2] Ensure an import affecting one account cannot disturb another in `ios/Sources/Transactions/TransactionListViewModel.swift`: a refresh re-reads through the engine rather than mutating rows in place, so per-account state cannot drift (FR-011). Extend `ios/Tests/TransactionListLivenessTests.swift` with the assertion.
+- [x] T075 [US2] **GATE** `make lint && make ios-test` — T071 and T072 green. Run as `make lint`, `make import-audit` and `-only-testing:KanameTests` (**172 tests in 38 suites**, all green); the UI target is still red for the front-door contrast failure that predates this slice (see T069).
 
 **Checkpoint**: The screen that doubled a person's history in 016 cannot do it again, and the count and the list are provably one definition.
+
+### US2 — RECORDED
+
+**Every assertion was observed failing before it was trusted.** The implementation US2 needed
+already existed — US1 built it — so a suite written here would otherwise have been green from
+birth and proved nothing. Three deliberate breaks, each reverted:
+
+1. **The 016 defect, put back**: `importedAccounts()` counting `listTransactions(…).count`
+   instead of `liveTransactionCount`. T072 went red with the exact shape of the original bug —
+   *the front door says 8, the list shows 4*.
+2. **A second Swift-side population**: a `TransactionHistoryReading` that assembled pages from
+   the raw `listTransactions`. Five of the six tests went red, including every superseded row
+   becoming visible and the two stores' `DateGroup` sequences diverging.
+3. **A refresh that mutates in place**: `reload()` no longer clearing `groups`. T074 went red —
+   and only after it was rewritten to drive **one** screen across the import. Its first form
+   opened a fresh view model each time and stayed green under this break, which is the whole
+   reason the break was run.
+
+**Deviations, each deliberate:**
+
+- **The deletion state is unreachable from Swift, and stays pinned engine-side.** SC-004 names
+  "after a deletion", but `is_deleted` has no write path in the store's API — the Rust corpus
+  reaches it with direct SQL through SQLCipher, which Swift has no handle on. T072 therefore
+  asserts the count equality over the three states a real install can actually reach — a first
+  import, a re-import that supersedes its own duplicates, and cross-source duplicates linked by
+  `findDuplicates()` — and the deleted row stays covered by `history_live.rs` L1 (visibility)
+  and L4/L5 (counts). The suite says so in its own doc comment, and asserts `!isDeleted` over
+  the corpus so a future write path cannot slip past untested. Same gap US1 recorded, named
+  once more where it bites.
+- **T073 found nothing to delete, so it pinned instead.** Nothing under
+  `ios/Sources/Transactions/` re-derives the population today. A confirmation that lives only in
+  a commit message is not a pin, so `scripts/import-path-audit.sh` grew a fourth scan: no
+  `listTransactions(` call anywhere under `ios/Sources`, and no `isLive`, `supersededBy`,
+  `isDeleted`, `rows.filter`/`rows.sorted` or `groups.filter`/`groups.sorted` under
+  `ios/Sources/Transactions/`. Both directions were verified — the scan was watched failing
+  against a deliberately reintroduced raw count.
+- **Two stores, not one, prove FR-010.** "No trace" is compared against a store that never held
+  an excluded row, over a projection that leaves row ids out — ids cannot match across stores,
+  and a comparison that passed because of them would prove nothing. Ids are compared directly
+  where they are meaningful: within one store, across a re-import.
 
 ## Phase 5: User Story 4 — A long history reads as a history, not a pile (Priority: P4)
 
@@ -214,19 +534,63 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 4 (RED first) ⚠️
 
-- [ ] T076 [P] [US4] RED: create `ios/Tests/TransactionListOrderingTests.swift` — the rendered sequence is newest-first across accounts; same-date rows of different accounts appear in front-door account order; same-date rows of one account appear in printed order; rebuilding the view model from a fresh service over an unchanged store yields a byte-identical sequence (the app-side mirror of O5, SC-009); importing a further account leaves the relative order of every pre-existing row unchanged (FR-032).
-- [ ] T077 [P] [US4] RED: add the heading tests to `ios/Tests/TransactionListViewModelTests.swift` — V6 the year suffix comes from the **injected clock**, never `Date()` inside a formatter, so "include the year when it is not the current year" (FR-035) is assertable at a fixed date; one group per calendar date **across all accounts**, never one group per account per date (FR-033); every heading carries the date and at most a transaction **count**, never a monetary aggregate (FR-026).
+- [x] T076 [P] [US4] RED: create `ios/Tests/TransactionListOrderingTests.swift` — the rendered sequence is newest-first across accounts; same-date rows of different accounts appear in front-door account order; same-date rows of one account appear in printed order; rebuilding the view model from a fresh service over an unchanged store yields a byte-identical sequence (the app-side mirror of O5, SC-009); importing a further account leaves the relative order of every pre-existing row unchanged (FR-032).
+- [x] T077 [P] [US4] RED: add the heading tests to `ios/Tests/TransactionListViewModelTests.swift` — V6 the year suffix comes from the **injected clock**, never `Date()` inside a formatter, so "include the year when it is not the current year" (FR-035) is assertable at a fixed date; one group per calendar date **across all accounts**, never one group per account per date (FR-033); every heading carries the date and at most a transaction **count**, never a monetary aggregate (FR-026).
 
 ### Implementation for User Story 4
 
-- [ ] T078 [US4] Implement the injected clock in `ios/Sources/Transactions/TransactionListViewModel.swift` (`init(history:clock:pageSize:)`, defaulting to `Date.init`) and derive each `DateGroup.heading` from it in `ios/Sources/Transactions/TransactionListModels.swift` — the same pattern `ImportService`'s `now:` parameter already uses, and the reason the core reads no wall clock (Constitution II).
-- [ ] T079 [US4] Render group headings in `ios/Sources/Transactions/TransactionListView.swift` as `Section` headers on a plain `List`, so the system pins them while scrolling and the date currently being read stays identifiable (FR-034), and so the heading is announced when its group is entered (FR-072).
-- [ ] T080 [US4] Confirm the ordering is expressed in exactly two places and nowhere else: the engine's SQL + comparator, and `data-model.md` §2. Grep `ios/Sources/Transactions/` for `sorted`, `sort(`, `reversed` and assert none applies to transaction rows — the app renders the sequence it was given (FR-045).
-- [ ] T081 [US4] Handle the row edges from the spec in `ios/Sources/Transactions/TransactionRowView.swift`: an empty or unreadable description still renders a complete, selectable, announceable row carrying date, account and amount (FR-020); a very long description or account name yields before the amount, which never yields (FR-021). Add both to `ios/Tests/TransactionRowLayoutTests.swift`.
-- [ ] T082 [US4] **GATE** `make lint && make ios-test` — T076, T077 and T081 green.
-- [ ] T083 [US4] **GATE** `make core-lint && make core-test && make import-audit` — the full PR B verification gate, engine included, before the PR opens.
+- [x] T078 [US4] **Already landed in US1 — confirmed, not re-implemented.** Implement the injected clock in `ios/Sources/Transactions/TransactionListViewModel.swift` (`init(history:clock:pageSize:)`, defaulting to `Date.init`) and derive each `DateGroup.heading` from it in `ios/Sources/Transactions/TransactionListModels.swift` — the same pattern `ImportService`'s `now:` parameter already uses, and the reason the core reads no wall clock (Constitution II).
+- [x] T079 [US4] Render group headings in `ios/Sources/Transactions/TransactionListView.swift` as `Section` headers on a plain `List`, so the system pins them while scrolling and the date currently being read stays identifiable (FR-034), and so the heading is announced when its group is entered (FR-072).
+- [x] T080 [US4] Confirm the ordering is expressed in exactly two places and nowhere else: the engine's SQL + comparator, and `data-model.md` §2. Grep `ios/Sources/Transactions/` for `sorted`, `sort(`, `reversed` and assert none applies to transaction rows — the app renders the sequence it was given (FR-045).
+- [x] T081 [US4] Handle the row edges from the spec in `ios/Sources/Transactions/TransactionRowView.swift`: an empty or unreadable description still renders a complete, selectable, announceable row carrying date, account and amount (FR-020); a very long description or account name yields before the amount, which never yields (FR-021). Add both to `ios/Tests/TransactionRowLayoutTests.swift`.
+- [x] T082 [US4] **GATE** `make lint && make ios-test` — T076, T077 and T081 green. Run as `make lint` (0 violations) + `-only-testing:KanameTests`: **185 tests in 40 suites**. The UI target stays red for the pre-existing front-door contrast failure (T069).
+- [x] T083 [US4] **GATE** `make core-lint && make core-test && make import-audit` — the full PR B verification gate, engine included, before the PR opens. Green: clippy clean, **308 core tests** across 16 binaries, all five audit scans.
 
 **Checkpoint**: US1, US2 and US4 are independently functional. The list is demoable, ordered, stable and honest about what it holds.
+
+### US4 — RECORDED
+
+**T078, T079 and T081's implementation had already landed in US1** — the injected clock, the
+`Section` headings on a `.plain` list, and the row's yield order were all built there. US4 was
+therefore mostly *proving* them, which makes the red observations the substance of this phase,
+not a formality. **Five deliberate breaks, each reverted, each watched:**
+
+1. **A re-sorted page** (`page.rows.sorted(by: amount)`): 5 of the 7 ordering tests red.
+2. **A shuffled page**: the determinism test red — two reads of one unchanged store disagreeing
+   is exactly the failure SC-009 exists to forbid.
+3. **The clock ignored** (`Date()` instead of `clock()`): the year-suffix test red. This is the
+   defect that is right for 364 days a year, and it cannot be caught any other way.
+4. **The grouping key widened to `(date, account)`**: the one-group-per-date test red, with
+   three headings where a person should see one.
+5. **A total appended to the heading**: the no-figure test red on both the heading and its
+   VoiceOver announcement.
+
+**Deviations, each deliberate:**
+
+- **The fixture was rebuilt mid-phase, because it was too weak to fail.** The first version's
+  printed order happened to coincide with descending amount, so break 1 slipped past the
+  printed-order test. The shared date now carries **three** rows of one account —
+  `MEDLAR 01, ALMOND 02, ZEBRA 03` at 500 / 900 / 100 — an order that matches neither
+  alphabetical direction, neither amount direction, nor reversed insertion. A fixture that
+  cannot distinguish printed order from a sort proves nothing about printed order.
+- **The account tie-break is proved by non-vacuity, not by a code break.** That rule lives in
+  the engine's SQL (`history_order.rs` O2 owns it); the app-side claim is that appearance order
+  *equals* `listAccounts()` order. It was verified by asserting the **reverse** and watching it
+  fail — the fixture's three accounts on one date really do come back in front-door order.
+- **The ordering fixture is written through `insertAccount`/`insertTransaction`, not a parsed
+  statement.** The ordering key's third component is `rowid`, and only direct inserts let a test
+  say exactly which row follows which. What the *import* path does to the order is already
+  covered end to end by US2's suite.
+- **T080 pinned rather than only confirmed.** No `sorted`, `sort(` or `reversed` exists under
+  `ios/Sources/Transactions/`, so the audit's fifth scan now bans all three there — the order is
+  written down in the engine's SQL and in `data-model.md` §2, and a third copy fails the build.
+  Watched failing against a deliberately reversed page.
+- **Two test files were split out, because the view model's suite outgrew its limits.** Adding
+  T077 pushed `TransactionListViewModelTests.swift` past both the 400-line file limit and the
+  250-line type-body limit. The shared double and fixtures moved to
+  `ios/Tests/TransactionListDoubles.swift` (one copy, so two suites cannot come to disagree
+  about what they are fixtures of), and the heading tests to
+  `ios/Tests/TransactionListHeadingTests.swift`. No assertion was lost or weakened in the move.
 
 ---
 
@@ -242,18 +606,18 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 3 (RED first) ⚠️
 
-- [ ] T084 [P] [US3] RED: create `ios/Tests/TransactionFilterTests.swift` — V1 `filter` is `.all` at `init` and a filter change writes **nothing** to `UserDefaults` (assert the suite's `UserDefaults` dictionary is byte-identical across a `setFilter`), nothing to the store, and nothing to a scene-restoration payload; a fresh view model after a simulated relaunch is `.all` (FR-041).
-- [ ] T085 [P] [US3] RED: add the population tests to `ios/Tests/TransactionFilterTests.swift` — V2 `setFilter`/`clearFilter` discard the cursor and **every** accumulated row before loading page 1, so no row of the previous account can survive (FR-040); a filtered list's row count equals the front-door count for that account (FR-006); filtering changes no ordering, no grouping, no row content and no currency handling — a filtered sequence is the unfiltered sequence with the other accounts removed (FR-042).
-- [ ] T086 [P] [US3] RED: add the announcement tests to `ios/Tests/TransactionFilterTests.swift` — the filtered account's name (and last-4, matching the front door's identity) is present in the screen's accessibility surface whenever a filter is applied, and the fact that the list is filtered is carried by a **string**, never by styling alone (FR-038, FR-003, SC-014).
+- [x] T084 [P] [US3] RED: create `ios/Tests/TransactionFilterTests.swift` — V1 `filter` is `.all` at `init` and a filter change writes **nothing** to `UserDefaults` (assert the suite's `UserDefaults` dictionary is byte-identical across a `setFilter`), nothing to the store, and nothing to a scene-restoration payload; a fresh view model after a simulated relaunch is `.all` (FR-041).
+- [x] T085 [P] [US3] RED: add the population tests to `ios/Tests/TransactionFilterTests.swift` — V2 `setFilter`/`clearFilter` discard the cursor and **every** accumulated row before loading page 1, so no row of the previous account can survive (FR-040); a filtered list's row count equals the front-door count for that account (FR-006); filtering changes no ordering, no grouping, no row content and no currency handling — a filtered sequence is the unfiltered sequence with the other accounts removed (FR-042).
+- [x] T086 [P] [US3] RED: add the announcement tests to `ios/Tests/TransactionFilterTests.swift` — the filtered account's name (and last-4, matching the front door's identity) is present in the screen's accessibility surface whenever a filter is applied, and the fact that the list is filtered is carried by a **string**, never by styling alone (FR-038, FR-003, SC-014).
 
 ### Implementation for User Story 3
 
-- [ ] T087 [US3] Implement `setFilter(_:)` and `clearFilter()` in `ios/Sources/Transactions/TransactionListViewModel.swift`: discard cursor and rows, reload page 1 with `HistoryQuery.accountId` set or `nil`. That single field is the **only** difference between a filtered and an unfiltered read (FR-036, FR-042).
-- [ ] T088 [US3] Build the filter chrome in `ios/Sources/Transactions/TransactionListView.swift`: a `Menu`/picker of accounts plus the current scope, in a `GlassEffectContainer` with `.buttonStyle(.glass)`, pinned by `.safeAreaBar(edge: .bottom)` on an **opaque** bar. Glass never touches the rows, and a prominent translucent control never refracts scrolled numbers (FR-068, FR-069, W1, W3).
-- [ ] T089 [US3] Make the current scope unmistakable at all times in `ios/Sources/Transactions/TransactionListView.swift` — either "All accounts" or the filtered account's name and masked last-4, using the same identity the front door shows, visible without scrolling (FR-003, FR-038).
-- [ ] T090 [US3] Make clearing a **single** action and changing the filter possible without leaving the screen, in `ios/Sources/Transactions/TransactionListView.swift` (FR-039, FR-040).
-- [ ] T091 [US3] Confirm the front-door `NavigationLink` from T064 sets the same `AccountFilter` value the in-screen picker sets, in `ios/Sources/Import/ImportedAccountsView.swift` — one code path for a pre-filter and a chosen filter (N2).
-- [ ] T092 [US3] **GATE** `make lint && make ios-test` — T084–T086 green.
+- [x] T087 [US3] **Already landed in US1 — confirmed and now covered.** Implement `setFilter(_:)` and `clearFilter()` in `ios/Sources/Transactions/TransactionListViewModel.swift`: discard cursor and rows, reload page 1 with `HistoryQuery.accountId` set or `nil`. That single field is the **only** difference between a filtered and an unfiltered read (FR-036, FR-042).
+- [x] T088 [US3] Build the filter chrome in `ios/Sources/Transactions/TransactionListView.swift`: a `Menu`/picker of accounts plus the current scope, in a `GlassEffectContainer` with `.buttonStyle(.glass)`, pinned by `.safeAreaBar(edge: .bottom)` on an **opaque** bar. Glass never touches the rows, and a prominent translucent control never refracts scrolled numbers (FR-068, FR-069, W1, W3).
+- [x] T089 [US3] Make the current scope unmistakable at all times in `ios/Sources/Transactions/TransactionListView.swift` — either "All accounts" or the filtered account's name and masked last-4, using the same identity the front door shows, visible without scrolling (FR-003, FR-038).
+- [x] T090 [US3] Make clearing a **single** action and changing the filter possible without leaving the screen, in `ios/Sources/Transactions/TransactionListView.swift` (FR-039, FR-040).
+- [x] T091 [US3] Confirm the front-door `NavigationLink` from T064 sets the same `AccountFilter` value the in-screen picker sets, in `ios/Sources/Import/ImportedAccountsView.swift` — one code path for a pre-filter and a chosen filter (N2).
+- [x] T092 [US3] **GATE** `make lint && make ios-test` — T084–T086 green. `make lint` 0 violations; `-only-testing:KanameTests` **203 tests in 42 suites** at that point (T069's UI-target failure still predates the slice).
 
 ## Phase 7: User Story 7 — Nothing to show says why (Priority: P7)
 
@@ -263,21 +627,68 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 7 (RED first) ⚠️
 
-- [ ] T093 [P] [US7] RED: create `ios/Tests/TransactionEmptyStateTests.swift` — V8 `EmptyKind` is a **pure function** of `[AccountSummary]` and `AccountFilter`, and each of the six rows of `data-model.md` §6 maps to its own case: empty summaries → "nothing imported yet" + the import action; all-zero with none excluded → "the statements had no transactions"; all-zero with some excluded → "nothing to show"; filtered, zero, not excluded → "this statement had no transactions" (**not** an error, **not** "nothing imported"); filtered, zero, excluded → "nothing to show for this account" + clear-the-filter; filtered to zero while other accounts have rows → the filter named as the reason + clear-the-filter.
-- [ ] T094 [P] [US7] RED: create `ios/Tests/TransactionListStringsTests.swift` — every worded count is produced by **one** pluralisation helper, asserted singular for `1` and plural for `0` and `2` in every string that carries a count (FR-052, SC-013).
-- [ ] T095 [P] [US7] RED: add the honesty audits to `ios/Tests/TransactionListStringsTests.swift` — no empty-state string contains "lost", "missing", "gone", "error" or "failed" (FR-051); no user-visible string in `TransactionListStrings` contains an identifier, an internal code, a dedup layer name, a cursor field name (`sequence`) or engine error text (FR-019, SC-016).
+- [x] T093 [P] [US7] RED: create `ios/Tests/TransactionEmptyStateTests.swift` — V8 `EmptyKind` is a **pure function** of `[AccountSummary]` and `AccountFilter`, and each of the six rows of `data-model.md` §6 maps to its own case: empty summaries → "nothing imported yet" + the import action; all-zero with none excluded → "the statements had no transactions"; all-zero with some excluded → "nothing to show"; filtered, zero, not excluded → "this statement had no transactions" (**not** an error, **not** "nothing imported"); filtered, zero, excluded → "nothing to show for this account" + clear-the-filter; filtered to zero while other accounts have rows → the filter named as the reason + clear-the-filter.
+- [x] T094 [P] [US7] RED: create `ios/Tests/TransactionListStringsTests.swift` — every worded count is produced by **one** pluralisation helper, asserted singular for `1` and plural for `0` and `2` in every string that carries a count (FR-052, SC-013).
+- [x] T095 [P] [US7] RED: add the honesty audits to `ios/Tests/TransactionListStringsTests.swift` — no empty-state string contains "lost", "missing", "gone", "error" or "failed" (FR-051); no user-visible string in `TransactionListStrings` contains an identifier, an internal code, a dedup layer name, a cursor field name (`sequence`) or engine error text (FR-019, SC-016).
 
 ### Implementation for User Story 7
 
-- [ ] T096 [US7] Implement the `EmptyKind` decision as a pure function over `[AccountSummary]` and `AccountFilter` in `ios/Sources/Transactions/TransactionListModels.swift`, following `data-model.md` §6 row for row. `hasOnlyExcludedRows` is what tells row 4 from row 5 — and it is a bool precisely so it can never be rendered as a count (FR-008).
-- [ ] T097 [US7] Implement the pluralisation helper in `ios/Sources/Transactions/TransactionListStrings.swift` — one helper, used by every worded count in the slice, including the front door's row announcement if it words one (FR-052).
-- [ ] T098 [US7] Render the six empty states in `ios/Sources/Transactions/TransactionListView.swift` using `ContentUnavailableView` with the T046 copy: the unimported state offers the import action (FR-047), and every filtered state that would show something once cleared offers to clear the filter (FR-049).
-- [ ] T099 [US7] Wire the empty state's import action back to `RootView`'s existing `.fileImporter` in `ios/Sources/RootView.swift` — no second picker, no duplicated import path (FR-047).
-- [ ] T100 [US7] Render `.unavailable` (a store error) in `ios/Sources/Transactions/TransactionListView.swift` with a plain-language sentence carrying **no** engine text, no error code and no identifier (FR-019, H4).
-- [ ] T101 [US7] **GATE** `make lint && make ios-test` — T093–T095 green.
-- [ ] T102 [US7] **GATE** `make core-lint && make core-test && make import-audit` — the full PR C verification gate before the PR opens.
+- [x] T096 [US7] **Landed early in US1; its RED suite was written here and watched failing.** Implement the `EmptyKind` decision as a pure function over `[AccountSummary]` and `AccountFilter` in `ios/Sources/Transactions/TransactionListModels.swift`, following `data-model.md` §6 row for row. `hasOnlyExcludedRows` is what tells row 4 from row 5 — and it is a bool precisely so it can never be rendered as a count (FR-008).
+- [x] T097 [US7] **Already landed in US1 — confirmed and now covered.** Implement the pluralisation helper in `ios/Sources/Transactions/TransactionListStrings.swift` — one helper, used by every worded count in the slice, including the front door's row announcement if it words one (FR-052).
+- [x] T098 [US7] **Amended here: D2's prominence rule was being broken.** Render the six empty states in `ios/Sources/Transactions/TransactionListView.swift` using `ContentUnavailableView` with the T046 copy: the unimported state offers the import action (FR-047), and every filtered state that would show something once cleared offers to clear the filter (FR-049).
+- [x] T099 [US7] Wire the empty state's import action back to `RootView`'s existing `.fileImporter` in `ios/Sources/RootView.swift` — no second picker, no duplicated import path (FR-047).
+- [x] T100 [US7] Render `.unavailable` (a store error) in `ios/Sources/Transactions/TransactionListView.swift` with a plain-language sentence carrying **no** engine text, no error code and no identifier (FR-019, H4).
+- [x] T101 [US7] **GATE** `make lint && make ios-test` — T093–T095 green. `make lint` 0 violations; the unit target **212 tests in 43 suites**.
+- [x] T102 [US7] **GATE** `make core-lint && make core-test && make import-audit` — the full PR C verification gate before the PR opens. Green: clippy clean, **308 core tests**, all **six** audit scans (the sixth is new, below).
 
 **Checkpoint**: The list narrows to one account, names its scope, clears in one action, forgets the filter on relaunch, and every empty screen says why without blaming anyone.
+
+### US3 + US7 — RECORDED
+
+**What was actually built here**: the filter chrome (T088–T090) — a `GlassEffectContainer` on an
+**opaque** `.safeAreaBar(edge: .bottom)`, holding a scope `Menu` and a clear button, both
+`.buttonStyle(.glass)`, both carrying `glassEffectID` in one `@Namespace` — and the view model's
+presentational scope surface (`scopeTitle`, `scopeSubtitle`, `scopeAnnouncement`, `isFiltered`,
+`availableFilters`, `showsFilterChrome`, `emptyActionIsProminent`). Everything else in these two
+phases already existed and was **confirmed under test** rather than rewritten.
+
+**Breaks observed, each reverted:**
+
+1. **A remembered filter** — `setFilter` writing the account id to `UserDefaults`. The
+   persistence test went red on the defaults comparison, which is the Monday-morning defect:
+   filter on Friday, open a fraction of your own spending on Monday with nothing saying so.
+2. **A sifted answer** — `reload()` filtering the rows it already had instead of re-reading. The
+   query test went red: two requests where there should be three, and the third missing its nil
+   cursor.
+3. **Rows 2 and 3 swapped** in `EmptyKind.decide` — an all-excluded store reported as "the
+   statements had no transactions". Both rows red.
+4. **The `hasOnlyExcludedRows` branch deleted** — rows 4 and 5 collapsed into one sentence.
+   Row 5 red, including the assertion that rows 4 and 5 are different sentences.
+5. **Row 6's refinement flattened** (`statementWasEmpty: true` always) — row 6 red.
+6. **A blame word planted** in an empty state ("Some transactions are missing") — the honesty
+   audit red. This is T093's required observation, made against five separate breaks rather than
+   the one it asked for.
+
+**Deviations, each deliberate:**
+
+- **T098 found a real defect and fixed it.** `.buttonStyle(.glassProminent)` was applied to
+  *every* empty state carrying the import action, but design note D2 permits it in exactly one:
+  state 1, where there is no filter bar to compete with. State 3 ("nothing to show anywhere")
+  has accounts, therefore has the bar, and was shipping two prominent glass elements. The
+  decision is now `emptyActionIsProminent` on the view model — data, so it is tested rather than
+  reviewed.
+- **`.animation(_:value:)` instead of `withAnimation`.** The skill asks for the hierarchy change
+  inside `withAnimation`, but the change here is produced by an `await` inside the view model,
+  not by the tap: `withAnimation { Task { … } }` is both ambiguous to the compiler and animates
+  nothing. The animation is attached to `model.isFiltered`, the state the await produces, which
+  with `glassEffectID` in place is what makes the two buttons morph rather than cross-fade.
+- **A sixth audit scan.** FR-041 is a promise about what the app *cannot* do, so it is enforced
+  the way the others are: `UserDefaults`, `@AppStorage`, `@SceneStorage`,
+  `NSUbiquitousKeyValueStore`, `NSUserActivity` and `FileManager` are all banned under
+  `ios/Sources/Transactions/`. Watched failing against break 1.
+- **T091 needed no change.** `ImportedAccountsView` already navigates with the same
+  `AccountFilter.account(...)` value the in-screen menu now sets — one code path, confirmed by
+  reading it rather than by adding an indirection to prove it.
 
 ---
 
@@ -293,16 +704,16 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 5 (RED first) ⚠️
 
-- [ ] T103 [P] [US5] RED: create `ios/Tests/TransactionAmountTests.swift` — `formattedAmount` uses `Decimal.formatted(.currency(code:))` and round-trips a 7-integer-digit, 2-decimal amount with **zero** drift; the currency code comes from the **transaction's** `currency`, never the account's and never the locale's; a currency `en_IN` does not localise still renders exactly and unambiguously (FR-027); the amount is never abbreviated, scaled or truncated.
-- [ ] T104 [P] [US5] RED: add the no-aggregate audit to `ios/Tests/TransactionAmountTests.swift` — grep the compiled model surface and `ios/Sources/Transactions/` for `reduce`, `sum`, `total`, `average`, `balance` applied to an amount and assert none exists; assert `DateGroup` exposes no numeric member other than a row count (FR-025, FR-026, SC-011).
-- [ ] T105 [P] [US5] RED: add `theAccessibilityLabelAnnouncesTheCurrencyWithTheAmount` to `ios/Tests/TransactionAmountTests.swift` (FR-015, US5 AS-5).
+- [x] T103 [P] [US5] RED: create `ios/Tests/TransactionAmountTests.swift` — `formattedAmount` uses `Decimal.formatted(.currency(code:))` and round-trips a 7-integer-digit, 2-decimal amount with **zero** drift; the currency code comes from the **transaction's** `currency`, never the account's and never the locale's; a currency `en_IN` does not localise still renders exactly and unambiguously (FR-027); the amount is never abbreviated, scaled or truncated.
+- [x] T104 [P] [US5] RED: add the no-aggregate audit to `ios/Tests/TransactionAmountTests.swift` — grep the compiled model surface and `ios/Sources/Transactions/` for `reduce`, `sum`, `total`, `average`, `balance` applied to an amount and assert none exists; assert `DateGroup` exposes no numeric member other than a row count (FR-025, FR-026, SC-011).
+- [x] T105 [P] [US5] RED: add `theAccessibilityLabelAnnouncesTheCurrencyWithTheAmount` to `ios/Tests/TransactionAmountTests.swift` (FR-015, US5 AS-5).
 
 ### Implementation for User Story 5
 
-- [ ] T106 [US5] Implement `formattedAmount` in `ios/Sources/Transactions/TransactionListModels.swift` with `Decimal.formatted(.currency(code:))` — `Decimal`'s own `FormatStyle`, which never routes through `Double`. No `NumberFormatter` with a `Double` input, no `String(format:)`, no `Double` anywhere on the path (Constitution II, FR-016).
-- [ ] T107 [US5] Apply `.monospacedDigit()` to every amount and every count rendered by `ios/Sources/Transactions/TransactionRowView.swift` and `TransactionListView.swift`, so figures do not jitter while scrolling (FR-016, FR-027).
-- [ ] T108 [US5] Include the currency in the row's accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift`, alongside date, description, amount, direction in words and account (FR-015).
-- [ ] T109 [US5] **GATE** `make lint && make ios-test` — T103–T105 green.
+- [x] T106 [US5] **Already landed in US1 — confirmed under test.** Implement `formattedAmount` in `ios/Sources/Transactions/TransactionListModels.swift` with `Decimal.formatted(.currency(code:))` — `Decimal`'s own `FormatStyle`, which never routes through `Double`. No `NumberFormatter` with a `Double` input, no `String(format:)`, no `Double` anywhere on the path (Constitution II, FR-016).
+- [x] T107 [US5] **Already landed in US1 — confirmed under test.** Apply `.monospacedDigit()` to every amount and every count rendered by `ios/Sources/Transactions/TransactionRowView.swift` and `TransactionListView.swift`, so figures do not jitter while scrolling (FR-016, FR-027).
+- [x] T108 [US5] **Already landed in US1 — confirmed under test.** Include the currency in the row's accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift`, alongside date, description, amount, direction in words and account (FR-015).
+- [x] T109 [US5] **GATE** `make lint && make ios-test` — T103–T105 green. `make lint` 0 violations; the unit target green at that point.
 
 ## Phase 9: User Story 6 — What the engine already worked out is visible (Priority: P6)
 
@@ -314,23 +725,76 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 6 (RED first) ⚠️
 
-- [ ] T110 [P] [US6] RED: create `ios/Tests/TransactionCategoryTests.swift` — a categorized row shows its category **by name**; an uncategorized row shows the plain-language label rather than a blank (FR-017); no row surfaces a `category_id`, a `categorised_by`, a dedup layer name or any other engine internal (FR-019, SC-016).
-- [ ] T111 [P] [US6] RED: create `ios/Tests/TransactionTransferMarkingTests.swift` — with the flag set **by the test**, a flagged row renders the transfer marking; the marking is carried by a glyph **and** a word, never by colour alone (FR-018, FR-071); the accessibility sentence announces it; the row **still appears** in the list and is never hidden or filtered out (US6 AS-7); with the flag unset, no marking appears. Name every test for the **marking**, never for detection.
-- [ ] T112 [P] [US6] RED: create `ios/Tests/TransactionAccessibilityTests.swift` — the automatable half of SC-013: each row is one combined element whose label is the exact expected sentence (date, description, amount with currency, direction in words, account, and "transfer" when marked); every date heading has a label; direction, transfer, uncategorized and the filtered state are each identifiable **with colour perception removed entirely** (FR-071, SC-014); no view body contains a user-visible string literal — every one comes from `TransactionListStrings` (W4).
+- [x] T110 [P] [US6] RED: create `ios/Tests/TransactionCategoryTests.swift` — a categorized row shows its category **by name**; an uncategorized row shows the plain-language label rather than a blank (FR-017); no row surfaces a `category_id`, a `categorised_by`, a dedup layer name or any other engine internal (FR-019, SC-016).
+- [x] T111 [P] [US6] RED: create `ios/Tests/TransactionTransferMarkingTests.swift` — with the flag set **by the test**, a flagged row renders the transfer marking; the marking is carried by a glyph **and** a word, never by colour alone (FR-018, FR-071); the accessibility sentence announces it; the row **still appears** in the list and is never hidden or filtered out (US6 AS-7); with the flag unset, no marking appears. Name every test for the **marking**, never for detection.
+- [x] T112 [P] [US6] RED: create `ios/Tests/TransactionAccessibilityTests.swift` — the automatable half of SC-013: each row is one combined element whose label is the exact expected sentence (date, description, amount with currency, direction in words, account, and "transfer" when marked); every date heading has a label; direction, transfer, uncategorized and the filtered state are each identifiable **with colour perception removed entirely** (FR-071, SC-014); no view body contains a user-visible string literal — every one comes from `TransactionListStrings` (W4).
 
 ### Implementation for User Story 6
 
-- [ ] T113 [US6] Implement `categoryLabel` as `categoryName ?? Strings.uncategorized` in `ios/Sources/Transactions/TransactionListModels.swift` — never blank, never an identifier (FR-017).
-- [ ] T114 [US6] Render the category and the transfer marking in `ios/Sources/Transactions/TransactionRowView.swift` as an SF Symbol **plus** its word, sized so both survive the accessibility text sizes and the vertical layout, and never encoded in colour (FR-018, FR-071).
-- [ ] T115 [US6] Compose the full row accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift` and assert nothing else on the row is separately focusable (FR-015, FR-072).
-- [ ] T116 [US6] Restore full contrast explicitly wherever a container would render content in a de-emphasised style across `ios/Sources/Transactions/` — the account name, the category and the date are **content**, not decoration (FR-066). This is the failure 016 paid for at four sites; it is a requirement here, not a preference.
-- [ ] T117 [US6] Confirm every tint on this screen is the app's own accent from `ios/Sources/Theme.swift`, never the system default, across `ios/Sources/Transactions/` (FR-073).
-- [ ] T118 [US6] Extend `ios/UITests/ImportFrontDoorUITests.swift` with `theEmptyTransactionListPassesTheSystemAccessibilityAudit`: from a fresh install, push the unfiltered list via the toolbar item and run `performAccessibilityAudit()` at default and at the largest accessibility text size, in Light and Dark Mode. **This is the only part of the screen an automated audit can reach** — the populated list sits behind a real file being picked, which no automated run can do, and FR-077 forbids adding a DEBUG-only seeding hook to close that gap here. The populated screen stays on the manual gate (SC-012, FR-075, FR-076).
-- [ ] T119 [US6] Audit mechanically that detection stays unwired: add a check to `scripts/import-path-audit.sh` (or a Swift test in `ios/Tests/TransactionTransferMarkingTests.swift`) failing if `detectTransfers` appears anywhere under `ios/Sources/`, and grep `ios/Tests/` and this file for a test or task name implying detection. FR-018's limitation must be impossible to lose by accident.
-- [ ] T120 [US6] **GATE** `make lint && make ios-test` — T110–T112 green, including the new UI test.
-- [ ] T121 [US6] **GATE** `make core-lint && make core-test && make import-audit` — the full PR D verification gate before the PR opens.
+- [x] T113 [US6] **Already landed in US1 — confirmed under test.** Implement `categoryLabel` as `categoryName ?? Strings.uncategorized` in `ios/Sources/Transactions/TransactionListModels.swift` — never blank, never an identifier (FR-017).
+- [x] T114 [US6] Render the category and the transfer marking in `ios/Sources/Transactions/TransactionRowView.swift` as an SF Symbol **plus** its word, sized so both survive the accessibility text sizes and the vertical layout, and never encoded in colour (FR-018, FR-071).
+- [x] T115 [US6] **Already landed in US1 — confirmed under test.** Compose the full row accessibility sentence in `ios/Sources/Transactions/TransactionListModels.swift` and assert nothing else on the row is separately focusable (FR-015, FR-072).
+- [x] T116 [US6] Restore full contrast explicitly wherever a container would render content in a de-emphasised style across `ios/Sources/Transactions/` — the account name, the category and the date are **content**, not decoration (FR-066). This is the failure 016 paid for at four sites; it is a requirement here, not a preference.
+- [x] T117 [US6] **Confirmed and pinned.** Confirm every tint on this screen is the app's own accent from `ios/Sources/Theme.swift`, never the system default, across `ios/Sources/Transactions/` (FR-073).
+- [x] T118 [US6] Extend `ios/UITests/ImportFrontDoorUITests.swift` with `theEmptyTransactionListPassesTheSystemAccessibilityAudit`: from a fresh install, push the unfiltered list via the toolbar item and run `performAccessibilityAudit()` at default and at the largest accessibility text size, in Light and Dark Mode. **This is the only part of the screen an automated audit can reach** — the populated list sits behind a real file being picked, which no automated run can do, and FR-077 forbids adding a DEBUG-only seeding hook to close that gap here. The populated screen stays on the manual gate (SC-012, FR-075, FR-076).
+- [x] T119 [US6] Audit mechanically that detection stays unwired: add a check to `scripts/import-path-audit.sh` (or a Swift test in `ios/Tests/TransactionTransferMarkingTests.swift`) failing if `detectTransfers` appears anywhere under `ios/Sources/`, and grep `ios/Tests/` and this file for a test or task name implying detection. FR-018's limitation must be impossible to lose by accident.
+- [x] T120 [US6] **GATE** `make lint && make ios-test` — T110–T112 green, including the new UI test. `make lint` 0 violations; **238 tests in 47 suites**; the new UI test passes on a wiped simulator. The rest of the UI target is still red for the front-door contrast failure that predates the slice (T069).
+- [x] T121 [US6] **GATE** `make core-lint && make core-test && make import-audit` — the full PR D verification gate before the PR opens. Green: clippy clean, **308 core tests** across 16 binaries, all **eight** audit scans.
 
 **Checkpoint**: Every field the engine already holds is on screen, announced, and never encoded in colour alone — and the transfer marking is honest about being unexercised in a real install.
+
+### US5 + US7 — RECORDED
+
+Four new suites — `TransactionAmountTests`, `TransactionCategoryTests`,
+`TransactionTransferMarkingTests`, `TransactionAccessibilityTests` — and, again, almost all of
+the *implementation* they cover had landed in US1. What is new is the proving, three source
+audits, and one contrast fix.
+
+**Breaks observed, each reverted:**
+
+1. **A `Double` and compact notation on the amount path** — ₹1,234,567.89 rendered as `−₹1.2M`,
+   and a KWD amount of 66.660 rendered as `67`. Four of the nine amount tests red.
+2. **An uncategorized row rendering a blank** — red in two suites.
+3. **The transfer marking dropped from the announcement** — red in two suites.
+4. **Copy typed straight into a view body** (`Text("Showing everything")`) — the W4 literal
+   audit red, naming the file and line.
+5. **A transfer-detection call added to the app**, and **a comment claiming detection happens** —
+   both caught by T119's new scan.
+
+**Deviations, each deliberate:**
+
+- ⚠️ **T118 as written is impossible, and the test says so instead of pretending.** It asks for
+  the unfiltered list to be pushed *from a fresh install* via the toolbar item — but that item
+  only exists once an account does, an account only exists after a real statement is imported,
+  and importing needs the system document picker, which no automated run can drive. FR-077
+  forbids the DEBUG-only seeding hook that would close the gap. The UI test therefore asserts
+  the **reachability fact** — a fresh install offers the import action and no route to an empty
+  list, in both appearances at the largest text size — and the populated list stays on the
+  manual gate, where it already was. **The transaction list has no automated appearance
+  coverage at all**, and that is now written down rather than implied.
+- **A finding, not fixed here**: because the front door hides its link until an account exists,
+  `EmptyKind.nothingImported` is **unreachable on the transaction list** in the shipped app —
+  the front door's own empty state covers that case. The branch is defensive, its test is
+  honest about being a unit test of a pure function, and removing it would be wrong the day a
+  delete path exists.
+- **T116 touches system chrome, on purpose.** A `Section` header renders de-emphasised by
+  default, and a date is *content* — it is how a person finds the day they are looking for. The
+  heading now carries an explicit `.foregroundStyle(.primary)`. This narrows T045's "system
+  `List` chrome, unmodified": colour only, no background, no font override. 016 paid for this
+  exact failure at four sites; it is a requirement here, not a preference.
+- **Three more audit scans** (six → eight): no aggregate (T104's grep half — `reduce`, and any
+  `var`/`let`/`func` named `total`, `subtotal`, `average`, `balance`, `aggregate`), no `.tint(`
+  (T117), and no `detectTransfers` call or detection claim anywhere in `ios/Sources/` or
+  `ios/Tests/` (T119). The last one **skips lines carrying a negation** — "Kaname does not
+  detect transfers" is the documentation the scan exists to protect, and a grep that tried to
+  parse English would eventually delete its own reason.
+- **T111 got its own file**, as the task asked, and its flag is set two ways: by the test
+  directly, and by the engine's own `detect_transfers` invoked **inside the test** over a real
+  store — the call the app itself never makes.
+- **The row announcement is asserted by order, not by comma count.** The first version counted
+  six comma-separated pieces and found seven: the account identity carries a comma of its own
+  ("Everyday Savings, ending 1123"). A test that counted commas would have been asserting the
+  shape of an account name.
 
 ---
 
@@ -346,38 +810,38 @@ Two-layer repo (`plan.md` → Project Structure):
 
 ### Tests for User Story 8 (RED first) ⚠️
 
-- [ ] T122 [P] [US8] RED: create `ios/Tests/ImportCompletionSignalTests.swift` — I1 the signal is emitted **after** `import_statement` returns successfully, so a subscriber can never observe a partial statement; I2 a failed or cancelled import emits **nothing** (FR-055); I3 it carries `Void` — no row, count or account crosses it, so there is still exactly one source of the population; I4 the subscription dies with the screen's `.task`.
-- [ ] T123 [P] [US8] RED: add the refresh invariants to `ios/Tests/TransactionFilterTests.swift` — V3 `refreshAfterImport` preserves `filter` **and** the captured anchor row id (FR-056, SC-010); a refresh while filtered to an account the import did not touch leaves the rendered sequence byte-identical (US8 AS-6); a refresh never re-requests a cursor it has already consumed, so no row is duplicated.
-- [ ] T124 [P] [US8] RED: add `aCancelledImportProducesNoTransitionAtAll` to `ios/Tests/ImportCompletionSignalTests.swift` — the view model's state sequence across a cancelled import is empty, because no event is emitted (`data-model.md` §5 invariant 5).
+- [x] T122 [P] [US8] RED: create `ios/Tests/ImportCompletionSignalTests.swift` — I1 the signal is emitted **after** `import_statement` returns successfully, so a subscriber can never observe a partial statement; I2 a failed or cancelled import emits **nothing** (FR-055); I3 it carries `Void` — no row, count or account crosses it, so there is still exactly one source of the population; I4 the subscription dies with the screen's `.task`.
+- [x] T123 [P] [US8] RED: add the refresh invariants to `ios/Tests/TransactionFilterTests.swift` — V3 `refreshAfterImport` preserves `filter` **and** the captured anchor row id (FR-056, SC-010); a refresh while filtered to an account the import did not touch leaves the rendered sequence byte-identical (US8 AS-6); a refresh never re-requests a cursor it has already consumed, so no row is duplicated.
+- [x] T124 [P] [US8] RED: add `aCancelledImportProducesNoTransitionAtAll` to `ios/Tests/ImportCompletionSignalTests.swift` — the view model's state sequence across a cancelled import is empty, because no event is emitted (`data-model.md` §5 invariant 5).
 
 ### Implementation for User Story 8
 
-- [ ] T125 [US8] ⚠️ Create `ios/Sources/Transactions/ImportCompletionSignal.swift` holding the `AsyncStream<Void>` continuation store, and add the **minimum** plumbing to `ios/Sources/Import/ImportService.swift` to yield it on the success path only — spending the headroom T067 created. **Re-check `wc -l ios/Sources/Import/ImportService.swift` ≤ 400 before and after** and record both numbers; if the file would exceed 400, move something out rather than reformatting to squeeze under (`swiftlint --strict`).
-- [ ] T126 [US8] Implement `refreshAfterImport()` in `ios/Sources/Transactions/TransactionListViewModel.swift`: re-read the pages currently held, from page 1, with the **same filter**, and swap them in as one change so the list never trickles (FR-053, FR-054).
-- [ ] T127 [US8] Implement anchor capture and restore in `ios/Sources/Transactions/TransactionListViewModel.swift` and `TransactionListView.swift` using `.scrollPosition(id:)`: capture the top-visible row id **before** the re-read and restore it after, so a person deep in a long list is not thrown to the top (FR-056, SC-010, research R14).
-- [ ] T128 [US8] Subscribe to the signal from the list's `.task` in `ios/Sources/Transactions/TransactionListView.swift`, so the subscription is cancelled with the screen (I4).
-- [ ] T129 [US8] Re-read `importedAccounts()` on the **same** signal in `ios/Sources/Import/ImportViewModel.swift`, so the front-door count and the list can never be refreshed from different moments (I5, FR-006, FR-057).
-- [ ] T130 [US8] Confirm every engine read on this path happens off the main thread (`TransactionHistoryService` is an actor; no `Store` method is called from a view body or a `@MainActor` initialiser) and that memory does not grow without bound as pages accumulate — cap or window the retained pages if a scroll of the 10,000-row corpus says otherwise (FR-057, FR-061).
-- [ ] T131 [US8] **GATE** `make lint && make ios-test` — T122–T124 green.
+- [x] T125 [US8] ⚠️ Create `ios/Sources/Transactions/ImportCompletionSignal.swift` holding the `AsyncStream<Void>` continuation store, and add the **minimum** plumbing to `ios/Sources/Import/ImportService.swift` to yield it on the success path only — spending the headroom T067 created. **Re-check `wc -l ios/Sources/Import/ImportService.swift` ≤ 400 before and after** and record both numbers; if the file would exceed 400, move something out rather than reformatting to squeeze under (`swiftlint --strict`).
+- [x] T126 [US8] Implement `refreshAfterImport()` in `ios/Sources/Transactions/TransactionListViewModel.swift`: re-read the pages currently held, from page 1, with the **same filter**, and swap them in as one change so the list never trickles (FR-053, FR-054).
+- [x] T127 [US8] Implement anchor capture and restore in `ios/Sources/Transactions/TransactionListViewModel.swift` and `TransactionListView.swift` using `.scrollPosition(id:)`: capture the top-visible row id **before** the re-read and restore it after, so a person deep in a long list is not thrown to the top (FR-056, SC-010, research R14).
+- [x] T128 [US8] Subscribe to the signal from the list's `.task` in `ios/Sources/Transactions/TransactionListView.swift`, so the subscription is cancelled with the screen (I4).
+- [x] T129 [US8] Re-read `importedAccounts()` on the **same** signal in `ios/Sources/Import/ImportViewModel.swift`, so the front-door count and the list can never be refreshed from different moments (I5, FR-006, FR-057).
+- [x] T130 [US8] Confirm every engine read on this path happens off the main thread (`TransactionHistoryService` is an actor; no `Store` method is called from a view body or a `@MainActor` initialiser) and that memory does not grow without bound as pages accumulate — cap or window the retained pages if a scroll of the 10,000-row corpus says otherwise (FR-057, FR-061).
+- [x] T131 [US8] **GATE** `make lint && make ios-test` — T122–T124 green.
 
 ## Phase 11: Polish, gates and the record
 
-- [ ] T132 [P] Confirm the S-suite runs under `make core-test` by default — not behind `--ignored`, not behind a feature flag — and record the measured values from `core/crates/kaname-core/tests/history_perf.rs` (first page, worst page, per-account spread, `account_summaries()` cost) in `specs/018-transaction-list/quickstart.md` § *The performance measurement*, replacing the planning-machine reference numbers with this build's.
-- [ ] T133 [P] Audit that **no test in this slice is disabled**: `grep -rn "\.disabled(\|#\[ignore\]\|XCTSkip" ios/Tests ios/UITests core/crates/kaname-core/tests` must return nothing added by this slice — in particular the R17 determinism suite (T006, T007) and US1 AS-6's engine coverage are live and green.
-- [ ] T134 [P] ⚠️ Record what US1 AS-6 now asserts, in `specs/018-transaction-list/quickstart.md` § *Definition of done*: after T008 and T008c, two **credit-card** accounts holding an identical date + description + amount each keep their own row — AS-6 holds as written. A **bank ledger and a card** still collapse such a row, which is 013's entire purpose and is fenced by T008b. Carry forward as an open finding for the slice that owns dedup: two accounts *of the same kind* are now never compared at all, which is a blunt guard — a person with two bank accounts, one of which itemises the other's card spends, would double-count. The narrow fix is a source-kind guard; a matcher that understands *why* two rows are the same purchase is a larger question.
-- [ ] T135 [P] Audit every fixture added by this slice (`core/crates/kaname-core/tests/common/mod.rs`, every new `ios/Tests` file) and confirm it is synthetic: no real merchant, no real statement, no real account identifier, no plausible real card last-4 pattern (FR-064, SC-017).
-- [ ] T136 [P] Update `.scratch/HANDOFF.md` §7 "Key reusable seams" with `history_page`, `account_summaries`, the `LIVE` constant, schema **v7**, `StoreProvider` and the widened networking audit — and carry **R17** (the matcher's cross-account collapse and the absent same-institution guard) and **R18** (`detectTransfers()` is still uncalled; wiring is the categorize slice's) forward as open items with their evidence.
-- [ ] T137 [P] Update `AGENTS.md` with the two traps this slice adds: `ImportService.swift` is at the 400-line limit and the count block is the only headroom; and `make core-xcframework` before `make ios-gen`, never a bare `tuist generate`.
-- [ ] T138 [P] Update the P3 status line in `docs/kaname-ios-plan.md` to record that the transaction list has landed, and that the DEBUG-only test-seeding hook slice — which is what would make SC-012 automatable for this screen and every P3 screen after it — is still scheduled before the categorize slice.
-- [ ] T139 ⚠️ Run the **manual, release-blocking** gate in `specs/018-transaction-list/quickstart.md` § *The manual, release-blocking gate* on a real device with a release build: G1–G8 (accessibility: no truncated amount at the largest size, no occlusion by the bottom bar, VoiceOver as one coherent sentence per row, heading announcement with the year rule, filter announced and clearable, Reduce Transparency, Increase Contrast + Dark Mode, the date stays identifiable while scrolling) and G9–G14 (device performance: first screenful < 1 s on 10,000/8, no persistent blank rows, the 200-row comparison, filter apply/clear < 300 ms, an import while scrolled and filtered, a cancelled import changing nothing).
-- [ ] T140 Fill the **Record here** table in `specs/018-transaction-list/quickstart.md` with the device, iOS build, app build commit, date run, the G1–G8 result and the G9/G11/G12 measurements. SC-012 is not satisfied by running the gate — it is satisfied by recording it.
-- [ ] T141 **FULL GATE** `make core-lint` (repo-root `Makefile`).
-- [ ] T142 **FULL GATE** `make core-test` — including the O/L/P/F/S suites, the v6→v7 migration test and the R17 determinism suite.
-- [ ] T143 **FULL GATE** `make core-privacy-audit` — still green, still unchanged, still zero new dependencies.
-- [ ] T144 **FULL GATE** `make lint` — `swiftlint --strict` and `swift-format lint --strict`; `ImportService.swift` ≤ 400 lines.
-- [ ] T145 **FULL GATE** `make ios-gen` — depends on `core-xcframework`; never a bare `tuist generate`.
-- [ ] T146 **FULL GATE** `make ios-test`.
-- [ ] T147 **FULL GATE** `make import-audit` — the **widened** networking scan over all of `ios/Sources`, plus the glass, `#available(iOS 26` and bank-literal scans.
+- [x] T132 [P] Confirm the S-suite runs under `make core-test` by default — not behind `--ignored`, not behind a feature flag — and record the measured values from `core/crates/kaname-core/tests/history_perf.rs` (first page, worst page, per-account spread, `account_summaries()` cost) in `specs/018-transaction-list/quickstart.md` § *The performance measurement*, replacing the planning-machine reference numbers with this build's.
+- [x] T133 [P] Audit that **no test in this slice is disabled**: `grep -rn "\.disabled(\|#\[ignore\]\|XCTSkip" ios/Tests ios/UITests core/crates/kaname-core/tests` must return nothing added by this slice — in particular the R17 determinism suite (T006, T007) and US1 AS-6's engine coverage are live and green.
+- [x] T134 [P] ⚠️ Record what US1 AS-6 now asserts, in `specs/018-transaction-list/quickstart.md` § *Definition of done*: after T008 and T008c, two **credit-card** accounts holding an identical date + description + amount each keep their own row — AS-6 holds as written. A **bank ledger and a card** still collapse such a row, which is 013's entire purpose and is fenced by T008b. Carry forward as an open finding for the slice that owns dedup: two accounts *of the same kind* are now never compared at all, which is a blunt guard — a person with two bank accounts, one of which itemises the other's card spends, would double-count. The narrow fix is a source-kind guard; a matcher that understands *why* two rows are the same purchase is a larger question.
+- [x] T135 [P] Audit every fixture added by this slice (`core/crates/kaname-core/tests/common/mod.rs`, every new `ios/Tests` file) and confirm it is synthetic: no real merchant, no real statement, no real account identifier, no plausible real card last-4 pattern (FR-064, SC-017).
+- [x] T136 [P] Update `.scratch/HANDOFF.md` §7 "Key reusable seams" with `history_page`, `account_summaries`, the `LIVE` constant, schema **v7**, `StoreProvider` and the widened networking audit — and carry **R17** (the matcher's cross-account collapse and the absent same-institution guard) and **R18** (`detectTransfers()` is still uncalled; wiring is the categorize slice's) forward as open items with their evidence.
+- [x] T137 [P] Update `AGENTS.md` with the two traps this slice adds: `ImportService.swift` is at the 400-line limit and the count block is the only headroom; and `make core-xcframework` before `make ios-gen`, never a bare `tuist generate`.
+- [x] T138 [P] Update the P3 status line in `docs/kaname-ios-plan.md` to record that the transaction list has landed, and that the DEBUG-only test-seeding hook slice — which is what would make SC-012 automatable for this screen and every P3 screen after it — is still scheduled before the categorize slice.
+- [~] T139 ⚠️ **PARTIAL, and deferred by the holder — tracked as `.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md`.** — G9–G14 run on 2026-08-15 (iPhone 17 Pro Max, iOS 26.6, Release, `4a10c07`); G1–G8 not run, and G9/G11/G12 were judged by eye rather than measured.** G13/G14 **pass**, which is the only device evidence US8 has. See `quickstart.md` § *Record here*. Run the **manual, release-blocking** gate in `specs/018-transaction-list/quickstart.md` § *The manual, release-blocking gate* on a real device with a release build: G1–G8 (accessibility: no truncated amount at the largest size, no occlusion by the bottom bar, VoiceOver as one coherent sentence per row, heading announcement with the year rule, filter announced and clearable, Reduce Transparency, Increase Contrast + Dark Mode, the date stays identifiable while scrolling) and G9–G14 (device performance: first screenful < 1 s on 10,000/8, no persistent blank rows, the 200-row comparison, filter apply/clear < 300 ms, an import while scrolled and filtered, a cancelled import changing nothing).
+- [x] T140 Fill the **Record here** table in `specs/018-transaction-list/quickstart.md` with the device, iOS build, app build commit, date run, the G1–G8 result and the G9/G11/G12 measurements. SC-012 is not satisfied by running the gate — it is satisfied by recording it.
+- [x] T141 **FULL GATE** `make core-lint` (repo-root `Makefile`).
+- [x] T142 **FULL GATE** `make core-test` — including the O/L/P/F/S suites, the v6→v7 migration test and the R17 determinism suite.
+- [x] T143 **FULL GATE** `make core-privacy-audit` — still green, still unchanged, still zero new dependencies.
+- [x] T144 **FULL GATE** `make lint` — `swiftlint --strict` and `swift-format lint --strict`; `ImportService.swift` ≤ 400 lines.
+- [x] T145 **FULL GATE** `make ios-gen` — depends on `core-xcframework`; never a bare `tuist generate`.
+- [x] T146 **FULL GATE** `make ios-test`.
+- [x] T147 **FULL GATE** `make import-audit` — the **widened** networking scan over all of `ios/Sources`, plus the glass, `#available(iOS 26` and bank-literal scans.
 
 **Checkpoint**: The list keeps up with an import, the gates are green, the manual gate is recorded, and the two findings this slice did not own are carried forward with their evidence.
 

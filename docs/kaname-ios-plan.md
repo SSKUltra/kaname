@@ -170,8 +170,19 @@ Approach: **fixtures-driven, incremental by bank** — port the top banks first,
   **Under way.** The statement-import vertical (`016-statement-import-vertical`) has landed:
   the first-run front door, the PDFKit → engine → encrypted-store pipeline, honest failures,
   account attribution, the integrity verdict in plain language, and a cancellable import —
-  with a `KanameUITests` accessibility audit gating the front door. The transaction list,
-  dashboard, budgets, tags, search and export are specified slice by slice from here.
+  with a `KanameUITests` accessibility audit gating the front door. Geometry-first PDF row
+  reconstruction followed (`017-column-major-pdf`), and **the transaction list has now landed**
+  (`018-transaction-list`): every account's history in one date-grouped, keyset-paged sequence,
+  filterable to one account and clearable in a tap, six honest empty states, and a list that
+  keeps up with an import without taking away the filter or the person's place in it. It added
+  schema **v7** (one partial index), `history_page` + `account_summaries`, and moved the front
+  door's count out of Swift and into the engine.
+  ⚠️ **The DEBUG-only test-seeding hook slice is still scheduled before the categorize slice.**
+  Without it no automated run can reach a *populated* transaction list at all — the list is
+  behind an import, an import is behind the system document picker, and FR-077 forbids seeding
+  the shipped app. That is what makes SC-012 manual-gate-only for this screen, and it will make
+  it manual-gate-only for every P3 screen after it. Dashboard, budgets, tags, search and export
+  are specified slice by slice from here.
 - **P4 — Account + entitlement + purchase.** Web (Razorpay) + StoreKit 2 IAP; account-based cross-platform entitlement; server-side receipt validation; gated premium hooks.
 - **P5 — Expand + ship.** Remaining parsers; WidgetKit; App Intents; accessibility pass; TestFlight → App Store.
 - **P6 — Premium on iOS (later).** Cross-device E2E sync, managed AI, AA one-click, broker/CAS sync, split hosting → then **Android** via the shared Rust core.

@@ -11,6 +11,9 @@ actor ImportService {
     /// it when it names that same document.
     private var inFlight: (url: URL, task: Task<PipelineOutcome, Error>)?
     private let pipeline: ImportPipeline
+    /// Where a committed statement is announced — and the only thing this actor tells anyone
+    /// about a finished import beyond its own return value (FR-053).
+    private let completions: ImportCompletionSignal
     /// The statement waiting on a person to say which account it belongs to. Held only until
     /// they answer or walk away — nothing has been written for it yet.
     private var pendingChoice: PendingImport?
@@ -18,11 +21,13 @@ actor ImportService {
     init(
         extractor: any StatementTextExtractor,
         store: Store,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        completions: ImportCompletionSignal = .shared
     ) {
         // The clock lives on this side, not in the core: the engine reads no wall-clock time,
         // so the timestamp is an input. Injectable so tests are deterministic.
         pipeline = ImportPipeline(extractor: extractor, store: store, now: now)
+        self.completions = completions
     }
 
     /// Import one statement. Throws `ImportFailure` and nothing else: every engine and store
@@ -52,6 +57,9 @@ actor ImportService {
         defer { inFlight = nil }
         let outcome = try await task.value
         pendingChoice = outcome.pending
+        // After the store's one transaction has committed, and only when it did: a statement
+        // still waiting on an account question wrote nothing to announce.
+        if case .finished = outcome.result { completions.send() }
         return outcome.result
     }
 
@@ -59,7 +67,9 @@ actor ImportService {
     func resolveAccount(_ decision: AccountDecision) throws -> ImportSummary {
         guard let pending = pendingChoice else { throw ImportFailure.cancelled }
         pendingChoice = nil
-        return try pipeline.finish(pending, decision: decision)
+        let summary = try pipeline.finish(pending, decision: decision)
+        completions.send()
+        return summary
     }
 
     /// Stop the running import. Every checkpoint sits before the single write, so a
@@ -74,20 +84,6 @@ actor ImportService {
     func importedAccounts() throws -> [ImportedAccount] {
         try pipeline.importedAccounts()
     }
-}
-
-/// A parse waiting on an account decision. Everything needed to finish the import without
-/// reading the file — or asking for its password — a second time.
-struct PendingImport: Sendable {
-    let issuer: Issuer
-    let parsed: ParsedStatement
-    let integrity: IntegrityOutcome
-}
-
-/// What one pipeline run produced: what to show, and what it is still waiting on.
-private struct PipelineOutcome: Sendable {
-    let result: ImportResult
-    let pending: PendingImport?
 }
 
 /// The stages themselves, as a plain value so each one stays small and separately readable.
@@ -122,19 +118,16 @@ private struct ImportPipeline: Sendable {
         }
     }
 
-    /// Every account the store holds, with the weight of what is in it. The count is the
-    /// evidence: an account with no transactions behind it would be a claim, not a fact.
-    /// Live rows only — see `StoredTransaction.isLive`.
+    /// Every account the store holds, with the weight of what is in it — counted by the engine
+    /// through its `LIVE` predicate and the v7 index, the same rule and the same index the
+    /// transaction list reads, so a count and a list can no longer disagree (FR-006, FR-008).
     fileprivate func importedAccounts() throws -> [ImportedAccount] {
         do {
-            return try store.listAccounts().map { account in
+            return try store.accountSummaries().map {
                 ImportedAccount(
-                    id: account.id,
-                    name: account.name,
-                    last4: account.last4,
-                    isCreditCard: account.isCreditCard,
-                    transactionCount: try store.listTransactions(accountId: account.id).filter(\.isLive).count
-                )
+                    id: $0.id, name: $0.name, last4: $0.last4, isCreditCard: $0.isCreditCard,
+                    transactionCount: Int($0.liveTransactionCount),
+                    hasOnlyExcludedRows: $0.hasOnlyExcludedRows)
             }
         } catch {
             throw ImportFailure.storageUnavailable
@@ -150,8 +143,12 @@ private struct ImportPipeline: Sendable {
         switch decision {
         case .existing(let id):
             target = .existing(id: id, last4: pending.parsed.cardLast4)
-        case .new(let name):
-            target = Self.newAccount(named: name, issuer: pending.issuer, parsed: pending.parsed)
+        case .new(let name, let last4):
+            // The document wins when it printed digits of its own: those were read, not
+            // remembered. The typed ones are for the statements that print too few.
+            target = Self.newAccount(
+                named: name, issuer: pending.issuer, parsed: pending.parsed,
+                statedLast4: last4)
         }
         return try persist(pending, target: target) { _ in }
     }
@@ -323,13 +320,14 @@ private struct ImportPipeline: Sendable {
     private static func newAccount(
         named name: String,
         issuer: Issuer,
-        parsed: ParsedStatement
+        parsed: ParsedStatement,
+        statedLast4: String? = nil
     ) -> ImportAccountTarget {
         .new(
             name: name,
             bankCode: issuer.bankCode,
             isCreditCard: issuer.kind == .creditCard,
-            last4: parsed.cardLast4,
+            last4: parsed.cardLast4 ?? statedLast4,
             currency: parsed.lines.first?.currency ?? "INR"
         )
     }

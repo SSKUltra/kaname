@@ -7,8 +7,25 @@ import ProjectDescription
 // source is the UniFFI-generated `Generated/kaname_core.swift`; it links the prebuilt
 // `Frameworks/KanameCoreFFI.xcframework` (built by `make core-xcframework`). Both the
 // generated Swift and the xcframework are git-ignored build artifacts.
+
+// Running on a real device needs a signing team, and `tuist generate` rewrites the project
+// every time — so a team set by hand in Xcode is gone at the next `make ios-gen`. It is read
+// from the environment rather than committed: this repository is public, and a team
+// identifier is not ours to publish.
+//
+//     TUIST_DEVELOPMENT_TEAM=ABCDE12345 make ios-gen
+//
+// Unset, the project generates exactly as it did before — which is what the simulator, the
+// test gates and CI all want.
+let developmentTeam = Environment.developmentTeam.getString(default: "")
+let signing: SettingsDictionary =
+    developmentTeam.isEmpty
+    ? [:]
+    : ["DEVELOPMENT_TEAM": .string(developmentTeam), "CODE_SIGN_STYLE": .string("Automatic")]
+
 let project = Project(
     name: "Kaname",
+    settings: .settings(base: signing),
     targets: [
         .target(
             name: "Kaname",

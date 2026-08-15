@@ -43,11 +43,13 @@ final class ImportViewModel {
     }
 
     /// The real wiring: PDFKit for extraction, and the encrypted store this device already
-    /// holds the key for. Deliberately off the main actor: opening the database is I/O.
+    /// holds the key for — the *same* `Store` the transaction list reads through, so a page
+    /// read can never land inside an import's transaction. Deliberately off the main actor:
+    /// opening the database is I/O.
     nonisolated static func liveService() throws -> ImportService {
         ImportService(
             extractor: PDFKitStatementTextExtractor(),
-            store: try StoreLocator(keyStore: KeychainKeyStore()).open()
+            store: try StoreProvider.shared()
         )
     }
 
@@ -97,6 +99,15 @@ final class ImportViewModel {
     func refreshAccounts() async {
         guard let service = try? resolveService() else { return }
         accounts = (try? await service.importedAccounts()) ?? accounts
+    }
+
+    /// Keep the front door's counts current from the **same** signal the transaction list
+    /// refreshes on, so a count and a list can never be read from two different moments
+    /// (I5, FR-006, FR-057). The loop belongs to the caller's `.task`.
+    func refreshWhenImportsComplete(_ signal: ImportCompletionSignal = .shared) async {
+        for await _ in signal.events {
+            await refreshAccounts()
+        }
     }
 
     func importStatement(at url: URL) async {

@@ -55,9 +55,10 @@ pub use statement::{
     DirectionSource, LedgerMetadata, LineWords, ParsedStatement, ParsedTransaction, Word,
 };
 pub use store::{
-    CategorizeSummary, DedupSummary, ImportAccountTarget, ImportOutcome, ImportRequest, NewAccount,
+    AccountMark, AccountSummary, CategorizeSummary, DedupSummary, HistoryCursor, HistoryPage,
+    HistoryQuery, HistoryRow, ImportAccountTarget, ImportOutcome, ImportRequest, NewAccount,
     NewCategory, NewImportTransaction, NewStatement, NewTransaction, StatementSource, Store,
-    StoreError, StoredAccount, StoredStatement, StoredTransaction, TransferSummary,
+    StoreError, StoredAccount, StoredStatement, StoredTransaction, TransferSummary, PAGE_SQL,
 };
 pub use transfer::{TransferInput, TransferPair};
 
