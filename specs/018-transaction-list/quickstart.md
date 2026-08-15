@@ -226,21 +226,32 @@ it survives regeneration:
 ```
 TUIST_DEVELOPMENT_TEAM=ABCDE12345 make ios-gen     # your team id
 cd ios && xcodebuild -workspace Kaname.xcworkspace -scheme Kaname \
-    -configuration Release -destination 'id=<device udid>' install
+    -configuration Release -destination 'id=<device udid>' \
+    -allowProvisioningUpdates install
 ```
 
-Set it by hand in Xcode instead and the next `make ios-gen` will wipe it.
+Set the team by hand in Xcode instead and the next `make ios-gen` will wipe it.
 
-Finding the two values, neither of which exists until you sign in:
+Finding the two values:
 
-- **Team id** — Xcode → Settings → Accounts → **+** → Apple ID. A free Apple ID gives a
-  "Personal Team", which is enough for this gate (the build expires after seven days). Then
-  `defaults read com.apple.dt.Xcode IDEProvisioningTeams | grep -i teamid`, or
-  developer.apple.com/account → Membership Details.
+- **Team id** — Xcode → Settings → Accounts → **+** → Apple ID; a free Apple ID gives a
+  "Personal Team", which is enough for this gate. Then read it back with
+  `defaults read com.apple.dt.Xcode | grep -A3 IDEProvisioningTeamByIdentifier` (⚠️ Xcode 26
+  keeps it under `IDEProvisioningTeamByIdentifier`; the older `IDEProvisioningTeams` key does
+  not exist and `defaults read` will say so), or developer.apple.com/account → Membership.
 - **Device** — connect by cable and trust the Mac, then `xcrun devicectl list devices` for the
   name and UDID, or `xcodebuild -showdestinations -workspace Kaname.xcworkspace -scheme Kaname`
   for destination strings that can be pasted verbatim. Prefer `id=` over `name=`: a device name
-  with a space or an emoji in it breaks the `name=` form. ⚠️ `04-sbi.pdf` prints no readable card
+  with a space or an emoji in it breaks the `name=` form.
+
+⚠️ **Two things a free Personal Team costs you.** The installed build **stops working after
+seven days**, so a gate run spread over two weekends needs re-installing. And a personal team
+cannot mint a provisioning profile until the device is **connected and registered** — without
+`-allowProvisioningUpdates`, and without the phone attached, the build fails with *"No profiles
+for 'in.beaconbrain.kaname' were found"*, which is provisioning talking and not a code problem.
+The very first signed build is easiest from Xcode's own UI (select the device, ⌘R), because it
+handles two-factor sign-in and device registration interactively; `xcodebuild` works headlessly
+from then on. ⚠️ `04-sbi.pdf` prints no readable card
 number, so Kaname will **ask which account it belongs to** — name it and carry on. That is the
 designed behaviour (FR-024), not a defect. Check the front door reads **8 accounts** before
 starting, and that the counts add to 10,000.
