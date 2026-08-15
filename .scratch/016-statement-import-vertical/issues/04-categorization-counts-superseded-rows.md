@@ -47,7 +47,7 @@ So step 3 always sees the losers step 2 just created.
 
 - **The summary lies about scale.** Three imports of a 3-row statement report
   `Categorized 3 / Left uncategorized 6` — nine rows, six of which no screen will ever show.
-  Observed; screenshot in the session evidence.
+  Observed; `../evidence/summary-mixed-scope-3-imported-9-counted.png`.
 - **Category writes land on invisible rows.** Harmless to the data, wasted work on the import
   path that SC-006 constrains, and it grows with every re-import.
 - **It will mislead the next reader of these figures.** The columns are `categorized` /

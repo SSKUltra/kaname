@@ -17,7 +17,7 @@ independently.
 A transaction row's amount renders as **`−₹2,518.21` sliced horizontally through the glyphs** by
 the top edge of the filter bar. The row is neither fully visible nor fully hidden: it is cut.
 
-Evidence: session screenshot `g5.png`.
+Evidence: `../evidence/g5-filter-chrome-and-clipped-row-xxxl.png`.
 
 ## Why it is a real failure and not just scrolled-under content
 

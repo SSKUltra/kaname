@@ -20,7 +20,7 @@ With the list filtered to *ICICI Amazon Pay Credit Card, ending 7742*:
 - The clear button wraps and hyphenates as **`Show all ac-count s`** across four lines, with an
   orphaned `s`, and the pill grows tall enough to cover list content.
 
-Evidence: session screenshot `g5.png`.
+Evidence: `../evidence/g5-filter-chrome-and-clipped-row-xxxl.png`.
 
 ## Why
 

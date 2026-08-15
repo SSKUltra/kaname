@@ -18,7 +18,7 @@ recovered completely on relaunch (3.4% CPU), so nothing was persisted wrong.
 
 ## What the sample says
 
-`sample` over three seconds (`hang-sample.txt` in the session evidence) puts **1217 of 1217**
+`sample` over three seconds (`../evidence/hang-sample.txt.gz` — `gunzip -c` it) puts **1217 of 1217**
 main-thread samples inside a single, never-completing `CATransaction` commit:
 
 ```

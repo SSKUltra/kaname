@@ -25,7 +25,9 @@ Pay cards imported, every row of both reads `ICICI Amazon Pay Credit Card, endin
 
 `ending 90…` is worse still: it looks like a number and is not one.
 
-Evidence: session screenshots `g6.png` (menu vs rows, side by side) and `g7.png`.
+Evidence: `../evidence/g6-reduce-transparency-menu-vs-rows.png` (the menu reading both
+last-4s in full while the rows behind it truncate) and
+`../evidence/g7-increase-contrast-dark-mode.png` (the same truncation at the **default** size).
 
 ## The asymmetry that makes this clearly a defect
 

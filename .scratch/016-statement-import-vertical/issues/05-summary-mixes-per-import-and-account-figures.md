@@ -23,8 +23,10 @@ The section is headed **"Imported"** and reads:
 | Left uncategorized | **the whole account** |
 
 Observed after three imports of one 3-row statement: `Transactions 3`, `Duplicates skipped 3`,
-`Categorized 3`, `Left uncategorized 6`. A person reading four numbers under one heading has no
-way to know two of them describe a different set from the other two, and they do not sum.
+`Categorized 3`, `Left uncategorized 6` — evidence
+`../evidence/summary-mixed-scope-3-imported-9-counted.png`. A person reading four numbers under
+one heading has no way to know two of them describe a different set from the other two, and they
+do not sum.
 
 ## Why it happens
 
