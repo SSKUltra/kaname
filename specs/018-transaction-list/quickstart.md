@@ -319,7 +319,11 @@ judgement. Closing it needs one screen recording and about ten minutes: tap in, 
 then step the video frame by frame (§ *How to run G9–G14*, step 4). G11 additionally needs the
 app deleted and reinstalled with the 200-row corpus alone.
 
-**G1–G8 have not been run at all**, and issue 02 says what one of them will find.
+**G1–G8 have not been run at all.** Both halves of what remains are deferred **knowingly**, and
+tracked as `.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md` so the
+gap is a ticket rather than a memory. One thing G7 would have found — the accent's Dark Mode
+contrast — was found by eye during this run instead, fixed, and is now covered by
+`ios/Tests/ThemeContrastTests.swift`, which computes the ratios from the tokens themselves.
 
 ---
 

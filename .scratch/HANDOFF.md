@@ -27,7 +27,13 @@ A feature here is picked up by working `tasks.md` in order, respecting its PR sp
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
-⚠️ **Three things *are* open here**, all against `016-statement-import-vertical`:
+⚠️ **One thing is open**: **`.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md`**
+(`ready-for-human`) — **T139's accessibility half (G1–G8) has never been run**, and G9/G11/G12
+were judged by eye rather than measured, so **SC-012 is not satisfied**. Deferred knowingly by
+the holder on 2026-08-15. Closing it is ~30 minutes with a device and no code; the ticket carries
+the runbook. ⚠️ A free-team build expires seven days after install.
+
+**Resolved during 018's manual gate**, kept for the reasoning:
 - **`issues/01-front-door-contrast-dark-mode-largest-text.md`** — **resolved**, and
   **`make ios-test` is green again** (256 unit tests, 6 UI tests). It was an auditor artifact:
   at the largest text size the explanation is 621 pt tall on an 852 pt screen, so the contrast
@@ -39,8 +45,8 @@ per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
   two tokens (`kanameAccentText` / `kanameAccentFill`), Dark Mode text goes from **2.35:1 to
   5.02:1** at its worst surface, Increase Contrast is answered, and two guards hold it:
   `ThemeContrastTests` computes the ratios from the tokens, and `import-audit`'s ninth scan
-  confines `.glassProminent` to `Theme.swift` so the fill and its style cannot come apart. Not
-  yet confirmed by eye on a device.
+  confines `.glassProminent` to `Theme.swift` so the fill and its style cannot come apart.
+  **Confirmed by eye on the device** by the holder who reported it.
 - **`issues/03-no-way-to-state-an-unprinted-last-4.md`** — **resolved**. The account picker now
   takes an optional last-4 beside the name, under one rule: **what the document printed wins**
   (`parsed.cardLast4 ?? statedLast4`), so a typo can leave an account without digits but can
