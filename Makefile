@@ -1,4 +1,4 @@
-.PHONY: bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test import-audit lint reference-check reference-shapes a11y-sweep
+.PHONY: perf-corpus bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test import-audit lint reference-check reference-shapes a11y-sweep
 
 # SQLCipher crypto backend is chosen per-OS with NO OpenSSL (Constitution I): Apple
 # auto-selects CommonCrypto; on Linux we force LibTomCrypt by injecting the compile flag
@@ -74,6 +74,32 @@ reference-check: ios-gen
 		grep -q '^reference-check:' reference-check.log \
 			|| { echo "reference-check: the suite did not run — nothing was measured."; status=1; }; \
 		rm -f reference-check.log; \
+		exit $$status
+
+# The corpus the manual performance gate (T139 G9-G12) is measured against: 10,000
+# transactions over 8 accounts, plus a 200-row corpus for the comparison, written as
+# statement PDFs. There is no seeding hook and there will not be one (FR-077), so the only
+# way a corpus reaches a device is the way a person's own data does: documents, imported
+# through the picker. Every document is drawn from a proven layout signature in
+# fixtures/geometry/ and read back through the shipping extractor before it is handed over.
+#
+#     make perf-corpus DIR=/path/to/write/it
+#
+# Then AirDrop 10000-rows/*.pdf to the phone and import all eight.
+perf-corpus: ios-gen
+	@test -n "$(DIR)" || { echo "usage: make perf-corpus DIR=/path/to/write/the/corpus"; exit 2; }
+	@mkdir -p "$(abspath $(DIR))"
+	@cd ios && TEST_RUNNER_KANAME_CORPUS_DIR="$(abspath $(DIR))" xcodebuild \
+		-workspace Kaname.xcworkspace -scheme Kaname \
+		-destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+		-only-testing:KanameTests/PerformanceCorpusGenerator test > perf-corpus.log 2>&1; \
+		status=$$?; \
+		echo; \
+		grep -E '^perf-corpus:' perf-corpus.log || true; \
+		echo; \
+		grep -q '^perf-corpus:' perf-corpus.log \
+			|| { echo "perf-corpus: the generator did not run - nothing was written."; status=1; }; \
+		rm -f perf-corpus.log; \
 		exit $$status
 
 # Same pass, but describing the *shape* of any document that read nothing: digits become 9,

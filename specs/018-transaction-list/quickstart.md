@@ -199,6 +199,54 @@ Run on a real iPhone, release build, with the 10,000-row / 8-account corpus inst
 | G13 | Start an import while the list is open, scrolled and filtered. The list updates when the import commits; the filter is preserved; the scroll position is preserved; **no partially-written statement is ever visible** | FR-053, FR-054, FR-056, SC-010 |
 | G14 | Cancel an import mid-way with the list open. **Nothing changes** on the list | FR-055 |
 
+### How to run G9–G14 — the corpus, the build, and how the numbers are taken
+
+**1. Build the corpus** (on the Mac, ~3 minutes):
+
+```
+make perf-corpus DIR=~/kaname-corpus
+```
+
+Eight synthetic statements — six card products, two of them appearing twice under a different
+card number — 1,250 rows each. Every row has a globally unique amount and description, so
+de-duplication cannot quietly shrink the corpus (R20). The target does not just write them: it
+reads every document back through the **shipping** extractor and readers, imports all eight into
+a throwaway store, and fails unless the result is **8 accounts holding 10,000 live rows**. On the
+planning machine it reported 1.0–1.9 s per import and a 1.4 ms first page.
+
+It also writes `200-rows/` for G11.
+
+**2. Get it onto the phone.** AirDrop `~/kaname-corpus/10000-rows/*.pdf` (Files → *Save to Files*),
+or drop the folder in iCloud Drive. Nothing is seeded: the app imports them through the document
+picker like any other statement (FR-077).
+
+**3. Install a release build**, then import all eight. ⚠️ `04-sbi.pdf` prints no readable card
+number, so Kaname will **ask which account it belongs to** — name it and carry on. That is the
+designed behaviour (FR-024), not a defect. Check the front door reads **8 accounts** before
+starting, and that the counts add to 10,000.
+
+**4. Take the measurements from a screen recording, not a stopwatch.** Start iOS Screen Recording
+(Control Centre), perform the action, stop, AirDrop the video to the Mac and step it frame by
+frame in QuickTime with the arrow keys. At 60 fps one frame is 17 ms, so:
+
+| Gate | Bound | Frames |
+|---|---|---|
+| G9 / G11 | < 1 s | < 60 |
+| G12 | < 300 ms | < 18 |
+
+Count from the frame the finger lands to the frame the content is **readable** — not the frame it
+first appears. Recording costs a few percent of frame budget, which biases against passing: a
+number that passes while recording passes.
+
+**5. G11 needs a fresh store.** Delete the app (which deletes the encrypted database with it),
+reinstall, and import `200-rows/01-icici-1002.pdf` only. The two corpora must never share a store.
+
+**6. G13/G14 are the ones no automated test can reach.** Scroll deep into the list, apply an
+account filter, then import a ninth statement — copy any of the eight into a new file name, so
+it is a *re-import* and the row count must not change — and watch: the list updates, the filter
+survives, the scroll position survives, and no half-written statement is ever on screen. Then
+repeat, cancelling the import mid-way: **nothing** may change.
+
 ### Record here
 
 | Field | Value |
@@ -206,9 +254,12 @@ Run on a real iPhone, release build, with the 10,000-row / 8-account corpus inst
 | Device / iOS build | _to fill_ |
 | App build (commit) | _to fill_ |
 | Date run | _to fill_ |
+| Corpus | `make perf-corpus` — 8 accounts, 10,000 live rows, verified at generation time |
 | G1–G8 result | _to fill_ |
 | G9 / G11 measured | _to fill_ |
+| G10 (scroll) | _to fill_ |
 | G12 measured | _to fill_ |
+| G13 / G14 | _to fill_ |
 | Notes | _to fill_ |
 
 ---
