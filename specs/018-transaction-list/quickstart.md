@@ -226,10 +226,21 @@ it survives regeneration:
 ```
 TUIST_DEVELOPMENT_TEAM=ABCDE12345 make ios-gen     # your team id
 cd ios && xcodebuild -workspace Kaname.xcworkspace -scheme Kaname \
-    -configuration Release -destination 'platform=iOS,name=<your iPhone>' install
+    -configuration Release -destination 'id=<device udid>' install
 ```
 
-Set it by hand in Xcode instead and the next `make ios-gen` will wipe it. ⚠️ `04-sbi.pdf` prints no readable card
+Set it by hand in Xcode instead and the next `make ios-gen` will wipe it.
+
+Finding the two values, neither of which exists until you sign in:
+
+- **Team id** — Xcode → Settings → Accounts → **+** → Apple ID. A free Apple ID gives a
+  "Personal Team", which is enough for this gate (the build expires after seven days). Then
+  `defaults read com.apple.dt.Xcode IDEProvisioningTeams | grep -i teamid`, or
+  developer.apple.com/account → Membership Details.
+- **Device** — connect by cable and trust the Mac, then `xcrun devicectl list devices` for the
+  name and UDID, or `xcodebuild -showdestinations -workspace Kaname.xcworkspace -scheme Kaname`
+  for destination strings that can be pasted verbatim. Prefer `id=` over `name=`: a device name
+  with a space or an emoji in it breaks the `name=` form. ⚠️ `04-sbi.pdf` prints no readable card
 number, so Kaname will **ask which account it belongs to** — name it and carry on. That is the
 designed behaviour (FR-024), not a defect. Check the front door reads **8 accounts** before
 starting, and that the counts add to 10,000.
