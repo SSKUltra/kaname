@@ -1,6 +1,6 @@
 # 01 — The front door fails the Dark Mode contrast audit at the largest text size
 
-**Status:** ready-for-human
+**Status:** resolved
 
 **Found:** 2026-08-14, during `018-transaction-list` PR B (T069's gate).
 **Belongs to:** `016-statement-import-vertical` — its screen, its manual accessibility gate
@@ -94,3 +94,44 @@ this screen at this text size.
 
 _2026-08-14_ — Filed from 018 PR B rather than fixed there. 018's gate T069 is left **unchecked**
 with a pointer here: a gate ticked green while it is red is worth less than no gate at all.
+
+---
+
+## Resolved — 2026-08-15
+
+**It is an auditor artifact, and that was proved rather than assumed** — which is exactly what
+this ticket demanded before anyone reached for a suppression.
+
+| # | Evidence |
+|---|---|
+| 1 | The element is 621 pt tall with its top at y=467, on an **852 pt** screen — 236 pt of it is below the bottom of the display. |
+| 2 | It fails in **both** appearances. A colour problem does not do that. |
+| 3 | Dropping one size, to `AccessibilityXL` — same colours, same layout, **only the height changes** — makes both tests **pass**. |
+| 4 | A screenshot of the failing state shows white on black, **unfaded**: about 21:1, an order of magnitude clear of the threshold. |
+
+So the auditor is computing contrast over pixels that were never drawn.
+`ImportFrontDoorUITests.auditIgnoringContrastOverUnrenderedArea` ignores a `.contrast` issue
+**only** when the element's frame is not contained by the window, prints every one it ignores,
+and is applied **only** to the two largest-text tests — the ordinary-size audits keep no
+suppression at all.
+
+Watched failing before it was trusted: dimming the title to `Color(white: 0.22)` — a genuine,
+in-window failure — turns **all four** audit tests red, the two tolerant ones included.
+
+**`make ios-test` is green on `main` for the first time since this was filed**: 256 unit tests
+across 50 suites, and 6 UI tests, 0 failures.
+
+### One thing tried and dropped
+
+`.scrollEdgeEffectHidden(true, for: .bottom)` on the empty state's `ScrollView` — the theory
+being that the soft edge under an **opaque** bar was fading the text the auditor then measured.
+Screenshots taken with and without it are **identical**, and the audit result was unchanged, so
+it was removed rather than shipped as a change that buys nothing. Whatever fading the original
+screenshot in this ticket showed, it is not in the current build.
+
+### What is genuinely true, and left alone
+
+At `AccessibilityXXXL` the explanation really does run off the bottom of the screen and has to
+be scrolled. That is the correct behaviour for a paragraph at that size — the words are all
+there, all legible, and reachable by scrolling — and it is why the copy was not trimmed to
+satisfy a measurement.

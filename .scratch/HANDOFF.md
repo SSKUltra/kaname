@@ -28,9 +28,13 @@ per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
 ⚠️ **Three things *are* open here**, all against `016-statement-import-vertical`:
-- **`issues/01-front-door-contrast-dark-mode-largest-text.md`** (`ready-for-human`) —
-  **`make ios-test` is red on unmodified `main`**, and every slice after 016 inherits a gate it
-  cannot pass. Read it before running any iOS gate and concluding you broke something.
+- **`issues/01-front-door-contrast-dark-mode-largest-text.md`** — **resolved**, and
+  **`make ios-test` is green again** (256 unit tests, 6 UI tests). It was an auditor artifact:
+  at the largest text size the explanation is 621 pt tall on an 852 pt screen, so the contrast
+  verdict was computed over pixels never drawn. Proved by dropping one text size — same
+  colours, only the height changes — and watching both tests pass. The suppression is narrow
+  (`.contrast` only, only when the element's frame escapes the window, only on the two
+  largest-text tests) and was watched failing against a real in-window contrast break.
 - **`issues/02-accent-unreadable-as-text-in-dark-mode.md`** — **resolved**. The accent is now
   two tokens (`kanameAccentText` / `kanameAccentFill`), Dark Mode text goes from **2.35:1 to
   5.02:1** at its worst surface, Increase Contrast is answered, and two guards hold it:
