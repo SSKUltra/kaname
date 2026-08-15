@@ -220,7 +220,16 @@ It also writes `200-rows/` for G11.
 or drop the folder in iCloud Drive. Nothing is seeded: the app imports them through the document
 picker like any other statement (FR-077).
 
-**3. Install a release build**, then import all eight. ⚠️ `04-sbi.pdf` prints no readable card
+**3. Install a release build**, then import all eight. Signing is read from the environment, so
+it survives regeneration:
+
+```
+TUIST_DEVELOPMENT_TEAM=ABCDE12345 make ios-gen     # your team id
+cd ios && xcodebuild -workspace Kaname.xcworkspace -scheme Kaname \
+    -configuration Release -destination 'platform=iOS,name=<your iPhone>' install
+```
+
+Set it by hand in Xcode instead and the next `make ios-gen` will wipe it. ⚠️ `04-sbi.pdf` prints no readable card
 number, so Kaname will **ask which account it belongs to** — name it and carry on. That is the
 designed behaviour (FR-024), not a defect. Check the front door reads **8 accounts** before
 starting, and that the counts add to 10,000.
