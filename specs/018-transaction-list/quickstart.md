@@ -294,16 +294,32 @@ repeat, cancelling the import mid-way: **nothing** may change.
 
 | Field | Value |
 |---|---|
-| Device / iOS build | _to fill_ |
-| App build (commit) | _to fill_ |
-| Date run | _to fill_ |
-| Corpus | `make perf-corpus` — 8 accounts, 10,000 live rows, verified at generation time |
-| G1–G8 result | _to fill_ |
-| G9 / G11 measured | _to fill_ |
-| G10 (scroll) | _to fill_ |
-| G12 measured | _to fill_ |
-| G13 / G14 | _to fill_ |
-| Notes | _to fill_ |
+| Device / iOS build | iPhone 17 Pro Max (iPhone18,2), iOS 26.6 |
+| App build (commit) | `4a10c07` — Release configuration, free Personal Team, launched from the home screen with no debugger attached |
+| Date run | 2026-08-15 |
+| Corpus | `make perf-corpus` — 8 accounts, 10,000 live rows, **verified at generation time** by importing all eight into a throwaway store. Not re-confirmed on the device. |
+| G1–G8 result | ⛔ **Not run.** See issue 02 below before running G7. |
+| G9 / G11 | ⚠️ **Observed, not measured** — "felt instant", by eye, with no screen recording. SC-006's < 1 s bound is **not evidenced**. |
+| G10 (scroll) | ✅ No stalls or persistent blank rows reported over the full corpus |
+| G12 | ⚠️ **Observed, not measured** — SC-008's < 300 ms bound is **not evidenced**. |
+| G13 / G14 | ✅ **PASS.** Importing a ninth statement with the list open, scrolled and filtered: the new rows appeared **without a relaunch**, the filter was kept, the scroll position was kept, and no partially-written statement was seen. A **cancelled** import changed nothing at all. |
+| Notes | Two defects found while running it, both against 016 and neither in 018: `issues/02` (the accent measures 2.35:1 as text in Dark Mode — will fail G7) and `issues/03` (no way to give an account a last-4 the statement did not print). |
+
+**What this record does and does not close.**
+
+**G13 and G14 are the load-bearing result**, and they pass. They are the only evidence anywhere
+that US8 works on a device: T118 established that no automated run can reach a populated
+transaction list at all, so "an import lands in a list you are already reading, without taking
+away your filter or your place in it" was, until this run, untested outside unit doubles.
+
+**SC-012 is not yet satisfied.** G9, G11 and G12 were judged by eye. "Felt instant" is a real
+signal — a screen that took two seconds would not feel instant — but it is not 60 frames, and
+the whole point of writing the bound down was to stop a later regression hiding behind a
+judgement. Closing it needs one screen recording and about ten minutes: tap in, filter, clear,
+then step the video frame by frame (§ *How to run G9–G14*, step 4). G11 additionally needs the
+app deleted and reinstalled with the 200-row corpus alone.
+
+**G1–G8 have not been run at all**, and issue 02 says what one of them will find.
 
 ---
 
