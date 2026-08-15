@@ -72,17 +72,33 @@ document that reads nothing — the latter prints each line with every value rep
 `9`, letters → `A`/`a`), so a layout can be diagnosed, and pasted into a bug report, without a
 statement leaving the machine.
 
-**⬅️ NEXT: `018-transaction-list`, PR C — US3 (the filter) and US7 (the empty states), starting at T084.**
+**⬅️ NEXT: `018-transaction-list`, PR D — US5 (currency) and US6 (the accessibility suite), starting at T103.**
 
 018 is specified, planned and broken into **147 tasks** — `specs/018-transaction-list/`. **Do not
 re-run `speckit.specify`/`plan`/`tasks`**: the design is locked, and its two clarifications and
 two judgement calls are settled (spec § *Clarifications*, plan § *Judgement calls*).
 
-**PR A0 (#38) is merged**, **PR A is done — T001–T044**, and **PR B is done — T045–T083, less
-T069.** A person can now open the app, tap once, and read their own transactions across every
-account, newest first and grouped by date; importing the same statement a second time changes
-nothing they can see. **PR B has not been opened as a pull request yet** — its three commits are
-on `main` (`738cbe1`, `ea7ba68`, `1a8054f`, plus US4's).
+**PR A0 (#38) is merged**, **PR A is done — T001–T044**, **PR B is done — T045–T083, less T069**,
+and **PR C is done — T084–T102.** A person can now open the app, tap once, read their own
+transactions across every account newest-first and grouped by date, narrow to one account and
+clear it again in a single tap, and be told which of six true things is the case when a screen
+is empty. Importing the same statement a second time changes nothing they can see, and the
+filter is forgotten on relaunch, deliberately. **Neither PR B nor PR C has been opened as a pull
+request yet** — their commits are on `main` (`738cbe1`, `ea7ba68`, `1a8054f`, `572f0b4`, and
+PR C's).
+
+**What PR C landed**: the **filter chrome** — a `GlassEffectContainer` on an opaque
+`.safeAreaBar(edge: .bottom)` holding a scope `Menu` and a clear button, both `.buttonStyle(.glass)`
+with `glassEffectID` in one `@Namespace` — plus the view model's scope surface (`scopeTitle`,
+`scopeSubtitle`, `scopeAnnouncement`, `isFiltered`, `availableFilters`, `showsFilterChrome`,
+`emptyActionIsProminent`) and three test suites: `TransactionFilterTests`,
+`TransactionEmptyStateTests`, `TransactionListStringsTests`. **Six deliberate breaks were watched
+going red**, including the one T093 demanded. ⚠️ **T098 found and fixed a real defect**:
+`.glassProminent` was being applied to *every* empty state with an import action, but design note
+D2 permits it only where there is no filter bar — state 3 was shipping two prominent glass
+elements. And the audit gained a **sixth scan**: `UserDefaults`, `@AppStorage`, `@SceneStorage`,
+`NSUbiquitousKeyValueStore`, `NSUserActivity` and `FileManager` are banned under
+`ios/Sources/Transactions/`, because FR-041 is a promise about what the app *cannot* do.
 
 **What US4 landed**: `ios/Tests/TransactionListOrderingTests.swift` (7 tests over a real store:
 newest-first across accounts, both same-date tie-breaks, byte-identical rebuild, identical across
@@ -114,8 +130,8 @@ import's transaction); the front door's rows became `NavigationLink`s and stoppe
 `LabeledContent`; **the front-door count became one `account_summaries()` call**; and the
 networking audit widened from `ios/Sources/Import` to all of `ios/Sources`.
 
-Green: `make lint` (0 violations), `make import-audit` (all five scans), `make core-test`
-(**308 tests**), the **unit target — 185 tests in 40 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
+Green: `make lint` (0 violations), `make import-audit` (all **six** scans), `make core-test`
+(**308 tests**), the **unit target — 212 tests in 43 suites**. `ImportService.swift` is **397 lines**, three below the limit it sat
 exactly on. Read `tasks.md` § "US1 — RECORDED" for the five deviations before continuing; the
 two that change later work are:
 

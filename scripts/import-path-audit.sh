@@ -201,3 +201,33 @@ if [ -d "$TRANSACTIONS_DIR" ]; then
 fi
 
 echo "import-audit: OK (the engine is the only definition of the live population)"
+
+# ---------------------------------------------------------------------------
+# Filter-persistence audit (FR-041) — the account filter is a question being asked, never a
+# fact about a person's data, and it must not survive a launch.
+#
+# The failure it prevents is quiet and expensive: somebody filters to one card on Friday,
+# opens Kaname on Monday, and sees a fraction of their own spending with nothing on screen to
+# say it is a fraction. Any storage reached from the transaction list — a preference, an
+# iCloud key-value store, a scene-restoration payload — would make that possible, so the
+# symbols are banned outright rather than reviewed for.
+
+if [ -d "$TRANSACTIONS_DIR" ]; then
+    PERSISTENCE_DENYLIST=(
+        'UserDefaults' '@AppStorage' '@SceneStorage'
+        'NSUbiquitousKeyValueStore' 'NSUserActivity' 'FileManager'
+    )
+    persistence_pattern="$(printf '%s|' "${PERSISTENCE_DENYLIST[@]}")"
+    persistence_pattern="(${persistence_pattern%|})"
+    persistence_hits="$(grep -rInE "$persistence_pattern" "$TRANSACTIONS_DIR" || true)"
+
+    if [ -n "$persistence_hits" ]; then
+        echo "import-audit: FAIL — the transaction list can remember something:" >&2
+        echo "$persistence_hits" >&2
+        echo "The account filter must not survive a launch: a person who filtered on Friday" >&2
+        echo "must not open a fraction of their spending on Monday (FR-041)." >&2
+        exit 1
+    fi
+fi
+
+echo "import-audit: OK (the transaction list persists nothing of its own)"

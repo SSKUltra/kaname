@@ -606,18 +606,18 @@ not a formality. **Five deliberate breaks, each reverted, each watched:**
 
 ### Tests for User Story 3 (RED first) ⚠️
 
-- [ ] T084 [P] [US3] RED: create `ios/Tests/TransactionFilterTests.swift` — V1 `filter` is `.all` at `init` and a filter change writes **nothing** to `UserDefaults` (assert the suite's `UserDefaults` dictionary is byte-identical across a `setFilter`), nothing to the store, and nothing to a scene-restoration payload; a fresh view model after a simulated relaunch is `.all` (FR-041).
-- [ ] T085 [P] [US3] RED: add the population tests to `ios/Tests/TransactionFilterTests.swift` — V2 `setFilter`/`clearFilter` discard the cursor and **every** accumulated row before loading page 1, so no row of the previous account can survive (FR-040); a filtered list's row count equals the front-door count for that account (FR-006); filtering changes no ordering, no grouping, no row content and no currency handling — a filtered sequence is the unfiltered sequence with the other accounts removed (FR-042).
-- [ ] T086 [P] [US3] RED: add the announcement tests to `ios/Tests/TransactionFilterTests.swift` — the filtered account's name (and last-4, matching the front door's identity) is present in the screen's accessibility surface whenever a filter is applied, and the fact that the list is filtered is carried by a **string**, never by styling alone (FR-038, FR-003, SC-014).
+- [x] T084 [P] [US3] RED: create `ios/Tests/TransactionFilterTests.swift` — V1 `filter` is `.all` at `init` and a filter change writes **nothing** to `UserDefaults` (assert the suite's `UserDefaults` dictionary is byte-identical across a `setFilter`), nothing to the store, and nothing to a scene-restoration payload; a fresh view model after a simulated relaunch is `.all` (FR-041).
+- [x] T085 [P] [US3] RED: add the population tests to `ios/Tests/TransactionFilterTests.swift` — V2 `setFilter`/`clearFilter` discard the cursor and **every** accumulated row before loading page 1, so no row of the previous account can survive (FR-040); a filtered list's row count equals the front-door count for that account (FR-006); filtering changes no ordering, no grouping, no row content and no currency handling — a filtered sequence is the unfiltered sequence with the other accounts removed (FR-042).
+- [x] T086 [P] [US3] RED: add the announcement tests to `ios/Tests/TransactionFilterTests.swift` — the filtered account's name (and last-4, matching the front door's identity) is present in the screen's accessibility surface whenever a filter is applied, and the fact that the list is filtered is carried by a **string**, never by styling alone (FR-038, FR-003, SC-014).
 
 ### Implementation for User Story 3
 
-- [ ] T087 [US3] Implement `setFilter(_:)` and `clearFilter()` in `ios/Sources/Transactions/TransactionListViewModel.swift`: discard cursor and rows, reload page 1 with `HistoryQuery.accountId` set or `nil`. That single field is the **only** difference between a filtered and an unfiltered read (FR-036, FR-042).
-- [ ] T088 [US3] Build the filter chrome in `ios/Sources/Transactions/TransactionListView.swift`: a `Menu`/picker of accounts plus the current scope, in a `GlassEffectContainer` with `.buttonStyle(.glass)`, pinned by `.safeAreaBar(edge: .bottom)` on an **opaque** bar. Glass never touches the rows, and a prominent translucent control never refracts scrolled numbers (FR-068, FR-069, W1, W3).
-- [ ] T089 [US3] Make the current scope unmistakable at all times in `ios/Sources/Transactions/TransactionListView.swift` — either "All accounts" or the filtered account's name and masked last-4, using the same identity the front door shows, visible without scrolling (FR-003, FR-038).
-- [ ] T090 [US3] Make clearing a **single** action and changing the filter possible without leaving the screen, in `ios/Sources/Transactions/TransactionListView.swift` (FR-039, FR-040).
-- [ ] T091 [US3] Confirm the front-door `NavigationLink` from T064 sets the same `AccountFilter` value the in-screen picker sets, in `ios/Sources/Import/ImportedAccountsView.swift` — one code path for a pre-filter and a chosen filter (N2).
-- [ ] T092 [US3] **GATE** `make lint && make ios-test` — T084–T086 green.
+- [x] T087 [US3] **Already landed in US1 — confirmed and now covered.** Implement `setFilter(_:)` and `clearFilter()` in `ios/Sources/Transactions/TransactionListViewModel.swift`: discard cursor and rows, reload page 1 with `HistoryQuery.accountId` set or `nil`. That single field is the **only** difference between a filtered and an unfiltered read (FR-036, FR-042).
+- [x] T088 [US3] Build the filter chrome in `ios/Sources/Transactions/TransactionListView.swift`: a `Menu`/picker of accounts plus the current scope, in a `GlassEffectContainer` with `.buttonStyle(.glass)`, pinned by `.safeAreaBar(edge: .bottom)` on an **opaque** bar. Glass never touches the rows, and a prominent translucent control never refracts scrolled numbers (FR-068, FR-069, W1, W3).
+- [x] T089 [US3] Make the current scope unmistakable at all times in `ios/Sources/Transactions/TransactionListView.swift` — either "All accounts" or the filtered account's name and masked last-4, using the same identity the front door shows, visible without scrolling (FR-003, FR-038).
+- [x] T090 [US3] Make clearing a **single** action and changing the filter possible without leaving the screen, in `ios/Sources/Transactions/TransactionListView.swift` (FR-039, FR-040).
+- [x] T091 [US3] Confirm the front-door `NavigationLink` from T064 sets the same `AccountFilter` value the in-screen picker sets, in `ios/Sources/Import/ImportedAccountsView.swift` — one code path for a pre-filter and a chosen filter (N2).
+- [x] T092 [US3] **GATE** `make lint && make ios-test` — T084–T086 green. `make lint` 0 violations; `-only-testing:KanameTests` **203 tests in 42 suites** at that point (T069's UI-target failure still predates the slice).
 
 ## Phase 7: User Story 7 — Nothing to show says why (Priority: P7)
 
@@ -627,21 +627,68 @@ not a formality. **Five deliberate breaks, each reverted, each watched:**
 
 ### Tests for User Story 7 (RED first) ⚠️
 
-- [ ] T093 [P] [US7] RED: create `ios/Tests/TransactionEmptyStateTests.swift` — V8 `EmptyKind` is a **pure function** of `[AccountSummary]` and `AccountFilter`, and each of the six rows of `data-model.md` §6 maps to its own case: empty summaries → "nothing imported yet" + the import action; all-zero with none excluded → "the statements had no transactions"; all-zero with some excluded → "nothing to show"; filtered, zero, not excluded → "this statement had no transactions" (**not** an error, **not** "nothing imported"); filtered, zero, excluded → "nothing to show for this account" + clear-the-filter; filtered to zero while other accounts have rows → the filter named as the reason + clear-the-filter.
-- [ ] T094 [P] [US7] RED: create `ios/Tests/TransactionListStringsTests.swift` — every worded count is produced by **one** pluralisation helper, asserted singular for `1` and plural for `0` and `2` in every string that carries a count (FR-052, SC-013).
-- [ ] T095 [P] [US7] RED: add the honesty audits to `ios/Tests/TransactionListStringsTests.swift` — no empty-state string contains "lost", "missing", "gone", "error" or "failed" (FR-051); no user-visible string in `TransactionListStrings` contains an identifier, an internal code, a dedup layer name, a cursor field name (`sequence`) or engine error text (FR-019, SC-016).
+- [x] T093 [P] [US7] RED: create `ios/Tests/TransactionEmptyStateTests.swift` — V8 `EmptyKind` is a **pure function** of `[AccountSummary]` and `AccountFilter`, and each of the six rows of `data-model.md` §6 maps to its own case: empty summaries → "nothing imported yet" + the import action; all-zero with none excluded → "the statements had no transactions"; all-zero with some excluded → "nothing to show"; filtered, zero, not excluded → "this statement had no transactions" (**not** an error, **not** "nothing imported"); filtered, zero, excluded → "nothing to show for this account" + clear-the-filter; filtered to zero while other accounts have rows → the filter named as the reason + clear-the-filter.
+- [x] T094 [P] [US7] RED: create `ios/Tests/TransactionListStringsTests.swift` — every worded count is produced by **one** pluralisation helper, asserted singular for `1` and plural for `0` and `2` in every string that carries a count (FR-052, SC-013).
+- [x] T095 [P] [US7] RED: add the honesty audits to `ios/Tests/TransactionListStringsTests.swift` — no empty-state string contains "lost", "missing", "gone", "error" or "failed" (FR-051); no user-visible string in `TransactionListStrings` contains an identifier, an internal code, a dedup layer name, a cursor field name (`sequence`) or engine error text (FR-019, SC-016).
 
 ### Implementation for User Story 7
 
-- [ ] T096 [US7] Implement the `EmptyKind` decision as a pure function over `[AccountSummary]` and `AccountFilter` in `ios/Sources/Transactions/TransactionListModels.swift`, following `data-model.md` §6 row for row. `hasOnlyExcludedRows` is what tells row 4 from row 5 — and it is a bool precisely so it can never be rendered as a count (FR-008).
-- [ ] T097 [US7] Implement the pluralisation helper in `ios/Sources/Transactions/TransactionListStrings.swift` — one helper, used by every worded count in the slice, including the front door's row announcement if it words one (FR-052).
-- [ ] T098 [US7] Render the six empty states in `ios/Sources/Transactions/TransactionListView.swift` using `ContentUnavailableView` with the T046 copy: the unimported state offers the import action (FR-047), and every filtered state that would show something once cleared offers to clear the filter (FR-049).
-- [ ] T099 [US7] Wire the empty state's import action back to `RootView`'s existing `.fileImporter` in `ios/Sources/RootView.swift` — no second picker, no duplicated import path (FR-047).
-- [ ] T100 [US7] Render `.unavailable` (a store error) in `ios/Sources/Transactions/TransactionListView.swift` with a plain-language sentence carrying **no** engine text, no error code and no identifier (FR-019, H4).
-- [ ] T101 [US7] **GATE** `make lint && make ios-test` — T093–T095 green.
-- [ ] T102 [US7] **GATE** `make core-lint && make core-test && make import-audit` — the full PR C verification gate before the PR opens.
+- [x] T096 [US7] **Landed early in US1; its RED suite was written here and watched failing.** Implement the `EmptyKind` decision as a pure function over `[AccountSummary]` and `AccountFilter` in `ios/Sources/Transactions/TransactionListModels.swift`, following `data-model.md` §6 row for row. `hasOnlyExcludedRows` is what tells row 4 from row 5 — and it is a bool precisely so it can never be rendered as a count (FR-008).
+- [x] T097 [US7] **Already landed in US1 — confirmed and now covered.** Implement the pluralisation helper in `ios/Sources/Transactions/TransactionListStrings.swift` — one helper, used by every worded count in the slice, including the front door's row announcement if it words one (FR-052).
+- [x] T098 [US7] **Amended here: D2's prominence rule was being broken.** Render the six empty states in `ios/Sources/Transactions/TransactionListView.swift` using `ContentUnavailableView` with the T046 copy: the unimported state offers the import action (FR-047), and every filtered state that would show something once cleared offers to clear the filter (FR-049).
+- [x] T099 [US7] Wire the empty state's import action back to `RootView`'s existing `.fileImporter` in `ios/Sources/RootView.swift` — no second picker, no duplicated import path (FR-047).
+- [x] T100 [US7] Render `.unavailable` (a store error) in `ios/Sources/Transactions/TransactionListView.swift` with a plain-language sentence carrying **no** engine text, no error code and no identifier (FR-019, H4).
+- [x] T101 [US7] **GATE** `make lint && make ios-test` — T093–T095 green. `make lint` 0 violations; the unit target **212 tests in 43 suites**.
+- [x] T102 [US7] **GATE** `make core-lint && make core-test && make import-audit` — the full PR C verification gate before the PR opens. Green: clippy clean, **308 core tests**, all **six** audit scans (the sixth is new, below).
 
 **Checkpoint**: The list narrows to one account, names its scope, clears in one action, forgets the filter on relaunch, and every empty screen says why without blaming anyone.
+
+### US3 + US7 — RECORDED
+
+**What was actually built here**: the filter chrome (T088–T090) — a `GlassEffectContainer` on an
+**opaque** `.safeAreaBar(edge: .bottom)`, holding a scope `Menu` and a clear button, both
+`.buttonStyle(.glass)`, both carrying `glassEffectID` in one `@Namespace` — and the view model's
+presentational scope surface (`scopeTitle`, `scopeSubtitle`, `scopeAnnouncement`, `isFiltered`,
+`availableFilters`, `showsFilterChrome`, `emptyActionIsProminent`). Everything else in these two
+phases already existed and was **confirmed under test** rather than rewritten.
+
+**Breaks observed, each reverted:**
+
+1. **A remembered filter** — `setFilter` writing the account id to `UserDefaults`. The
+   persistence test went red on the defaults comparison, which is the Monday-morning defect:
+   filter on Friday, open a fraction of your own spending on Monday with nothing saying so.
+2. **A sifted answer** — `reload()` filtering the rows it already had instead of re-reading. The
+   query test went red: two requests where there should be three, and the third missing its nil
+   cursor.
+3. **Rows 2 and 3 swapped** in `EmptyKind.decide` — an all-excluded store reported as "the
+   statements had no transactions". Both rows red.
+4. **The `hasOnlyExcludedRows` branch deleted** — rows 4 and 5 collapsed into one sentence.
+   Row 5 red, including the assertion that rows 4 and 5 are different sentences.
+5. **Row 6's refinement flattened** (`statementWasEmpty: true` always) — row 6 red.
+6. **A blame word planted** in an empty state ("Some transactions are missing") — the honesty
+   audit red. This is T093's required observation, made against five separate breaks rather than
+   the one it asked for.
+
+**Deviations, each deliberate:**
+
+- **T098 found a real defect and fixed it.** `.buttonStyle(.glassProminent)` was applied to
+  *every* empty state carrying the import action, but design note D2 permits it in exactly one:
+  state 1, where there is no filter bar to compete with. State 3 ("nothing to show anywhere")
+  has accounts, therefore has the bar, and was shipping two prominent glass elements. The
+  decision is now `emptyActionIsProminent` on the view model — data, so it is tested rather than
+  reviewed.
+- **`.animation(_:value:)` instead of `withAnimation`.** The skill asks for the hierarchy change
+  inside `withAnimation`, but the change here is produced by an `await` inside the view model,
+  not by the tap: `withAnimation { Task { … } }` is both ambiguous to the compiler and animates
+  nothing. The animation is attached to `model.isFiltered`, the state the await produces, which
+  with `glassEffectID` in place is what makes the two buttons morph rather than cross-fade.
+- **A sixth audit scan.** FR-041 is a promise about what the app *cannot* do, so it is enforced
+  the way the others are: `UserDefaults`, `@AppStorage`, `@SceneStorage`,
+  `NSUbiquitousKeyValueStore`, `NSUserActivity` and `FileManager` are all banned under
+  `ios/Sources/Transactions/`. Watched failing against break 1.
+- **T091 needed no change.** `ImportedAccountsView` already navigates with the same
+  `AccountFilter.account(...)` value the in-screen menu now sets — one code path, confirmed by
+  reading it rather than by adding an indirection to prove it.
 
 ---
 

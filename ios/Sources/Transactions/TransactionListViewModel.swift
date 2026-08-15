@@ -36,6 +36,46 @@ final class TransactionListViewModel {
     private var isExhausted = false
     private var summaries: [AccountSummary] = []
 
+    // MARK: - The scope, as words
+
+    /// Which account is being shown, said outright. The filtered state is carried by this
+    /// string and never by styling, a colour or the glass the button happens to wear
+    /// (FR-038, FR-071).
+    var scopeTitle: String {
+        filter.accountName ?? TransactionListStrings.scopeAll
+    }
+
+    /// The masked last four beneath the name — the same identity shape the front door shows,
+    /// and absent entirely for an account that never learned its own last four (FR-003).
+    var scopeSubtitle: String? {
+        filter.accountLast4.map(TransactionListStrings.maskedLast4)
+    }
+
+    var scopeAnnouncement: String {
+        TransactionListStrings.scopeAnnouncement(name: filter.accountName, last4: filter.accountLast4)
+    }
+
+    var isFiltered: Bool { filter.accountID != nil }
+
+    /// Every account a person can narrow to, in the front door's own order — the same order
+    /// the combined list breaks ties with, so one screen never contradicts another (FR-030).
+    var availableFilters: [AccountFilter] {
+        summaries.map { .account(id: $0.id, name: $0.name, last4: $0.last4) }
+    }
+
+    /// Whether an empty state's action is the screen's **only** glass, and may therefore be
+    /// prominent (design note D2).
+    ///
+    /// True in exactly one state: nothing imported at all, where there is no filter bar to
+    /// compete with it. Everywhere else the bar is on screen, and two prominent elements make
+    /// prominence mean nothing.
+    var emptyActionIsProminent: Bool { !showsFilterChrome }
+
+    /// The filter chrome has nothing to say when there are no accounts to choose between: a
+    /// bar reading "All accounts" above a screen saying nothing was imported is a
+    /// contradiction (design note D3).
+    var showsFilterChrome: Bool { !summaries.isEmpty }
+
     /// How close to the end a row has to be before the next page is worth asking for.
     private static let prefetchDistance = 10
 
