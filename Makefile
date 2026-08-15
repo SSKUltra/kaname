@@ -47,6 +47,13 @@ ios-test: ios-gen
 	@# against the wrong screen. Boot and wipe first so the gate audits what it says it does.
 	@xcrun simctl bootstatus "iPhone 16" -b >/dev/null 2>&1 || true
 	@xcrun simctl uninstall "iPhone 16" in.beaconbrain.kaname >/dev/null 2>&1 || true
+	@# The same trap one layer up, and it cost a false failure on 2026-08-16. The UI tests
+	@# set their own *appearance* and tear it down, but nothing resets the **text size** —
+	@# so a manual gate run left at `accessibility-extra-extra-extra-large` makes the two
+	@# front-door contrast audits fail against a screen no test asked for. The audits are
+	@# written for the default size; pin it here rather than trusting the last person to
+	@# have put it back.
+	@xcrun simctl ui "iPhone 16" content_size large >/dev/null 2>&1 || true
 	cd ios && xcodebuild -workspace Kaname.xcworkspace -scheme Kaname \
 		-destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' test
 

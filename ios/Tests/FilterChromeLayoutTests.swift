@@ -83,6 +83,23 @@ struct FilterChromeLayoutTests {
 
     // MARK: - Issue 03 — the bar's height is bounded, at every size
 
+    @Test("The bar goes vertical exactly where the chip needs the whole width")
+    func theBarStacksAtTheAccessibilitySizes() {
+        for size in DynamicTypeSize.allCases {
+            let layout = FilterChromeLayout(dynamicTypeSize: size)
+            let expected: Axis = size.isAccessibilitySize ? .vertical : .horizontal
+            #expect(layout.axis == expected, "at \(size)")
+        }
+
+        // Why it cannot be a taste question: at the largest size the masked digits alone want
+        // roughly 280 pt and the collapsed clear button roughly 110 pt, which with the bar's
+        // 32 pt of horizontal padding overruns a 393 pt screen. The first fix for issue 02
+        // kept the bar horizontal, and G5 failed a second time with the chip reading
+        // `•••• 77…` — the digits truncated, which was the entire thing being fixed.
+        #expect(FilterChromeLayout(dynamicTypeSize: .accessibility5).axis == .vertical)
+        #expect(FilterChromeLayout(dynamicTypeSize: .large).axis == .horizontal)
+    }
+
     @Test("The clear button drops its words exactly at the accessibility sizes")
     func theClearButtonCollapsesWhereItWouldOtherwiseWrap() {
         for size in DynamicTypeSize.allCases {

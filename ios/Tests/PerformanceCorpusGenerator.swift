@@ -66,11 +66,25 @@ struct PerformanceCorpusGenerator {
         Statement(fixture: "icici_amazonpay_card.json", file: "01-icici-1002.pdf", rows: 200)
     ]
 
+    /// G2's corpus, and the reason it exists: **G2 is a question about the end of a list.**
+    ///
+    /// It asks whether the last row can be scrolled entirely clear of the filter bar, and at
+    /// `accessibility-extra-extra-extra-large` a single row is most of the screen — so on the
+    /// 10,000-row corpus the end of the list is some hundreds of flicks away and the gate is
+    /// unrunnable in practice. Six rows puts it two flicks away. The card number is distinct so
+    /// this imports as its **own** account and can be filtered to on its own, which G2 requires
+    /// (an unfiltered bar is shorter and passes either way).
+    private static let gate: [Statement] = [
+        Statement(
+            fixture: "icici_amazonpay_card.json", file: "01-icici-0006.pdf", rows: 6,
+            last4: "0006")
+    ]
+
     @Test("Write both corpora, and prove every document reads back the rows it printed")
     func writeTheCorpora() async throws {
         guard let root = Self.directory else { return }
 
-        for (name, plan) in [("10000-rows", Self.large), ("200-rows", Self.small)] {
+        for (name, plan) in [("10000-rows", Self.large), ("200-rows", Self.small), ("gate", Self.gate)] {
             let folder = root.appendingPathComponent(name, isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 

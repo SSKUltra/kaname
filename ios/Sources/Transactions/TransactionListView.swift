@@ -119,22 +119,41 @@ struct TransactionListView: View {
     private var filterBar: some View {
         if model.showsFilterChrome {
             GlassEffectContainer(spacing: 12) {
-                HStack(spacing: 12) {
-                    scopeMenu
-                    if model.isFiltered {
-                        clearButton
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // The hierarchy change is driven by an `await`, not by the tap, so the
-                // animation is attached to the state it produces rather than wrapped around
-                // the call. With `glassEffectID` in place this is what makes the two buttons
-                // morph rather than cross-fade.
-                .animation(.smooth(duration: 0.28), value: model.isFiltered)
+                barContent
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // The hierarchy change is driven by an `await`, not by the tap, so the
+                    // animation is attached to the state it produces rather than wrapped around
+                    // the call. With `glassEffectID` in place this is what makes the two buttons
+                    // morph rather than cross-fade.
+                    .animation(.smooth(duration: 0.28), value: model.isFiltered)
             }
             .background(.background)
+        }
+    }
+
+    /// The bar's two controls, laid out the way the text size can actually carry them.
+    ///
+    /// Vertical at accessibility sizes, where the chip needs the whole width to state which
+    /// account is being shown — side by side, the masked digits and the clear button do not fit
+    /// on the screen at any ordering, and the chip is what loses (issue 02).
+    @ViewBuilder
+    private var barContent: some View {
+        if chrome.axis == .vertical {
+            VStack(alignment: .leading, spacing: 10) {
+                scopeMenu
+                if model.isFiltered {
+                    clearButton
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                scopeMenu
+                if model.isFiltered {
+                    clearButton
+                }
+            }
         }
     }
 

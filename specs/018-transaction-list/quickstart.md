@@ -214,7 +214,39 @@ reads every document back through the **shipping** extractor and readers, import
 a throwaway store, and fails unless the result is **8 accounts holding 10,000 live rows**. On the
 planning machine it reported 1.0–1.9 s per import and a 1.4 ms first page.
 
-It also writes `200-rows/` for G11.
+It also writes `200-rows/` for G11, and **`gate/` for G2** — one statement, six rows, on a card
+number of its own.
+
+⚠️ **`gate/` is what makes G2 runnable at all.** G2 asks whether the **last** row can be scrolled
+entirely clear of the filter bar, and at `accessibility-extra-extra-extra-large` a single row is
+most of the screen — so on the 10,000-row corpus the end of the list is some hundreds of flicks
+away and the gate is unrunnable in practice. Six rows puts it two flicks away, and the distinct
+card number means it imports as its own account and can be filtered to alone (an **unfiltered**
+bar has no clear button, is shorter, and passes G2 either way — that is the trap). It is not a
+seeding hook: it is a PDF imported through the document picker like any other, so FR-077 stands.
+
+### Running the accessibility gates on the simulator, cheaply
+
+`issues/01` recorded that `xcrun simctl ui booted` drives three of the five axes
+(`appearance`, `increase_contrast`, `content_size`). Two more techniques were added on
+2026-08-16, running G2 and G5 to closure:
+
+- **Put statements into the simulator's "On My iPhone" with `cp`, not drag-and-drop.** The Files
+  app's local storage is the app group whose
+  `.com.apple.mobile_container_manager.metadata.plist` reads
+  `group.com.apple.FileProvider.LocalStorage`, under
+  `~/Library/Developer/CoreSimulator/Devices/<UDID>/data/Containers/Shared/AppGroup/`. Copy a PDF
+  into its `File Provider Storage/` and it appears under *Browse → On My iPhone* in the app's
+  document picker. Find the group with
+  `plutil -extract MCMMetadataIdentifier raw <plist>`.
+- **Read the screen with `xcrun simctl io booted screenshot`** rather than by eye. It is what
+  caught the *second* failure of `issues/02` — a chip reading `•••• 77…`, where the truncation
+  was four characters wide and easy to accept as fine at a glance.
+
+⚠️ **Put `content_size` back to `large` when you finish.** Two front-door contrast audits are
+written for the default text size and fail against anything else — which cost a false failure on
+2026-08-16. `make ios-test` now pins it before running, next to the container wipe that exists
+for exactly the same reason, so this is belt-and-braces rather than a trap.
 
 **2. Get it onto the phone.** AirDrop `~/kaname-corpus/10000-rows/*.pdf` (Files → *Save to Files*),
 or drop the folder in iCloud Drive. Nothing is seeded: the app imports them through the document

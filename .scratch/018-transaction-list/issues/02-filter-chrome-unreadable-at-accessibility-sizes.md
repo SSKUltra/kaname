@@ -124,3 +124,45 @@ the view still asks for it, so `TransactionAccessibilityTests` now reads
 rendering — no unit test can measure a frame (FR-075). G5's visual half closes on a re-run at
 `accessibility-extra-extra-extra-large`, which is booked with issue `03`'s G2 re-run, since both
 need the same screen at the same setting.
+
+---
+
+## ⛔ Reopened, then resolved — 2026-08-16, on the simulator
+
+**The fix above was wrong, and the gate caught it.** Re-running G5 at
+`accessibility-extra-extra-extra-large` in Dark Mode with the filter applied, the chip read:
+
+```
+•••• 77…
+ICICI  Ama…Card
+```
+
+The clear button *had* collapsed to `xmark.circle` as designed, and the name *was* middle-
+truncated as designed — but **the mask itself truncated**, which is the one thing the whole fix
+existed to prevent. Evidence: `../evidence/issue-02-second-failure-mask-truncated-xxxl.png`.
+
+**Why the first fix could not have worked, in numbers.** At the largest text size `•••• 7742` in
+`.subheadline.weight(.semibold)` wants roughly **280 pt**; the collapsed glass clear button wants
+roughly **110 pt**; the bar's own horizontal padding is **32 pt**. That is ~420 pt of demand on a
+**393 pt** screen. **No ordering of the two facts fits them side by side** — inverting the chip
+changed *which* fact got truncated, not *whether* one did.
+
+**The decision above — "option 1 was declined because stacking grows the bar" — was reasoning
+about the wrong constraint.** Width was binding, not height. This ticket's own first preference
+was correct, and the deviation recorded above is withdrawn.
+
+**What actually fixed it:** `FilterChromeLayout.axis`. At accessibility sizes the bar is a
+`VStack` and the chip gets the full width; below them it is the `HStack` it always was. With
+361 pt to work in, the chip renders **`•••• 7742` over `ICICI Amazon Pay Credit Card` in full** —
+the name does not even need its middle truncation at this size, and the clear `⊗` sits below.
+
+✅ **G5 passes**, both halves — `../evidence/issue-02-resolved-vertical-bar-xxxl.png`.
+
+**The lesson worth keeping.** Every assertion in `FilterChromeLayoutTests` passed against the
+broken bar, because they prove *which fact leads*, and the bar led with the mask exactly as
+asked — it simply had nowhere to put it. **A pure layout decision cannot see a width.** That is
+not a flaw in the approach; it is the boundary of it, and it is the reason FR-075 puts the
+rendering on a manual gate. The axis is now pinned by `theBarStacksAtTheAccessibilitySizes`
+(watched failing against `axis = .horizontal`) and by the W5 source pin (watched failing against
+a view that stops asking) — but what *found* it was a person at XXXL, and nothing cheaper would
+have.

@@ -259,6 +259,16 @@ struct ScopeLine: Equatable, Sendable, Identifiable {
 /// sizes that is the last four digits: the only part of an account's identity that
 /// discriminates between two cards of the same product.
 struct FilterChromeLayout: Equatable, Sendable {
+    /// Which way the bar lays its two controls out.
+    ///
+    /// Horizontal until the accessibility sizes, where it **must** go vertical: at the largest
+    /// size the masked digits alone want roughly 280 pt and the collapsed clear button roughly
+    /// 110 pt, which with the bar's own padding overruns a 393 pt screen. There is no ordering
+    /// of the two facts that fits them side by side, so the chip has to have the full width —
+    /// this was measured on a screen, after a first attempt that kept the bar horizontal
+    /// shipped a chip reading `•••• 77…` and failed G5 a second time.
+    let axis: Axis
+
     /// Whether the clear button shows its words. At accessibility sizes it does not — it
     /// collapses to a symbol carrying the same sentence as its accessibility label, because a
     /// button reading `Show all ac-count s` over four lines is both unreadable in itself and
@@ -274,6 +284,7 @@ struct FilterChromeLayout: Equatable, Sendable {
 
     init(dynamicTypeSize: DynamicTypeSize) {
         isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        axis = isAccessibilitySize ? .vertical : .horizontal
         clearButtonShowsTitle = !isAccessibilitySize
         maximumScopeLines = isAccessibilitySize ? 3 : 2
     }

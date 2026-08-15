@@ -216,6 +216,7 @@ struct TransactionAccessibilityTests {
         // to one line and letting the string be the only thing that can give (issue 02).
         #expect(bar.contains("chrome.scopeLines"))
         #expect(bar.contains("chrome.clearButtonShowsTitle"))
+        #expect(bar.contains("chrome.axis"))
         #expect(bar.contains("FilterChromeLayout"))
     }
 

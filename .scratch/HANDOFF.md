@@ -28,35 +28,46 @@ per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
 ⚠️ **Open on 018, and all of it from the 2026-08-15 gate run** — `SC-012 is still not satisfied`,
-but **every code defect it found is now fixed**, and what is left needs a person with a phone,
-not an agent with a keyboard:
+but **every accessibility gate now passes**. What is left is three timings that need a phone, one
+unreproduced hang, and one new legibility question:
 
-- **`issues/02`** — **resolved** (`3151e5b`). G5's code half: the filter bar now takes a
-  *decision* (`FilterChromeLayout`) instead of letting the string be the only thing that can
-  give. At accessibility sizes the chip **inverts** — the mask leads on a line that always fits,
-  the name follows middle-truncated — and the clear button collapses to `xmark.circle`, keeping
-  its words as the sentence VoiceOver speaks. ⚠️ The **visual** half still needs the re-run
-  booked under `03`.
-- **`issues/04`** — **resolved** (`3151e5b`). The row draws `accountRowIdentity` —
-  `•••• 7742 · <name>` — so trailing truncation eats the product name that repeats down the
-  column instead of the four digits that discriminate. `accessibilityLabel` is untouched: a
-  screen reader still hears the sentence. A sighted person can now tell two cards of one product
-  apart, which is the screen's whole premise.
-- **`issues/03`** (`ready-for-human`) — **cause fixed, verdict pending.** The bar can no longer
-  grow without bound (`maximumScopeLines` ≤ 3, held at all twelve text sizes), which was the
-  mechanism that sliced a row's amount mid-glyph. But no automated run can reach a populated list
-  (FR-077) and no unit test can measure a frame (FR-075), so **G2 closes on a manual re-run at
-  XXXL with a filter applied** — an unfiltered bar is shorter and passes either way. ⚠️ **Do it
-  in the same sitting as G5's visual half**: same screen, same size, same filter, two gates one
-  setup.
+- **`issues/02`** — ⛔ failed, was "fixed", ⛔ **failed again**, now **resolved** and ✅ **G5
+  passes**. The first fix kept the bar horizontal and only changed *which* fact truncated: the
+  chip shipped reading `•••• 77…`, with the digits cut. At the largest size the mask (~280 pt) and
+  the collapsed clear button (~110 pt) plus padding (32 pt) want ~420 pt of a **393 pt** screen —
+  **no ordering fits them side by side**. The bar is now a `VStack` at accessibility sizes
+  (`FilterChromeLayout.axis`) and the chip reads `•••• 7742` over `ICICI Amazon Pay Credit Card`
+  in full. ⚠️ **Every unit test passed against the broken bar**: they prove which fact *leads*,
+  and it did — a pure layout decision cannot see a width. That is the boundary of the approach,
+  not a flaw in it, and it is why FR-075 puts rendering on a manual gate.
+- **`issues/03`** — **resolved**, ✅ **G2 passes**. The last row sits entirely clear of the bar at
+  XXXL with a filter applied. `.safeAreaBar` was always correct; what it could not survive was a
+  bar with no bound on its height.
+- **`issues/04`** — **resolved**, and **confirmed by eye at both the default and accessibility
+  sizes**. Rows read `···· 1002 · ICICI Amazon Pay Credit…` and `···· 7742 · …`, so two cards of
+  one product are finally distinguishable on screen.
+- **`issues/07`** (`needs-triage`) — **new.** The pinned date heading has no background, so at
+  XXXL a row is legible *through* it — text on text, which G6 forbids. Pre-existing since US1,
+  unrelated to 02/03/04. Needs a verdict, because the obvious fix (an opaque background) runs into
+  FR-068's ban on material in the list.
 - **`issues/05`** (`needs-info`) — a one-off 100% CPU main-thread render hang; sampled, not
   reproduced in three attempts.
 - **`issues/06`** (`ready-for-human`) — **G9, G11, G12 have never been measured.** ~20 minutes
   with a device, a Release build and a frame-stepped screen recording; the ticket carries the
-  whole runbook. ⚠️ A free-team build expires seven days after install.
+  whole runbook. ⚠️ A free-team build expires seven days after install. **This is now the only
+  thing between 018 and SC-012.**
 - **`issues/01`** — **resolved.** T139's accessibility half (G1–G8) and G10 were run on the
   simulator: 6 pass, 2 fail. It is kept for what the run cost and the two techniques that made
   it cheap.
+
+⚠️ **Three things learned running the gate to closure, all now permanent.** `make perf-corpus`
+writes a **`gate/`** corpus — one six-row statement on its own card number — because G2 asks about
+the *end* of a list and at XXXL the 10,000-row corpus puts that hundreds of flicks away; statements
+reach the simulator's *On My iPhone* by `cp` into the
+`group.com.apple.FileProvider.LocalStorage` app group, with no drag-and-drop; and `make ios-test`
+now pins `content_size large`, because a text size left at XXXL by a manual run fails two
+front-door contrast audits and looks exactly like a code regression. All three are written up in
+`specs/018-transaction-list/quickstart.md`.
 
 ⚠️ **One lesson from `3151e5b`'s own working session, because it cost a rebuild.** The repo's
 "watch it fail" discipline needs a way to revert a deliberate break, and
