@@ -160,6 +160,23 @@ defects (`issues/02`–`05`) that no automated gate in this repo could have caug
 automated run can even reach. ⚠️ **This slice has not been specified** — it is the one place
 in this handoff where `speckit.specify` is the right next command.
 
+⚠️ **The 2026-08-17 session strengthened that case considerably — read this before specifying.**
+Closing `018/02` took **two** attempts: the first fix passed every unit test in the repo and was
+still broken on screen, because the tests prove *which fact leads* and a pure layout decision
+**cannot see a width**. What caught it was a person at XXXL and a screenshot. Meanwhile `018/03`
+could not be run at all until a **six-row `gate/` corpus** was added to `make perf-corpus`, since
+G2 asks about the *end* of a list and at XXXL the 10,000-row corpus puts that hundreds of flicks
+away. So the seeding slice's value is now measured, not asserted — and its scope should account
+for what the gate corpus already solved (getting *data* in cheaply) versus what it cannot
+(reaching a populated screen from an **automated** run, which is the whole point).
+
+**State at hand-off (2026-08-17, everything pushed, `main` clean):** 016 has **nothing open**;
+018 has `issues/06` (deferred, needs a phone — the only thing between 018 and SC-012),
+`issues/07` (`needs-triage`, but really `ready-for-agent`: an opaque background on the pinned
+date heading, which FR-068 already settles) and `issues/05` (`wontfix`, with its reopen
+conditions written down). Green on both gates: 16 core suites, 275 iOS tests in 53 suites, 6 UI
+tests, lint 0 violations, all nine audit scans.
+
 **What 017's reference pass measured** (13 real statements, on the holder's machine, counts
 only): statements reading **zero** transactions **10 → 0**; **unrecognised 2 → 0**. Re-run it
 any time with `make reference-check DIR=…`, and `make reference-shapes DIR=…` to describe a
