@@ -131,6 +131,19 @@ tree, which is how a gate gets deleted. The scan uses plain **`nm`** (4,511 real
 than 12,249 stab entries) and still catches break 3. The question `-a` would have answered —
 "was the file even compiled?" — is answered directly and truthfully by trap 1's check.
 
+### CI now runs both, and both were watched failing there (019 T020, T021)
+
+| Run | What it shows |
+|---|---|
+| [32022757285](https://github.com/SSKUltra/kaname/actions/runs/32022757285) | Green: **ten** `import-audit: OK` lines and `release-audit: OK (… 4511 symbols scanned, 6 terms)` — the same count as on a laptop, on a different machine |
+| [32023705285](https://github.com/SSKUltra/kaname/actions/runs/32023705285) | Break 4 pushed: CI red at **Import-path audit**, on a pull request rather than somebody's laptop (FR-029) |
+| [32024141212](https://github.com/SSKUltra/kaname/actions/runs/32024141212) | An over-long line in `UITests/` — **SwiftLint** caught it first, so this run proves nothing about the widened `swift-format` step. Recorded because it is the mistake to avoid when re-running T021 |
+| [32024308971](https://github.com/SSKUltra/kaname/actions/runs/32024308971) | A **block comment** in `ios/UITests/ImportFrontDoorUITests.swift`: SwiftLint ✅, `swift-format lint` ⛔ `[NoBlockComments]`. That is a failure CI could not have seen before the lint step was widened to `Sources Tests UITests` |
+
+⚠️ To exercise the *widened* lint you need a violation **only `swift-format` rejects**, because
+SwiftLint runs first and shares many rules. `[NoBlockComments]` is the reliable one;
+`[LineLength]` is not, and neither is a trailing inline comment (which `swift-format` accepts).
+
 **3. `nm "$BIN" | grep -q X` fails under `pipefail` even when it matches.** `grep -q` exits on
 the first hit, `nm` dies of SIGPIPE (141), and the pipeline reports failure — so the audit's
 first honest run declared itself inconclusive against a binary carrying both anchors. It is the
