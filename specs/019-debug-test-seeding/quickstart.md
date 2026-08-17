@@ -93,11 +93,50 @@ likely to be skipped:
 ```bash
 # Break 5 — point the audit at a stripped copy and confirm it says INCONCLUSIVE, not OK.
 cp "$BIN" /tmp/stripped && strip -rSTx /tmp/stripped
-nm -a /tmp/stripped | wc -l          # measured: 157, versus 12,249 unstripped
+nm /tmp/stripped | wc -l             # measured: 156, versus 4,511 unstripped
 ```
 
 A scan over that binary finds nothing — **because there is nothing to find**. If the audit
 reports `OK` there, the audit is decorative.
+
+### What the breaks actually did (019 PR A, T011–T016, measured)
+
+Run against the PR A stub. **Six** breaks, not five: the sixth exists because the fifth's
+sibling trap was discovered while running the others.
+
+| # | Break | Scan A | Scan B | What it taught |
+|---|---|---|---|---|
+| 1 | `#if DEBUG` removed from `DebugSeed.swift` | ⛔ FAIL (FR-024) | ✅ **OK** | An unguarded but **unreferenced, internal** type is dead-code eliminated: no symbol, no literal. Scan A is what catches this, and B's silence is honest — recorded, not fixed by weakening the denylist |
+| 2 | Seeding function copied, unguarded, into `Sources/Transactions/` | ⛔ FAIL (reverse direction) | ✅ OK | Same reason as 1 |
+| 3 | Guarded stub **referenced** from `RootView.swift` | ⛔ FAIL | ⛔ FAIL, via **`nm`** — `_$s6Kaname9DebugSeedOMa`, `…OMF`, `…OMf` | The artifact half is not decorative. **Variant 3a** (guard kept, reference added) fails the Release *build* — `cannot find 'DebugSeed' in scope` — so the compiler is a third gate: an unguarded shipping reference to DEBUG-only code cannot ship quietly |
+| 4 | `KANAME_SEED_SCENARIO` as a literal on an **unused** `static let` | ⛔ FAIL | ✅ OK | The optimiser drops it. **Variant 4b** — the same literal spliced into `TransactionListStrings.title`, which the screen renders — fails **through `strings` while `nm` stays silent**. That pair is the whole argument for scanning both |
+| 5 | Audit pointed at a `strip -rSTx`ed copy | — | ⛔ **FAIL (inconclusive)** | The self-check works, and "inconclusive" is a different sentence from "clean" |
+| 6 | A new `DebugSeed/*.swift` added **without** `make ios-gen` | ✅ OK (it is guarded) | ⛔ **FAIL (inconclusive)** | See below — this one was found the hard way |
+
+### ⚠️ Two traps found while building the proof, both now handled by the script
+
+**1. Tuist resolves `sources: ["Sources/**"]` at generation time.** A file added since the last
+`make ios-gen` is in no target, is compiled by nothing, and is therefore absent from the Release
+binary **for the wrong reason**. Three `release-audit: OK` runs and two "Scan B stayed green"
+break verdicts were recorded before this was noticed, and every one of them looked like a pass.
+The script now asserts, before concluding anything, that each `DebugSeed/*.swift` appears in
+`ios/Kaname.xcodeproj/project.pbxproj`, and fails as **inconclusive** if not. It is the same
+class of defect as the strip trap, in a place nobody was watching. **Run `make ios-gen` before
+`make release-audit` after adding any file.**
+
+**2. `nm -a` includes the debug map, and the debug map names source files.** A *correctly
+guarded* `DebugSeed.swift` produces three `nm -a` hits (`SO …/DebugSeed/`, `OSO …/DebugSeed.o`,
+`SO DebugSeed.swift`) in a binary containing none of its code — a false positive on a clean
+tree, which is how a gate gets deleted. The scan uses plain **`nm`** (4,511 real symbols rather
+than 12,249 stab entries) and still catches break 3. The question `-a` would have answered —
+"was the file even compiled?" — is answered directly and truthfully by trap 1's check.
+
+**3. `nm "$BIN" | grep -q X` fails under `pipefail` even when it matches.** `grep -q` exits on
+the first hit, `nm` dies of SIGPIPE (141), and the pipeline reports failure — so the audit's
+first honest run declared itself inconclusive against a binary carrying both anchors. It is the
+cousin of the `|| true` rule the nine existing scans follow (there, a `grep` that finds
+*nothing* exits 1). **Match in a variable, never in a pipe.**
+
 
 ## How FR-038's "watched failing" is actually carried out
 

@@ -18,6 +18,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMPORT_DIR="$REPO_ROOT/ios/Sources/Import"
 SOURCES_DIR="$REPO_ROOT/ios/Sources"
+SEED_DIR="$SOURCES_DIR/DebugSeed"
 REGISTRY="$REPO_ROOT/core/crates/kaname-core/src/statement/registry.rs"
 
 if [ ! -d "$IMPORT_DIR" ]; then
@@ -351,3 +352,58 @@ if [ -n "$claim_hits" ]; then
 fi
 
 echo "import-audit: OK (transfer detection is unwired, and nothing says otherwise)"
+
+# ---------------------------------------------------------------------------
+# DEBUG-boundary audit (019 FR-024, FR-027) — every seeding source must be compiled out of
+# Release.
+#
+# `ios/Sources/DebugSeed/` fabricates a person's financial history so an automated run can
+# reach a screen that has data on it. The `#if DEBUG` guard is the only thing between that and
+# a build somebody installs, so it is checked mechanically rather than reviewed for. This is
+# the cheap half of the proof — a grep, run on every `make import-audit`. The other half,
+# `scripts/release-absence-audit.sh`, builds a Release binary and looks for the seeding path in
+# the artifact, because a guard that is present but ineffective (a file in the wrong target, a
+# configuration missing the DEBUG condition) passes a source scan and ships anyway.
+#
+# Before this scan existed, an unguarded file under ios/Sources/DebugSeed/ passed all nine
+# scans above with nothing said (019 T005). Nothing else in this repository notices.
+
+if [ -d "$SEED_DIR" ]; then
+    unguarded=""
+    while IFS= read -r f; do
+        # `#if DEBUG` must open the file, ahead of any code — the doc comment above it is fine,
+        # 20 lines of preamble is not.
+        head -20 "$f" | grep -qE '^#if DEBUG$' || unguarded="$unguarded$f"$'\n'
+    done < <(find "$SEED_DIR" -name '*.swift')
+
+    if [ -n "$unguarded" ]; then
+        echo "import-audit: FAIL — seeding source outside a DEBUG guard:" >&2
+        echo "$unguarded" >&2
+        echo "Every file in ios/Sources/DebugSeed/ must be wrapped in #if DEBUG (019 FR-024)." >&2
+        exit 1
+    fi
+
+    # The reverse direction: nothing outside DebugSeed/ may name the seeding surface. The
+    # guard being in the right place is worth nothing if the seeding vocabulary has leaked into
+    # a file that ships unguarded.
+    #
+    # `KanameApp.swift` is excluded by name because it is the one shipping file that
+    # legitimately names it: three lines, inside `#if DEBUG`, calling the entry point. The
+    # exclusion is narrow on purpose — a second one is a design smell, and the answer to
+    # wanting it is to move the code into DebugSeed/, not to widen this line.
+    seed_hits="$(grep -rInE '\b(KANAME_SEED_SCENARIO|SeedScenario|DebugSeed)\b' "$SOURCES_DIR" \
+        --exclude-dir=DebugSeed | grep -v 'KanameApp.swift' || true)"
+
+    if [ -n "$seed_hits" ]; then
+        echo "import-audit: FAIL — the seeding surface is named outside ios/Sources/DebugSeed:" >&2
+        echo "$seed_hits" >&2
+        echo "Seeding lives in ios/Sources/DebugSeed/ behind #if DEBUG, and is named outside it" >&2
+        echo "only by KanameApp.swift's three guarded lines (019 FR-024, FR-027)." >&2
+        exit 1
+    fi
+
+    seed_file_count="$(find "$SEED_DIR" -name '*.swift' | wc -l | tr -d ' ')"
+    echo "import-audit: OK ($seed_file_count seeding file(s) under ios/Sources/DebugSeed, all #if DEBUG)"
+else
+    echo "import-audit: OK (no ios/Sources/DebugSeed directory)"
+fi
