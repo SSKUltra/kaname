@@ -27,11 +27,16 @@ A feature here is picked up by working `tasks.md` in order, respecting its PR sp
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
-**Still open on 016** (both from T129, neither release-blocking):
-- **`issues/05`** (`needs-triage`) — the summary mixes per-import figures with account-wide ones.
-  Visible on any re-import: `Transactions 6` beside `Duplicates skipped 6` under one "Imported"
-  heading. Needs a product decision, not a patch.
-- **`issues/04`** — **resolved** in `7dd9860`, and its status line was stale until 2026-08-16.
+**Still open on 016** — one ticket, and it is an **engine** one:
+- **`issues/07`** (`needs-triage`) — **`transactions_inserted` is `request.transactions.len()`**:
+  rows *read from the document*, not rows the account gained. Re-importing a six-row statement
+  reports `Transactions 6` beside `Duplicates skipped 6` while the account gains **nothing**. Not
+  client-fixable — `duplicatesSkipped` mixes cross-source de-duplication with re-import
+  supersession, so the two cannot be subtracted. Exposed by `05`'s fix, not caused by it; on a
+  first import every figure is correct, which is why it survived two gates.
+- **`issues/04`**, **`05`**, **`06`** — **resolved.** `04`'s status line was stale until
+  2026-08-16; `05` split the summary into `Imported` / `This account` with the scope captioned;
+  `06` moved "Import another" into the content so the title has room to say what happened.
 
 ⚠️ **Open on 018, and all of it from the 2026-08-15 gate run** — `SC-012 is still not satisfied`,
 but **every accessibility gate now passes**. What is left is three timings that need a phone, one

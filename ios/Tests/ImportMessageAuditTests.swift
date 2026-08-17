@@ -37,6 +37,9 @@ struct ImportMessageAuditTests {
                 ImportEmptyStateView.explanation,
                 ImportEmptyStateView.privacyPromise,
                 ImportEmptyStateView.actionTitle,
+                ImportSummary.importedSectionTitle,
+                ImportSummary.accountSectionTitle,
+                ImportSummary.accountSectionCaption,
             ]
     }
 

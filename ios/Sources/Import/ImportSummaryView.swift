@@ -24,16 +24,21 @@ struct ImportSummaryView: View {
                     }
                 }
 
-                Section("Imported") {
-                    figure("Transactions", summary.transactionsImported)
-                    figure("Categorized", summary.categorized)
-                    figure("Left uncategorized", summary.uncategorized)
-                    if summary.duplicatesSkipped > 0 {
-                        figure("Duplicates skipped", summary.duplicatesSkipped)
-                    }
-                    if summary.unreadableRows > 0 {
-                        figure("Rows Kaname couldn't read", summary.unreadableRows)
-                    }
+                Section(ImportSummary.importedSectionTitle) {
+                    ForEach(summary.importedFigures) { figure($0) }
+                }
+
+                // A second heading, because these two count something else. They are the
+                // account's whole position, recomputed on every import by design, and under
+                // the "Imported" heading they read as an outcome of the document just handed
+                // over — four numbers that do not sum
+                // (`.scratch/016-statement-import-vertical/issues/05`).
+                Section {
+                    ForEach(summary.accountFigures) { figure($0) }
+                } header: {
+                    Text(ImportSummary.accountSectionTitle)
+                } footer: {
+                    Text(ImportSummary.accountSectionCaption)
                 }
 
                 if let notice = summary.integrity.notice {
@@ -105,18 +110,18 @@ struct ImportSummaryView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func figure(_ label: String, _ count: Int) -> some View {
+    private func figure(_ figure: ImportSummary.Figure) -> some View {
         LabeledContent {
             // Explicitly primary: `LabeledContent` renders its value in a secondary style,
             // which does not hold contrast for a figure (FR-045, FR-046).
-            Text(count.formatted())
+            Text(figure.count.formatted())
                 .monospacedDigit()
                 .foregroundStyle(.primary)
         } label: {
-            Text(label)
+            Text(figure.label)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(count)")
+        .accessibilityLabel("\(figure.label): \(figure.count)")
     }
 
     private static func periodText(_ period: DateInterval) -> String {

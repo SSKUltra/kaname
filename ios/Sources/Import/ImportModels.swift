@@ -49,6 +49,52 @@ struct ImportSummary: Equatable, Sendable {
 }
 
 extension ImportSummary {
+    /// One figure on the summary, and which set of transactions it counts.
+    ///
+    /// The scope is carried as **data** rather than by where a `Section` happens to put a row,
+    /// because the two scopes were mixed under one heading for the whole of 016 and no test
+    /// could see it (`.scratch/016-statement-import-vertical/issues/05`).
+    struct Figure: Equatable, Sendable, Identifiable {
+        let label: String
+        let count: Int
+
+        var id: String { label }
+    }
+
+    /// What **this statement** did. `transactionsImported` and `duplicatesSkipped` come from
+    /// one `ImportOutcome` and describe only the document just handed over.
+    var importedFigures: [Figure] {
+        var figures = [Figure(label: "Transactions", count: transactionsImported)]
+        if duplicatesSkipped > 0 {
+            figures.append(Figure(label: "Duplicates skipped", count: duplicatesSkipped))
+        }
+        if unreadableRows > 0 {
+            figures.append(Figure(label: "Rows Kaname couldn't read", count: unreadableRows))
+        }
+        return figures
+    }
+
+    /// Where **the account** now stands. `categorize_account_in` recomputes every row in the
+    /// account by design, so these two describe far more than the import that triggered them —
+    /// three imports of one 3-row statement reported `Transactions 3` beside
+    /// `Left uncategorized 6`, four numbers under one heading that do not sum.
+    ///
+    /// The recompute is correct and stays. What was wrong was presenting its answer as an
+    /// outcome of the import, so the figures are separated and each set is captioned with the
+    /// set it counts.
+    var accountFigures: [Figure] {
+        [
+            Figure(label: "Categorized", count: categorized),
+            Figure(label: "Left uncategorized", count: uncategorized),
+        ]
+    }
+
+    /// The two headings, and the sentence that makes the second one's scope unmistakable.
+    static let importedSectionTitle = "Imported"
+    static let accountSectionTitle = "This account"
+    static let accountSectionCaption =
+        "Counted across every transaction in this account, not only the statement you just imported."
+
     /// What a statement whose transactions could not be recognised says to the person.
     static let nothingRecognizedNotice = IntegrityNotice(
         symbolName: "text.magnifyingglass",

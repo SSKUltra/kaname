@@ -93,3 +93,25 @@ Full detail in `quickstart.md` § *How to run G9–G14*. In short:
 `quickstart.md` § *Record here* carries three measured numbers with a build and a date, and G9,
 G11 and G12 read ✅ or ⛔ rather than ⚠️. If any fails, file the failure as its own ticket — the
 fix is not this ticket's job.
+
+---
+
+## Deferred — 2026-08-17, by the holder
+
+**Deferred, not dropped.** Status stays `ready-for-human` because that is still what it needs; the
+`Deferred:` note is the repo's existing idiom for "not now", the same one `issues/01` carried
+before it was run.
+
+**What deferring costs, precisely:** **SC-012 cannot be signed off.** G9, G11 and G12 are the last
+three unmeasured items in 018's gate — every accessibility gate now passes — so 018 is complete on
+every axis except *timed on real hardware*. Nothing else is waiting on it, and no further work is
+blocked by it.
+
+**Why it is a low-risk deferral.** The engine halves of the same bounds are already asserted in
+`cargo test` (`history_perf.rs` — the page plan neither scans nor sorts, first page within budget,
+per-account cost flat), and G10 (scrolling the full 10,000-row corpus) passed by hand. What is
+unmeasured is the *platform* half: how long a person waits, in frames.
+
+**Pick it up when a phone and a Release build are in the same room** — the ticket's runbook is
+unchanged and self-contained. ⚠️ A free Personal Team build expires **seven days** after install,
+so budget the measurement inside one week of installing it.

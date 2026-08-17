@@ -1,6 +1,6 @@
 # 05 — A one-off main-thread render hang at 100% CPU, sampled but not yet reproduced
 
-**Status:** needs-info
+**Status:** wontfix
 
 **Found:** 2026-08-15, on the simulator (iPhone 16, iOS 26.5, Debug build), once, during the
 manual gate. **Three deliberate attempts to reproduce it failed** — see below.
@@ -77,3 +77,23 @@ against a large, filtered, deeply-paged list.
 
 ⚠️ Do not close this as "could not reproduce" without step 3. The stack is a real pathology
 whether or not we caused it.
+
+---
+
+## Closed `wontfix` — 2026-08-17, by the holder
+
+**Not actioned, deliberately.** Three attempts to reproduce it failed, the sampled stack contains
+no Kaname frame, and it was seen once on a **Debug** build in the **simulator** — the two
+conditions under which SwiftUI's own render loop is least representative of a shipping app.
+Chasing an unreproducible hang with no attributable frame costs more than it can return.
+
+⚠️ **What would reopen it, stated so the decision is not silently permanent:**
+
+- The same freeze on a **device**, on a **Release** build — that removes both excuses at once.
+- Any second sighting at all, reproducible or not. Once is an anecdote; twice is a defect with a
+  pattern, and the two sample stacks together are worth more than either alone.
+- A frame of Kaname's own code appearing in a sampled stack during a hang.
+
+If any of those happens, reopen **this** ticket rather than filing a new one — the sample and the
+three failed reproduction attempts recorded above are the expensive part, and a new ticket would
+start without them.
