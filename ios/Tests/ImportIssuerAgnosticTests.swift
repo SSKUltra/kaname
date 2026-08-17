@@ -149,7 +149,7 @@ struct ImportIssuerAgnosticTests {
         // winning here would have produced a credit-card account.
         let account = try #require(try store.listAccounts().first)
         #expect(account.isCreditCard == false)
-        #expect(summary.transactionsImported == 2)
+        #expect(summary.transactionsAdded == 2)
     }
 
     @Test("Every failure says its own thing — no shared generic message")
@@ -189,7 +189,7 @@ struct ImportIssuerAgnosticTests {
                 store: store
             ).run(url: Self.anyURL, password: nil) { _ in }).summary)
 
-        #expect(summary.transactionsImported == 0)
+        #expect(summary.transactionsAdded == 0)
         #expect(summary.nothingRecognized)
         #expect(!ImportSummary.nothingRecognizedNotice.message.isEmpty)
     }
@@ -217,7 +217,7 @@ struct ImportIssuerAgnosticTests {
                 store: store
             ).run(url: Self.anyURL, password: nil) { _ in }).summary)
 
-        #expect(summary.transactionsImported == 0)
+        #expect(summary.transactionsAdded == 0)
         #expect(summary.integrity == .agrees)
         #expect(!summary.nothingRecognized)
     }
@@ -246,7 +246,7 @@ struct ImportIssuerAgnosticTests {
                 store: store
             ).run(url: Self.anyURL, password: nil) { _ in }).summary)
 
-        #expect(summary.transactionsImported == 0)
+        #expect(summary.transactionsAdded == 0)
         #expect(summary.nothingRecognized)
     }
 

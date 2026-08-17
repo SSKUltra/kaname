@@ -143,7 +143,7 @@ struct ImportIntegrityTests {
         let notice = try #require(imported.summary.integrity.notice)
         #expect(notice.isWarning)
         // A failed check withholds nothing: every row it did read is still the person's data.
-        #expect(imported.summary.transactionsImported == 2)
+        #expect(imported.summary.transactionsAdded == 2)
         #expect(imported.transactions.count == 2)
         #expect(imported.statement.needsReview)
     }
@@ -163,7 +163,7 @@ struct ImportIntegrityTests {
 
         #expect(imported.summary.integrity == .nothingToCheck)
         #expect(imported.summary.integrity.notice == nil)
-        #expect(imported.summary.transactionsImported == 2)
+        #expect(imported.summary.transactionsAdded == 2)
         #expect(imported.statement.needsReview == false)
     }
 
@@ -175,7 +175,7 @@ struct ImportIntegrityTests {
         // reshaping would land here as a mismatch.
         let imported = try await Self.importRendered("yes_kiwi_card.json")
 
-        #expect(imported.summary.transactionsImported == 4)
+        #expect(imported.summary.transactionsAdded == 4)
         #expect(imported.summary.integrity == .agrees)
         #expect(imported.statement.needsReview == false)
     }
@@ -188,7 +188,7 @@ struct ImportIntegrityTests {
         // opening balance, and the engine says so by asking for a second look.
         let imported = try await Self.importRendered("icici_bank.json")
 
-        #expect(imported.summary.transactionsImported == 4)
+        #expect(imported.summary.transactionsAdded == 4)
         #expect(imported.summary.integrity == .needsReview)
         #expect(imported.transactions.count == 4)
     }
@@ -205,7 +205,7 @@ struct ImportIntegrityTests {
         ])
 
         #expect(imported.summary.unreadableRows == 1)
-        #expect(imported.summary.transactionsImported == 1)
+        #expect(imported.summary.transactionsAdded == 1)
         // Rows that would not parse are as much a reason to look again as figures that don't
         // add up — even though this statement had no figures to check.
         #expect(imported.summary.integrity == .nothingToCheck)

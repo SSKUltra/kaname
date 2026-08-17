@@ -27,13 +27,15 @@ A feature here is picked up by working `tasks.md` in order, respecting its PR sp
 per `docs/agents/triage-labels.md`). Used by `.scratch/categorization/` and
 `.scratch/persistence/` — **both fully resolved; nothing open there.** Kept for history.
 
-**Still open on 016** — one ticket, and it is an **engine** one:
-- **`issues/07`** (`needs-triage`) — **`transactions_inserted` is `request.transactions.len()`**:
-  rows *read from the document*, not rows the account gained. Re-importing a six-row statement
-  reports `Transactions 6` beside `Duplicates skipped 6` while the account gains **nothing**. Not
-  client-fixable — `duplicatesSkipped` mixes cross-source de-duplication with re-import
-  supersession, so the two cannot be subtracted. Exposed by `05`'s fix, not caused by it; on a
-  first import every figure is correct, which is why it survived two gates.
+**Nothing is open on 016.** `issues/07` — the last one — is resolved:
+- **`issues/07`** — **resolved.** `transactions_inserted` counted rows *read from the document*,
+  not rows the account gained, so re-importing a six-row statement claimed six transactions while
+  the account gained none. `ImportOutcome` now carries `rows_read`, `transactions_added` and
+  `rows_superseded`, which always sum; `transactions_added` is a `COUNT(*)` over the statement's
+  live rows taken after every linking pass, because both available derivations are right in the
+  common case and wrong in the interesting one. The screen reads **"Transactions added"** and
+  **"Already in Kaname"**. ⚠️ The rename is load-bearing: there is no longer a field whose name
+  promises something it does not count.
 - **`issues/04`**, **`05`**, **`06`** — **resolved.** `04`'s status line was stale until
   2026-08-16; `05` split the summary into `Imported` / `This account` with the scope captioned;
   `06` moved "Import another" into the content so the title has room to say what happened.

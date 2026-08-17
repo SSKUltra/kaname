@@ -144,7 +144,7 @@ struct ImportAccountResolutionTests {
         let summary = try await service.resolveAccount(.existing(id: chosen))
 
         #expect(!summary.accountIsNew)
-        #expect(summary.transactionsImported == 2)
+        #expect(summary.transactionsAdded == 2)
         #expect(try store.listTransactions(accountId: chosen).count == 2)
     }
 
@@ -200,7 +200,7 @@ struct ImportAccountResolutionTests {
             Issue.record("a re-import is never refused")
             return
         }
-        #expect(summary.duplicatesSkipped == 1)
+        #expect(summary.rowsAlreadyHeld == 1)
 
         let account = try #require(try store.listAccounts().first)
         let stored = try store.listTransactions(accountId: account.id)

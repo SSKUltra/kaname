@@ -87,7 +87,7 @@ struct ImportPipelineTests {
         #expect(summary.last4 == "1002")
         // Nothing existed before this import, so the account was created for it.
         #expect(summary.accountIsNew)
-        #expect(summary.transactionsImported == 2)
+        #expect(summary.transactionsAdded == 2)
         #expect(summary.unreadableRows == 0)
         #expect(stages.first == .reading)
         #expect(stages.contains(.saving))
@@ -120,7 +120,7 @@ struct ImportPipelineTests {
                 .run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         #expect(summary.issuerDisplayName == "HDFC Bank Account")
-        #expect(summary.transactionsImported == 2)
+        #expect(summary.transactionsAdded == 2)
         // The statement's figures all agree, so the import is not flagged for review.
         #expect(summary.integrity == .agrees)
 
@@ -168,7 +168,7 @@ struct ImportPipelineTests {
                 .run(url: Self.anyURL, password: nil) { _ in }).summary)
 
         // Every imported row is accounted for on one side of the split or the other.
-        #expect(summary.categorized + summary.uncategorized == summary.transactionsImported)
+        #expect(summary.categorized + summary.uncategorized == summary.transactionsAdded)
 
         let account = try #require(try store.listAccounts().first)
         let stored = try store.listTransactions(accountId: account.id)
@@ -213,7 +213,8 @@ struct ImportPipelineTests {
                 now: Self.importedAt
             )
         )
-        #expect(outcome.transactionsInserted == 3)
+        #expect(outcome.rowsRead == 3)
+        #expect(outcome.transactionsAdded == 3)
 
         let stored = try store.listTransactions(accountId: outcome.accountId)
         for value in amounts {
@@ -315,7 +316,7 @@ struct ImportPipelineTests {
             (try await Self.realService(store: store).run(url: rendered.url, password: nil) { _ in }).summary
         )
 
-        #expect(summary.transactionsImported == 0)
+        #expect(summary.transactionsAdded == 0)
         #expect(summary.nothingRecognized)
     }
 }

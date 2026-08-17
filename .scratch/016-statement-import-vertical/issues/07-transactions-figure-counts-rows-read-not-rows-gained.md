@@ -1,6 +1,6 @@
 # 07 — "Transactions" counts rows read from the document, not rows the account gained
 
-**Status:** needs-triage
+**Status:** resolved
 
 **Found:** 2026-08-17, on the simulator, verifying `issues/05`'s fix on a **re-import** of the
 six-row `gate/01-icici-0006.pdf`.
@@ -70,3 +70,48 @@ A `cargo test` over a real store: import a statement, import the **same** statem
 assert the second outcome reports **zero** rows gained while still reporting six rows read. It
 must be watched failing against today's `request.transactions.len()`, which reports six either
 way — a single-import fixture passes whatever the field means.
+
+---
+
+## Resolution — 2026-08-17, by the holder's decision: **report net-new**
+
+Of the two readings, the holder chose the one that answers the question a person re-importing
+actually has — *did anything change?* — rather than the cheaper relabel that would only have
+stopped the arithmetic being nonsense.
+
+**Engine.** `ImportOutcome` now carries three figures where it carried one:
+
+| Field | Means |
+|---|---|
+| `rows_read` | every transaction printed in the document (was `transactions_inserted`) |
+| `transactions_added` | how many of them the account **gained** |
+| `rows_superseded` | the rest — rows of this statement that lost to a row already held |
+
+`rows_read == transactions_added + rows_superseded`, always, so the two numbers a person is shown
+account for the document in front of them.
+
+⚠️ **`transactions_added` is counted from the rows, not derived.** `count_live_statement_rows_in`
+runs a `COUNT(*)` over this statement's rows after **every** linking pass, built from
+`live_predicate!()` like every other read that means "the rows the person has". Deriving it from
+`reimported` would have missed a row lost to *cross-source* de-duplication; deriving it from
+`duplicates_linked` would have counted links made elsewhere in the store, because that figure is
+store-wide. Both derivations are right in the common case and wrong in the interesting one.
+
+`duplicates_linked` is unchanged and stays store-wide — callers that measure the de-duplicator
+still want it — but it is documented as such and is deliberately **not** what the summary shows.
+
+**Client.** `ImportSummary.transactionsAdded` / `.rowsAlreadyHeld`, rendered as
+**"Transactions added"** and **"Already in Kaname"**. A re-import of the six-row `gate/` statement
+now reads `0` and `6`. Evidence:
+`../evidence/issue-07-resolved-reimport-adds-nothing.png`.
+
+**Proof** — `importing_the_same_statement_twice_does_not_double_history` now asserts all three
+figures and that they sum. **Watched failing**: with `transactions_added = rows_read` — the
+behaviour this ticket describes — it goes red at the `transactions_added` assertion. A
+single-import fixture passes whatever the field means, which is why the re-import test is the one
+that had to carry it.
+
+⚠️ **The rename was the point, not a tidy-up.** `transactions_inserted` was read as "rows added"
+by every caller including the screen, and it never meant that. Renaming it to `rows_read` makes
+the old mistake unspellable; there is no longer a field whose name promises something it does not
+count.

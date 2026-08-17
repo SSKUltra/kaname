@@ -264,7 +264,8 @@ fn import_statement_writes_account_statement_and_transactions_in_one_transaction
 
     assert!(outcome.account_created);
     assert!(outcome.statement_id.is_some());
-    assert_eq!(outcome.transactions_inserted, 2);
+    assert_eq!(outcome.rows_read, 2);
+    assert_eq!(outcome.transactions_added, 2);
     assert_eq!(outcome.duplicates_linked, 0);
     assert_eq!(outcome.categorized, 1);
     assert_eq!(outcome.uncategorized, 1);
@@ -411,7 +412,8 @@ fn import_statement_writes_no_statements_row_when_no_period_and_no_transactions(
     assert_eq!(outcome.account_id, account_id);
     assert!(!outcome.account_created);
     assert_eq!(outcome.statement_id, None);
-    assert_eq!(outcome.transactions_inserted, 0);
+    assert_eq!(outcome.rows_read, 0);
+    assert_eq!(outcome.transactions_added, 0);
     assert_eq!(
         store.list_statements(account_id.clone()).unwrap(),
         Vec::new()
@@ -573,7 +575,18 @@ fn importing_the_same_statement_twice_does_not_double_history() {
         .expect("second import");
 
     // The import is not refused, and the repeats are linked rather than counted twice.
-    assert_eq!(second.transactions_inserted, 2);
+    //
+    // The two figures a person is shown are the whole document and they add up to it: two rows
+    // were read, **none** were gained, and both were superseded by rows already held. Reporting
+    // `rows_read` as the number imported is what told somebody they had added six transactions
+    // when their account gained nothing (`issues/07`).
+    assert_eq!(second.rows_read, 2);
+    assert_eq!(second.transactions_added, 0);
+    assert_eq!(second.rows_superseded, 2);
+    assert_eq!(
+        second.rows_read,
+        second.transactions_added + second.rows_superseded
+    );
     assert_eq!(second.duplicates_linked, 2);
     assert_eq!(live_total(&first.account_id), after_one);
 
@@ -705,7 +718,8 @@ fn two_identical_rows_in_one_statement_are_both_kept() {
         ))
         .expect("import");
 
-    assert_eq!(outcome.transactions_inserted, 2);
+    assert_eq!(outcome.rows_read, 2);
+    assert_eq!(outcome.transactions_added, 2);
     assert_eq!(outcome.duplicates_linked, 0);
     let live = store
         .list_transactions(outcome.account_id.clone())

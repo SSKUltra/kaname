@@ -27,8 +27,8 @@ struct ImportSummaryScopeTests {
             last4: "1002",
             accountIsNew: false,
             period: nil,
-            transactionsImported: imported,
-            duplicatesSkipped: duplicates,
+            transactionsAdded: imported,
+            rowsAlreadyHeld: duplicates,
             categorized: categorized,
             uncategorized: uncategorized,
             unreadableRows: unreadable,
@@ -48,8 +48,8 @@ struct ImportSummaryScopeTests {
         // every per-import figure out of the account set.
         #expect(!imported.contains("Categorized"))
         #expect(!imported.contains("Left uncategorized"))
-        #expect(!account.contains("Transactions"))
-        #expect(!account.contains("Duplicates skipped"))
+        #expect(!account.contains("Transactions added"))
+        #expect(!account.contains("Already in Kaname"))
         #expect(Set(imported).isDisjoint(with: Set(account)))
     }
 
@@ -62,7 +62,7 @@ struct ImportSummaryScopeTests {
         #expect(all.count == 5)
         #expect(Set(all.map(\.label)).count == all.count, "a figure is in both sets")
         for expected in [
-            "Transactions", "Duplicates skipped", "Rows Kaname couldn't read", "Categorized",
+            "Transactions added", "Already in Kaname", "Rows Kaname couldn't read", "Categorized",
             "Left uncategorized",
         ] {
             #expect(all.contains { $0.label == expected }, "\(expected) is not shown at all")
@@ -76,7 +76,7 @@ struct ImportSummaryScopeTests {
         #expect(summary.importedFigures.map(\.count) == [5, 2, 1])
         #expect(summary.accountFigures.map(\.count) == [4, 9])
         // `Transactions` leads: it is what the person just did.
-        #expect(summary.importedFigures.first?.label == "Transactions")
+        #expect(summary.importedFigures.first?.label == "Transactions added")
     }
 
     @Test("A clean import shows neither a duplicate nor an unreadable row")
@@ -84,7 +84,7 @@ struct ImportSummaryScopeTests {
         // Zero is not a fact worth a row here — "Duplicates skipped 0" invites a question the
         // person did not have. Both rows appear only when they have something to report.
         let clean = Self.summary(duplicates: 0, unreadable: 0)
-        #expect(clean.importedFigures.map(\.label) == ["Transactions"])
+        #expect(clean.importedFigures.map(\.label) == ["Transactions added"])
 
         // ...and the account's position is always shown, because "0 categorized" is a real
         // state of an account and the reason the next screen looks the way it does.

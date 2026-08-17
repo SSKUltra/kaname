@@ -420,7 +420,29 @@ pub struct ImportOutcome {
     pub account_id: String,
     pub account_created: bool,
     pub statement_id: Option<String>,
-    pub transactions_inserted: u32,
+    /// How many rows the reader handed over — every transaction printed in the document.
+    ///
+    /// Named for what it is. It was `transactions_inserted`, which every caller read as "rows
+    /// added to the account", and on a re-import it is not: all of them are written and then
+    /// the ones already held are superseded, so a six-row statement re-imported reported six
+    /// transactions while the account gained nothing
+    /// (`.scratch/016-statement-import-vertical/issues/07`).
+    pub rows_read: u32,
+    /// How many of those rows the account actually **gained** — this statement's rows that are
+    /// still live once re-import supersession and cross-source de-duplication have run.
+    ///
+    /// This is the number that answers "did anything change?", and it is counted from the
+    /// database after every linking pass rather than derived, so no arithmetic can drift from
+    /// what the rows actually say.
+    pub transactions_added: u32,
+    /// The rest: rows of **this statement** that lost to a row already held. `rows_read` is
+    /// always `transactions_added + rows_superseded`, so the two figures a person is shown add
+    /// up to the document in front of them.
+    pub rows_superseded: u32,
+    /// Links created across the **whole store** by this import's de-duplication pass, plus the
+    /// rows this statement re-imported. Store-wide and therefore **not** a per-statement
+    /// figure — it is kept for callers that measure the de-duplicator, and is deliberately not
+    /// what the import summary shows.
     pub duplicates_linked: u32,
     pub categorized: u32,
     pub uncategorized: u32,
@@ -748,7 +770,9 @@ impl Store {
                 account_id,
                 account_created,
                 statement_id: None,
-                transactions_inserted: 0,
+                rows_read: 0,
+                transactions_added: 0,
+                rows_superseded: 0,
                 duplicates_linked: 0,
                 categorized: 0,
                 uncategorized: 0,
@@ -800,13 +824,22 @@ impl Store {
         let reimported = link_reimported_rows_in(&tx, &account_id, &statement_id)?;
         let categorized = categorize_account_in(&tx, &account_id)?;
         let duplicates = find_duplicates_in(&tx)?;
+        // Counted **after** every linking pass and from the rows themselves, because that is
+        // the only way the figure survives a change to how linking works. Deriving it from
+        // `reimported` would have missed a row this statement lost to cross-source
+        // de-duplication, and deriving it from `duplicates_linked` would have counted links
+        // made elsewhere in the store (issues/07).
+        let rows_read = request.transactions.len() as u32;
+        let transactions_added = count_live_statement_rows_in(&tx, &statement_id)?;
         tx.commit()?;
 
         Ok(ImportOutcome {
             account_id,
             account_created,
             statement_id: Some(statement_id),
-            transactions_inserted: request.transactions.len() as u32,
+            rows_read,
+            transactions_added,
+            rows_superseded: rows_read.saturating_sub(transactions_added),
             duplicates_linked: duplicates.duplicates_linked + reimported,
             categorized: categorized.categorized,
             uncategorized: categorized.uncategorized,
@@ -1292,6 +1325,26 @@ pub fn categorize_account_in(
         }
     }
     Ok(summary)
+}
+
+/// How many rows of one statement the person actually has, right now.
+///
+/// Counted from the rows rather than derived from what linking reported, and built from
+/// `live_predicate!()` so it cannot drift from every other read that means "the rows the person
+/// has" (`.scratch/016-statement-import-vertical/issues/07`).
+fn count_live_statement_rows_in(
+    tx: &rusqlite::Transaction<'_>,
+    statement_id: &str,
+) -> Result<u32, StoreError> {
+    let count: i64 = tx.query_row(
+        concat!(
+            "SELECT COUNT(*) FROM transactions WHERE statement_id = ?1 AND ",
+            live_predicate!()
+        ),
+        params![statement_id],
+        |row| row.get(0),
+    )?;
+    Ok(count as u32)
 }
 
 /// Link the rows of a just-inserted statement to rows the same account already had.

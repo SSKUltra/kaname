@@ -23,8 +23,9 @@ enum IntegrityOutcome: Equatable, Sendable {
 
 /// Everything the person sees after a successful import.
 ///
-/// `transactionsImported == 0` is a success, not a failure: a statement with no rows in the
-/// period imported correctly and there was simply nothing to add.
+/// `transactionsAdded == 0` is a success, not a failure: a statement with no rows in the
+/// period imported correctly and there was simply nothing to add — and so did a statement
+/// imported twice, whose every row the account already held.
 struct ImportSummary: Equatable, Sendable {
     /// Engine-supplied and rendered verbatim — the only engine string allowed on screen, so a
     /// tie-break between two readers claiming one document is always visible.
@@ -33,8 +34,8 @@ struct ImportSummary: Equatable, Sendable {
     let accountIsNew: Bool
     /// Omitted entirely when the parse recovered no period — never faked from today's date.
     let period: DateInterval?
-    let transactionsImported: Int
-    let duplicatesSkipped: Int
+    let transactionsAdded: Int
+    let rowsAlreadyHeld: Int
     let categorized: Int
     let uncategorized: Int
     /// Rows that matched a transaction's shape but whose fields would not parse. Surfaced
@@ -61,12 +62,14 @@ extension ImportSummary {
         var id: String { label }
     }
 
-    /// What **this statement** did. `transactionsImported` and `duplicatesSkipped` come from
-    /// one `ImportOutcome` and describe only the document just handed over.
+    /// What **this statement** did. Both figures describe the document just handed over, and
+    /// together they account for all of it: every row read was either added or already held, so
+    /// the two numbers a person is shown add up to the statement in front of them
+    /// (`.scratch/016-statement-import-vertical/issues/07`).
     var importedFigures: [Figure] {
-        var figures = [Figure(label: "Transactions", count: transactionsImported)]
-        if duplicatesSkipped > 0 {
-            figures.append(Figure(label: "Duplicates skipped", count: duplicatesSkipped))
+        var figures = [Figure(label: "Transactions added", count: transactionsAdded)]
+        if rowsAlreadyHeld > 0 {
+            figures.append(Figure(label: "Already in Kaname", count: rowsAlreadyHeld))
         }
         if unreadableRows > 0 {
             figures.append(Figure(label: "Rows Kaname couldn't read", count: unreadableRows))

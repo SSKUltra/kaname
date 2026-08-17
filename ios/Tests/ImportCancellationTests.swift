@@ -220,7 +220,7 @@ struct ImportCancellationTests {
         // The import owned by the actor runs to completion, so the person comes back to a
         // finished import rather than a progress bar that never resolves.
         let summary = try #require(try await caller.value.summary)
-        #expect(summary.transactionsImported == 2)
+        #expect(summary.transactionsAdded == 2)
         let account = try #require(try store.listAccounts().first)
         #expect(try store.listTransactions(accountId: account.id).count == 2)
     }
