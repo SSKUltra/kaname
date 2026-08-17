@@ -1,4 +1,4 @@
-.PHONY: perf-corpus bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test import-audit lint reference-check reference-shapes a11y-sweep
+.PHONY: perf-corpus bootstrap core-test core-lint core-fmt core-privacy-audit core-xcframework ios-gen ios-test import-audit release-audit lint reference-check reference-shapes a11y-sweep
 
 # SQLCipher crypto backend is chosen per-OS with NO OpenSSL (Constitution I): Apple
 # auto-selects CommonCrypto; on Linux we force LibTomCrypt by injecting the compile flag
@@ -120,6 +120,17 @@ reference-shapes:
 # statement-import path. `core-privacy-audit` cannot see Swift.
 import-audit:
 	./scripts/import-path-audit.sh
+
+# Prove no seeding path is in the Release binary (~16s: it builds one).
+#
+# Deliberately NOT folded into `import-audit`, which is a sub-second grep people run
+# constantly — a 16-second build inside it is the reason somebody stops running it (019 FR-028,
+# SC-014). It needs `ios/Kaname.xcworkspace`, which Tuist generates; the script says so by name
+# rather than letting `xcodebuild` complain, so this target deliberately has NO `ios-gen`
+# prerequisite: a gate that silently regenerates the project is a gate that can pass against a
+# tree the reader is not looking at.
+release-audit:
+	@bash scripts/release-absence-audit.sh
 
 # The accessibility axes a test cannot set for itself (T123, Constitution IV).
 #

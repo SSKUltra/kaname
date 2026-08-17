@@ -61,7 +61,11 @@ jobs:
       - name: SwiftLint
         run: swiftlint --strict
       - name: swift-format lint
-        run: swift-format lint --recursive --strict Sources Tests
+        # `UITests` is here to match `make lint` (Makefile). Until 019 PR A, CI linted
+        # `Sources Tests` while the local gate linted all three, so every line in ios/UITests/
+        # was format-checked on a laptop and nowhere else — and that directory is where the
+        # seeding slice's centre of gravity is (019 FR-043a).
+        run: swift-format lint --recursive --strict Sources Tests UITests
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Add iOS Rust targets
@@ -75,6 +79,20 @@ jobs:
         run: make core-xcframework
       - name: Generate Xcode project
         run: tuist generate --no-open
+      # ⚠️ Until 019 PR A, CI had NEVER run this — all ten scans, the networking one that is the
+      # platform half of Constitution Principle I included, ran only when somebody remembered
+      # (019 research R19, FR-043a). `working-directory` is overridden because the job's default
+      # is `ios`, where there is no Makefile.
+      - name: Import-path audit (ten scans, ~0.3s)
+        working-directory: ${{ github.workspace }}
+        run: make import-audit
+      # The artifact half of the DEBUG-boundary proof: it builds its own Release binary and
+      # scans it, so it costs ~16s and needs the workspace `tuist generate` just produced. A
+      # seeding path that reached a shipping build would be caught here, on a pull request,
+      # rather than on somebody's laptop (019 FR-025, FR-029, SC-004).
+      - name: Release absence audit (~16s — it builds a Release binary)
+        working-directory: ${{ github.workspace }}
+        run: make release-audit
       - name: Prepare iOS simulator
         id: sim
         working-directory: ${{ github.workspace }}
