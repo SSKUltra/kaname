@@ -148,8 +148,31 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: the DEBUG-only test-seeding slice — now specified, planned and broken into 101 tasks
-(`specs/019-debug-test-seeding/`). Start at T001, PR A.** It is scheduled in
+**⬅️ NEXT: 019's **PR B — the seeding path**, starting at **T026** (`specs/019-debug-test-seeding/tasks.md`).
+**PR A is done and open as [#40](https://github.com/SSKUltra/kaname/pull/40), CI green** — T001–T025,
+the two absence proofs built and watched failing *before* a line of seeding code exists. Read PR #40's
+description and `quickstart.md` § *How to watch the absence audit fail* before touching PR B: three
+traps were found building the proof, and two of them will bite anyone adding a file.
+
+- ⚠️ **Tuist resolves `sources: ["Sources/**"]` at generation time.** A file added since the last
+  `make ios-gen` is compiled by nothing, so its absence from the Release binary proves nothing —
+  three `release-audit: OK` runs and two break verdicts were recorded before this was noticed, and
+  every one looked like a pass. `make release-audit` now checks `project.pbxproj` membership first
+  and fails as **inconclusive**. **Run `make ios-gen` after adding any file.**
+- ⚠️ **`nm -a` includes the debug map, which names source files**, so a *correctly guarded*
+  `DebugSeed.swift` shows up three times in a binary holding none of its code. The scan uses plain
+  `nm` (4,511 symbols, not 12,249 stabs).
+- ⚠️ **`nm … | grep -q` fails under `pipefail` even when it matches** (SIGPIPE) — match in a
+  variable, never in a pipe.
+- Six breaks were watched: an unguarded but *unreferenced* type is dead-code eliminated, so Scan B is
+  honestly silent for breaks 1, 2 and 4; a **referenced** one is caught by `nm`, a literal on a live
+  path by `strings` alone, and an unguarded shipping reference to DEBUG-only code fails the Release
+  **build** — the compiler is a third gate.
+- **CI now runs `make import-audit` (ten scans) and `make release-audit` for the first time**, and
+  lints `UITests` too. To exercise the widened lint you need a violation only `swift-format` rejects
+  (`[NoBlockComments]`) — SwiftLint runs first and shares `[LineLength]`.
+
+The slice is scheduled in
 `docs/kaname-ios-plan.md` before the categorize slice, and 018 is the reason it should stay there:
 **no automated run can reach a populated transaction list at all.** The list is behind an import,
 the import is behind the system document picker, and FR-077 forbids a seeding hook in the shipping
