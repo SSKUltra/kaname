@@ -174,7 +174,7 @@ ios/
 └── UITests/
     ├── SeededTransactionListUITests.swift    # NEW — S*, D*, E*, A1–A8, the geometry assertion
     ├── SeedContractUITests.swift             # NEW — L1–L6: absent/unknown/reset/timing
-    └── AccessibilityAuditTests.swift         # CHANGED — the populated list joins the sweep
+    └── ImportFrontDoorUITests.swift          # CHANGED — the only UITests file that exists today
 
 scripts/
 ├── import-path-audit.sh          # CHANGED — a TENTH scan: the DEBUG-boundary source check

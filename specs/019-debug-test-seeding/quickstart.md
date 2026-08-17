@@ -65,7 +65,7 @@ It is a separate target precisely so the cheap gate stays cheap (FR-028, SC-014)
 ```bash
 make ios-gen
 xcodebuild -workspace ios/Kaname.xcworkspace -scheme Kaname \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
   -only-testing:KanameUITests/SeededTransactionListUITests/testASeededHistoryRendersEveryLiveRow \
   test
 ```
@@ -78,7 +78,7 @@ app.launchEnvironment["KANAME_SEED_SCENARIO"] = "small"
 app.launchArguments += ["-AppleLocale", "en_IN", "-AppleLanguages", "(en)"]
 app.launch()
 XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-app.buttons["Transactions"].tap()          // the same control a person taps
+app.buttons["All transactions"].tap()      // the same control a person taps
 ```
 
 Six rows, one account, in a prior calendar year. If the app does not reach the foreground, the
