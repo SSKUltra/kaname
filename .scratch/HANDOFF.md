@@ -148,11 +148,51 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: 019's **PR B — the seeding path**, starting at **T026** (`specs/019-debug-test-seeding/tasks.md`).
-**PR A is done and open as [#40](https://github.com/SSKUltra/kaname/pull/40), CI green** — T001–T025,
-the two absence proofs built and watched failing *before* a line of seeding code exists. Read PR #40's
-description and `quickstart.md` § *How to watch the absence audit fail* before touching PR B: three
-traps were found building the proof, and two of them will bite anyone adding a file.
+**⬅️ NEXT: 019's **PR C — what the coverage was for**, starting at **T049**
+(`specs/019-debug-test-seeding/tasks.md`). **PR B is done** — T026–T048, every gate green — and
+**an automated run now reaches a populated transaction list**. PR A is merged (#40).
+
+**Read `tasks.md` § *PR B — RECORDED* before starting PR C.** It carries six watched breaks, five
+forced deviations, two facts about the element tree that will cost an hour each if rediscovered,
+and — the point of the slice — **what the first accessibility audit of a populated list found**.
+
+⚠️ **A1 found two real defects on its first run, and both are fixed.** 018's T116 set
+`.foregroundStyle(.primary)` on the date heading and it was a **no-op**: the bare `.primary` is the
+*hierarchical* style, "the most prominent level of whatever style is already in force", and what
+was in force on a plain-list header was the grey the header wanted. It shipped at ~3.5:1. And the
+pinned heading had **no background** — `.scratch/018-transaction-list/issues/07`, parked since
+2026-08-16 as `needs-triage`, found by a person at XXXL after forty minutes of manual gate, and
+reproduced here by a machine at the **default** text size in twelve seconds. Both fixed in
+`TransactionListView`; `018/07` can be closed.
+
+⚠️ **A1 audits every type except `.contrast`, and that is a recorded finding, not a convenience** —
+`.scratch/019-debug-test-seeding/issues/01`. Three `Contrast failed` verdicts remain that name **no
+element**; nine probes narrow them to the bottom filter bar (remove it: 4 → 0; the front door's
+accounts list: 0), and the chip's own text measures **9.48:1** computed from the audit's own
+screenshot. A suppression was **rejected on purpose**: every contrast issue on that screen arrives
+with `element == nil`, *including the real heading defect above*, so "ignore the ones it cannot
+name" would have hidden the very finding that proved the audit was worth running. **T074** — already
+the task for deciding what this instrument can see — inherits the question, and the ticket carries
+the probe table it should start from.
+
+- ⚠️ **`SeedScenarios.swift` and `SeedExpectations.swift` are compiled into `KanameUITests` too**,
+  so they may import **Foundation and nothing else** — that bundle links neither the app nor
+  `KanameCore`. This is why direction is a local `SeedDirection` and why the expected-row maths is
+  not in `SeedScenarioBuilder.swift`, which does import the engine.
+- ⚠️ **A row's sentence is not on its cell.** A row and a date heading are both `Cell`s with an
+  empty label; the sentence hangs on a `StaticText` inside, and they are told apart structurally
+  (a row has parts under it, a heading is one line) — never by wording. And a `List` renders a
+  **screenful**, not a list: even six rows do not all fit above the filter bar, so every count and
+  order assertion goes through `SeededLaunch.walk`, one pass collecting rows *and* headings.
+- ⚠️ **A seeded store outlives the suite that wrote it.** The `empty` scenario exists for this: the
+  reset without the seed, run in `tearDown`, or the shipped front-door audits assert a fresh
+  install against an accounts list. Appearance is pinned per test for the same class of reason —
+  `XCUIDevice.shared.appearance` is simulator-wide and sticky, like `content_size`.
+- **SC-009 measured 4.63 s** (`seed-timing:` in the log) against a 5 s bound, and the `deep` walk
+  costs **113 s** of the UI suite's 423 s. Shrink a scenario if it tightens; never move the seed
+  off the launch path.
+
+**Still true from PR A**, and it will bite anyone adding a file:
 
 - ⚠️ **Tuist resolves `sources: ["Sources/**"]` at generation time.** A file added since the last
   `make ios-gen` is compiled by nothing, so its absence from the Release binary proves nothing —

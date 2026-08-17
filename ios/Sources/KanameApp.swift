@@ -4,6 +4,12 @@ import SwiftUI
 /// UniFFI bindings; this shell has zero network dependencies.
 @main
 struct KanameApp: App {
+    init() {
+        #if DEBUG
+        DebugSeed.applyIfRequested()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
