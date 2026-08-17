@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/018-transaction-list/`, resuming at T071 (PR B, US2).**
+**The live one is `specs/019-debug-test-seeding/`, starting at T001 (PR A, the absence proof).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -148,27 +148,66 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: the DEBUG-only test-seeding slice.** It is scheduled in `docs/kaname-ios-plan.md`
-before the categorize slice, and 018 is the reason it should stay there: **no automated run can
-reach a populated transaction list at all.** The list is behind an import, the import is behind
-the system document picker, and FR-077 forbids a seeding hook in the shipping app — so every P3
-screen that shows a person's own data is manual-gate-only, half an hour of somebody's afternoon
-each, and 018's own SC-012 is still open because of it. Read
+**⬅️ NEXT: the DEBUG-only test-seeding slice — now specified, planned and broken into 101 tasks
+(`specs/019-debug-test-seeding/`). Start at T001, PR A.** It is scheduled in
+`docs/kaname-ios-plan.md` before the categorize slice, and 018 is the reason it should stay there:
+**no automated run can reach a populated transaction list at all.** The list is behind an import,
+the import is behind the system document picker, and FR-077 forbids a seeding hook in the shipping
+app — so every P3 screen that shows a person's own data is manual-gate-only, half an hour of
+somebody's afternoon each, and 018's own SC-012 is still open because of it. Read
 `.scratch/018-transaction-list/issues/01-manual-accessibility-gate-not-run.md` first — now
 **resolved**, it is the itemised bill for not having this: forty minutes by hand, and four
 defects (`issues/02`–`05`) that no automated gate in this repo could have caught, on a screen no
-automated run can even reach. ⚠️ **This slice has not been specified** — it is the one place
-in this handoff where `speckit.specify` is the right next command.
+automated run can even reach. **Do not re-run `speckit.specify`/`plan`/`tasks`** — all three are
+committed (`2bbc753`, `9aed2f7`, `705f5ae`, `d7bafe5`).
 
-⚠️ **The 2026-08-17 session strengthened that case considerably — read this before specifying.**
-Closing `018/02` took **two** attempts: the first fix passed every unit test in the repo and was
-still broken on screen, because the tests prove *which fact leads* and a pure layout decision
-**cannot see a width**. What caught it was a person at XXXL and a screenshot. Meanwhile `018/03`
-could not be run at all until a **six-row `gate/` corpus** was added to `make perf-corpus`, since
-G2 asks about the *end* of a list and at XXXL the 10,000-row corpus puts that hundreds of flicks
-away. So the seeding slice's value is now measured, not asserted — and its scope should account
-for what the gate corpus already solved (getting *data* in cheaply) versus what it cannot
-(reaching a populated screen from an **automated** run, which is the whole point).
+⚠️ **The planning pass discovered the slice cannot be a Rust one, and this is the single most
+load-bearing fact in it.** `core/scripts/build-xcframework.sh` runs `cargo build --release` **once**
+for all three Apple targets, and that one xcframework links into **both** Xcode configurations. So
+`#[cfg(debug_assertions)]` is already OFF in the DEBUG app and a cargo feature compiles straight
+into Release: **there is no Rust construct present in DEBUG and absent from Release.** The slice is
+Swift-only. No FFI change, no `make core-xcframework`, no `ios-gen` dance, no risk to
+`history_perf::s5` — and **schema stays at v7**, recorded as a deliberate non-change, because a
+migration would have been the tell that seeding had stopped going through the front door.
+
+⚠️ **The absence proof builds its own binary and refuses to trust itself.** `-showBuildSettings`
+reports `STRIP_STYLE = all` but `DEPLOYMENT_POSTPROCESSING = NO`, so research built a real Release
+artifact and simulated the strip: **12,249 symbols → 157**, and a known *shipping* type left
+`strings` entirely. A naive artifact scan would have **passed for the wrong reason**. `make
+release-audit` therefore scans both `nm` and `strings` and will not conclude an absence unless it
+first finds a symbol and a literal it knows are present — failing as **inconclusive** otherwise.
+Break 5 of the five deliberate breaks is pointing it at a stripped copy.
+
+⚠️ **CI has never run `make import-audit` — not once.** All nine scans, including the networking
+scan that is the platform half of Principle I, run only when somebody remembers. CI also lints
+`Sources Tests` while `make lint` lints `Sources Tests UITests`. FR-043a closes both in PR A,
+because 019 is about to add a tenth scan whose entire value is that it fails a build.
+
+⚠️ **Four spec amendments after planning, all cases of believing the codebase over the draft**
+(spec § *Amendments after `/speckit.plan`*). **FR-008a**: seeds cannot express deleted rows or
+transfers — `is_deleted` has no write path in `store.rs`'s API (the only `SET is_deleted = 1` is
+raw SQL in an engine test helper) and `is_transfer` is written only by `detect_transfers`, which
+`import-path-audit.sh` bans the app from calling. **FR-039a**: `EmptyKind.nothingImported` is
+unreachable *by construction* — its precondition is empty account summaries, and `RootView` hides
+the list's only entry point under that same call, so no seed satisfies both; it gets host-rendering
+without an audit, said plainly rather than folded into a "100%" that would not be true.
+**SC-008**: six steps automated, eight remaining, under twenty minutes — the draft's five left
+G10/G13/G14 homeless, and G13/G14 need a live import *through the picker*, the one interaction
+seeding structurally cannot stage. Two more verdicts are deferred into tasks: `nothingToShowAnywhere`
+may be a second FR-039a exception (T058/T080), and a third **`barren`** scenario is needed because
+neither `small` nor `deep` can produce a store with zero live rows.
+
+⚠️ **The 2026-08-17 session strengthened the case considerably.** Closing `018/02` took **two**
+attempts: the first fix passed every unit test in the repo and was still broken on screen, because
+the tests prove *which fact leads* and a pure layout decision **cannot see a width**. What caught it
+was a person at XXXL and a screenshot. Meanwhile `018/03` could not be run at all until a **six-row
+`gate/` corpus** was added to `make perf-corpus`, since G2 asks about the *end* of a list and at
+XXXL the 10,000-row corpus puts that hundreds of flicks away. So the slice's value is measured, not
+asserted — and FR-038/SC-006 make it a *requirement* that the new coverage be watched failing
+against `018/02` and `018/03` reinstated on purpose (T073, T076). ⚠️ One honest caveat: R10's claim
+that `performAccessibilityAudit` fires `.textClipped` for 018/02 is **inferred, not observed** — the
+seven iOS audit types have no occlusion check — so T074 determines it and T075 falls back to a
+second geometry assertion rather than a weakened criterion.
 
 **State at hand-off (2026-08-17, everything pushed, `main` clean):** 016 has **nothing open**;
 018 has `issues/06` (deferred, needs a phone — the only thing between 018 and SC-012),
