@@ -6,6 +6,12 @@ import XCTest
 /// the failures nobody can reproduce: a suite that passes on a clean machine and fails on the
 /// one that ran it yesterday. These are the assertions that make "deterministic" a property of
 /// the code rather than a hope about the container.
+///
+/// ⚠️ **The corpus-does-not-eat-itself assertion moved** to `SeededHistoryShapeUITests`, where
+/// the one expensive walk of `deep` now answers every question about that scenario at once.
+/// It is the same assertion — the screen's rows, the declaration's arithmetic and the engine's
+/// own per-account counts agreeing — and it is still the thing that notices when a scenario
+/// loses a row to a collision it did not declare.
 final class SeededDeterminismUITests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -16,42 +22,6 @@ final class SeededDeterminismUITests: XCTestCase {
     override func tearDown() {
         SeededLaunch.resetContainer()
         super.tearDown()
-    }
-
-    /// ⚠️ **The corpus must not eat itself.** A synthetic history built from repeated rows
-    /// collapses under the engine's own de-duplication and comes out short — 018 learned this
-    /// the hard way, from an ordering fixture whose printed order happened to coincide with
-    /// descending amount and let a deliberate break slip past.
-    ///
-    /// So the declaration's arithmetic is checked against two independent readings of the same
-    /// store: the rows the screen renders, and the live count the **engine** reports per
-    /// account at the front door. If `deep` ever loses a row to a collision it did not declare,
-    /// all three numbers stop agreeing here rather than silently in a later assertion that was
-    /// only ever testing a fraction of what it claimed.
-    func testTheDeepScenarioDoesNotDeDuplicateItself() {
-        let scenario = SeedScenario.deep
-        let declared = scenario.expectedLiveRows.map(\.accessibilityLabel)
-        XCTAssertEqual(
-            Set(declared).count, declared.count,
-            "two live rows share a sentence, so a count of sentences is not a count of rows")
-
-        let app = SeededLaunch.launch(scenario: scenario)
-        for account in scenario.expectedAccounts {
-            XCTAssertTrue(
-                SeededLaunch.element(app, labelled: account.announcement).waitForExistence(timeout: 10),
-                "the engine does not report \(account.announcement)")
-        }
-
-        SeededLaunch.openTransactionList(app)
-        let onScreen = SeededLaunch.allRowLabels(app)
-
-        XCTAssertEqual(onScreen.count, scenario.expectedLiveRowCount)
-        XCTAssertEqual(Set(onScreen), Set(declared))
-        // Exactly the collisions the scenario declares, and no others: one re-import and one
-        // cross-source pair. ⚠️ Two credit cards never de-duplicate — the engine compares a
-        // ledger against a card and nothing else — so a scenario that declared this pair as two
-        // cards would lose its supersession **silently**, and this number is what would notice.
-        XCTAssertEqual(scenario.expectedSupersededRowCount, 2)
     }
 
     /// D1 — ten consecutive seeded launches on a container nobody cleans produce one screen.

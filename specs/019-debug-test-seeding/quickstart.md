@@ -168,6 +168,51 @@ audit's type list, not yet observed** — it could not be run before the capabil
 exists. If it does not fire, the remedy is a second geometry assertion of A7's shape, **not** a
 weakened criterion.
 
+### What it turned out to be — 019 PR C, T072–T077, measured
+
+Four findings, and the table above is wrong in three places. All of it is recorded rather than
+tidied away, because each correction is a fact about the instruments this repository now relies on.
+
+**1. ⚠️ Neither one-line break reproduces its defect.** Both fixes were *plural*, and reverting one
+line of a three-line fix leaves the screen working.
+
+| Break as specified | What happened | The faithful reinstatement |
+|---|---|---|
+| `axis` → `.horizontal` | **everything stayed green** — the clear button still collapses to a symbol at accessibility sizes, and the chip still fitted | `axis` → `.horizontal` **and** `clearButtonShowsTitle` → `true` |
+| `maximumScopeLines` → `6` | **everything stayed green** — the bound only bites when a name is long enough to want the lines, and `SYNTHETIC BANK ONE` is three short words | the same break, against a fixture whose account name is as long as a real card product's |
+
+The second one is the more useful lesson: **a fixture that cannot express a defect cannot watch a
+gate catch it.** `small`'s account is now `SYNTHETIC INTERNATIONAL REWARDS BANK` for that reason,
+permanently — both parked 018 defects are defects of a *long name at a large text size*, and a
+suite built on a short one would have watched both breaks stay green and called it coverage.
+
+**2. 🚨 T074's verdict: (b). The auditor does not see `018/02`.** Reinstated faithfully, the chip
+rendered `••••…` over `SYN-T…NE` and the clear button read `Show all ac-count s` down four lines —
+the ticket's screenshot, reproduced. **A5 passed.** R10's inference is now *observed to be wrong*,
+and `.textClipped` could not have caught it anyway: at XXXL this screen fires that type by design
+(`issues/03`), so it is red before the break and cannot discriminate.
+
+**3. ⚠️ A test cannot read a truncation from a label.** The obvious sharper instrument — assert the
+chip's rendered text has no `…` — is **inert**. XCUITest reports a `Text`'s *string*, not its
+glyphs: with the screen reading `••••…`, the element's label was still `•••• 0006`. Anything built
+on labels would have passed against the defect while quoting the correct answer back.
+
+**4. T075's fallback, and what actually catches each defect.** Geometry, both times:
+
+| Defect | Instrument that goes red | Recorded failure |
+|---|---|---|
+| `018/02` | **A5b** — the chip's frame must be more than two-thirds of the window at accessibility sizes, because that is what going vertical *means* | `XCTAssertGreaterThan failed: ("163.0") is not greater than ("235.8") — the chip has less than two thirds of the width … so the bar did not go vertical` |
+| `018/03` | **A7** — the bottom-most rendered row's `maxY` against the chip's `minY` | `XCTAssertLessThanOrEqual failed: ("1121.0") is greater than ("456.7") — a row is underneath the filter bar: row (0.0, 784.3, 393.0, 336.7), chip (16.0, 456.7, 360.7, 278.0)` |
+
+⚠️ A7 asserts geometry **before** completeness on purpose. The first version checked "the walk
+reached the last row" first, and under `018/03` that fired instead — true, but it reported a
+missing row where the defect is a covered one. The bar being 278 pt tall instead of 176 pt is the
+sentence a reader needs.
+
+**Neither criterion was weakened and neither defect was re-parked.** What changed is which
+instrument is trusted: on this screen the system auditor is the *weaker* one, and the two
+assertions that carry FR-038 are both measurements of what was drawn.
+
 ## Gotchas discovered during planning
 
 | Trap | What actually happens | Do this |

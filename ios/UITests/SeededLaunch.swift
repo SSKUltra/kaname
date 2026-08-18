@@ -111,17 +111,26 @@ enum SeededLaunch {
     /// One walk rather than two, because a walk ends at the bottom of the list: a second query
     /// afterwards sees only the last screenful, which is how the first version of the date
     /// assertion came to look for a heading that had scrolled off half a minute earlier.
-    static func walk(
-        _ app: XCUIApplication,
-        maximumSwipes: Int = 60
-    ) -> (rows: [String], headings: [String]) {
+    static func walk(_ app: XCUIApplication, maximumSwipes: Int = 60) -> ListWalk {
         var rows: [String] = []
         var headings: [String] = []
+        var repeated: [String] = []
         var seen = Set<String>()
+        var swipes = 0
         let list = app.collectionViews.firstMatch
         for _ in 0...maximumSwipes {
             let before = seen.count
-            for (label, isRow) in visibleLabels(app) where !seen.contains(label) {
+            let visible = visibleLabels(app)
+            // ⚠️ The only duplication a walk can honestly detect. Rows are collected into a set
+            // across passes, because a row stays on screen while the list scrolls past it — so
+            // "seen twice" across passes says nothing. Seen twice **in one screenful** does: it
+            // is a row rendered twice, which is what a page boundary repeating its first row
+            // looks like.
+            var thisScreen = Set<String>()
+            for (label, _) in visible where !thisScreen.insert(label).inserted {
+                repeated.append(label)
+            }
+            for (label, isRow) in visible where !seen.contains(label) {
                 seen.insert(label)
                 if isRow { rows.append(label) } else { headings.append(label) }
             }
@@ -129,8 +138,10 @@ enum SeededLaunch {
             // an empty one.
             if seen.count == before { break }
             list.swipeUp()
+            swipes += 1
         }
-        return (rows, headings)
+        return ListWalk(
+            rows: rows, headings: headings, repeatedOnOneScreen: repeated, swipes: swipes)
     }
 
     /// Every labelled cell on screen, and whether it is a row.
@@ -141,6 +152,64 @@ enum SeededLaunch {
             return (label, texts.count > 1)
         }
     }
+
+    /// Narrow the list to one account, through the bar a person uses.
+    static func filter(
+        _ app: XCUIApplication,
+        to account: SeedAccountExpectation,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let label = SeedScenario.menuLabel(for: account)
+        // ⚠️ Not `app.buttons["Showing all accounts"]`. The scope chip announces the scope, so
+        // its label changes the moment a filter is applied — and a second `filter(…)` in the
+        // same test then taps a control that no longer exists.
+        scopeChip(app).tap()
+        let option = app.buttons[label]
+        XCTAssertTrue(
+            option.waitForExistence(timeout: 10), "the filter menu does not offer \(label)",
+            file: file, line: line)
+        option.tap()
+        XCTAssertTrue(
+            app.buttons["Showing \(label) only"].waitForExistence(timeout: 10),
+            "the scope chip does not say the filter was applied", file: file, line: line)
+    }
+
+    /// Put the list back to every account, through the button that exists for it.
+    static func clearFilter(
+        _ app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        app.buttons["Show all accounts"].firstMatch.tap()
+        XCTAssertTrue(
+            app.buttons["Showing all accounts"].waitForExistence(timeout: 10),
+            "the filter was not cleared", file: file, line: line)
+    }
+
+    /// The scope chip, whatever scope it is currently announcing.
+    static func scopeChip(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Showing '")).firstMatch
+    }
+
+    /// What an empty list is saying: the title and the message of the state it rendered.
+    static func emptyState(_ app: XCUIApplication) -> (title: String, message: String)? {
+        let texts = app.staticTexts.allElementsBoundByIndex.map(\.label)
+        guard
+            let index = texts.firstIndex(where: { text in
+                emptyTitlePrefixes.contains { text.hasPrefix($0) }
+            })
+        else { return nil }
+        return (texts[index], texts.dropFirst(index + 1).first ?? "")
+    }
+
+    /// How every title `TransactionListStrings.emptyState(for:)` can produce begins — three of
+    /// the six name the account, so this matches a prefix rather than a whole sentence.
+    /// Duplicated here on purpose: this bundle cannot see the app's strings, and an assertion
+    /// made against the **rendered** sentence is what notices when copy and state come apart.
+    private static let emptyTitlePrefixes = [
+        "No transactions", "Nothing to show", "Nothing imported yet",
+    ]
 
     /// Pin the appearance for the length of a test, and put it back.
     ///
@@ -154,4 +223,18 @@ enum SeededLaunch {
         XCUIDevice.shared.appearance = appearance
         testCase.addTeardownBlock { XCUIDevice.shared.appearance = previous }
     }
+}
+
+/// What one walk of the list saw.
+struct ListWalk {
+    /// Every transaction row, in the order it rendered.
+    let rows: [String]
+    /// Every date heading, in the order it rendered.
+    let headings: [String]
+    /// Labels that appeared **twice in a single screenful** — a row rendered twice, which is
+    /// what a page boundary repeating itself looks like. Always empty on a correct list.
+    let repeatedOnOneScreen: [String]
+    /// How many swipes it took to reach the end — the number SC-017's "a handful" is about,
+    /// and the one a later scenario author watches grow.
+    let swipes: Int
 }

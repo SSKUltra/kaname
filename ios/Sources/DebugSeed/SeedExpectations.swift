@@ -83,6 +83,24 @@ extension SeedScenario {
         }
     }
 
+    /// One account by name, as the front door will announce it.
+    func expectedAccount(named name: String) -> SeedAccountExpectation? {
+        expectedAccounts.first { $0.name == name }
+    }
+
+    /// The live rows of one account, in the order the filtered list must render them — which is
+    /// the same total order with one account in it, because a filter is the same query with
+    /// `k = 1` and never a second sort.
+    func expectedLiveRows(inAccountNamed name: String) -> [SeedExpectation] {
+        expectedLiveRows.filter { $0.accountName == name }
+    }
+
+    /// How the filter menu names an account: the spoken identity, which is also what the scope
+    /// chip announces once the filter is applied.
+    static func menuLabel(for account: SeedAccountExpectation) -> String {
+        account.last4.map { "\(account.name), ending \($0)" } ?? account.name
+    }
+
     private static func precedes(_ lhs: PlacedRow, _ rhs: PlacedRow) -> Bool {
         if lhs.row.date != rhs.row.date { return lhs.row.date > rhs.row.date }
         if lhs.accountIndex != rhs.accountIndex { return lhs.accountIndex < rhs.accountIndex }
@@ -167,6 +185,7 @@ private struct PlacedRow {
     var expectation: SeedExpectation {
         SeedExpectation(
             accountName: account.name, accountLast4: account.last4, isoDate: row.date,
+            currency: row.currency,
             accessibilityLabel: row.accessibilityLabel(
                 accountName: account.name, last4: account.last4))
     }

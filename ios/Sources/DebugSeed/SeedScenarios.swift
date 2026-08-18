@@ -88,6 +88,9 @@ struct SeedExpectation: Sendable, Equatable {
     let accountName: String
     let accountLast4: String?
     let isoDate: String
+    /// The **row's** currency, carried through so a currency assertion is made against the
+    /// declaration rather than against a symbol somebody typed into a test.
+    let currency: String
     /// The whole row, as one string — `TransactionRowView` combines its children, so this is
     /// the only per-row text an automated run can see (research R20).
     let accessibilityLabel: String
@@ -110,7 +113,7 @@ struct SeedAccountExpectation: Sendable, Equatable {
 
 extension SeedScenario {
     /// Every scenario a launch may name. An unrecognised name fails the launch (FR-006).
-    static let declared: [SeedScenario] = [.empty, .small, .deep]
+    static let declared: [SeedScenario] = [.empty, .small, .deep, .barren]
 
     static func named(_ name: String) -> SeedScenario? {
         declared.first { $0.name == name }
@@ -140,7 +143,7 @@ extension SeedScenario {
         now: "2026-01-15T09:00:00Z",
         statements: [
             SeedStatement(
-                accountName: "SYNTHETIC BANK ONE",
+                accountName: smallAccountName,
                 bankCode: "SYNTH_BANK",
                 isCreditCard: false,
                 last4: "0006",
@@ -152,6 +155,14 @@ extension SeedScenario {
             )
         ]
     )
+
+    /// ⚠️ **Long on purpose.** `.scratch/018-transaction-list/issues/02` and `03` are both
+    /// defects of a *long account name* at an accessibility text size: a chip that cannot fit
+    /// one truncates the digits away, and a bar with no bound on its height grows until it eats
+    /// the row above it. A fixture named `SYNTHETIC BANK ONE` cannot reproduce either — three
+    /// short words fit anywhere — and a suite built on one would have watched both breaks stay
+    /// green. This is the length of a real card product's printed name.
+    static let smallAccountName = "SYNTHETIC INTERNATIONAL REWARDS BANK"
 
     private static let smallRows: [SeedRow] = [
         ("2025-02-10", "SYNTHETIC MERCHANT 01", "450.00"),
@@ -165,21 +176,57 @@ extension SeedScenario {
             date: $0.0, description: $0.1, amount: $0.2, direction: .debit, currency: "INR",
             sourceCategory: nil, expectedCategory: nil)
     }
+
+    /// Two accounts, two imported statements, and **no transactions at all** — a person who
+    /// imported two genuinely quiet months.
+    ///
+    /// ⚠️ It exists because a **third** empty state turned out to need it, and neither `small`
+    /// nor `deep` can express it. `EmptyKind.decide`'s unfiltered branch is consulted only when
+    /// the store holds no live rows *anywhere*, and any scenario with a transaction in it has at
+    /// least one live row — the engine's de-duplication always keeps a winner. So
+    /// `noTransactionsAnywhere` needs a store that imported statements and got rows from none of
+    /// them. Filtering to either account reaches `accountStatementEmpty` for the same reason:
+    /// the other account has nothing live either, so the filter is not what is hiding anything.
+    ///
+    /// Adding it costs nothing outside a DEBUG build (FR-013, SC-015), and `data-model.md` §6
+    /// anticipates it in as many words.
+    static let barren = SeedScenario(
+        name: "barren",
+        now: "2026-01-15T09:00:00Z",
+        statements: [
+            SeedStatement(
+                accountName: barrenFirstName, bankCode: "SYNTH_BANK", isCreditCard: false,
+                last4: "0007", currency: "INR", periodStart: "2025-03-01",
+                periodEnd: "2025-03-31", reimportsPrevious: false, rows: []),
+            SeedStatement(
+                accountName: barrenSecondName, bankCode: "SYNTH_CARD", isCreditCard: true,
+                last4: "0008", currency: "INR", periodStart: "2025-03-01",
+                periodEnd: "2025-03-31", reimportsPrevious: false, rows: []),
+        ]
+    )
+
+    static let barrenFirstName = "SYNTHETIC BANK SIX"
+    static let barrenSecondName = "SYNTHETIC CARD SEVEN"
 }
 
 // MARK: - `deep`
 
 extension SeedScenario {
-    /// 160 live rows over three accounts — a bank ledger, a card, and a card whose statement
-    /// held nothing — in four statements, the last of which re-imports the first.
+    /// 160 live rows over four accounts — a bank ledger, a card, a card whose statement held
+    /// nothing, and a card whose every row loses to the ledger — in five statements, one of
+    /// which re-imports the first.
     ///
     /// 160 because `TransactionListViewModel.pageSize` is 50: four pages, the last partial,
     /// which also exercises the exhausted cursor.
     ///
-    /// ⚠️ **The corpus must not eat itself.** Exactly the two pairs declared to collide may
-    /// collide; every other row differs from every row anywhere else by **amount**, which is
-    /// the one field both de-duplication layers require to be equal. The two intended
-    /// collisions are `deepSharedPurchase` (cross-source, bank ↔ card) and the re-import.
+    /// ⚠️ **The corpus must not eat itself.** Exactly the rows declared to collide may collide;
+    /// every other row differs from every row anywhere else by **amount**, which is the one
+    /// field both de-duplication layers require to be equal. The intended collisions are
+    /// `deepSharedPurchase` (cross-source, bank ↔ card), the re-import, and `SYNTHETIC CARD
+    /// FIVE`'s three rows. ⚠️ They must also collide with **different** ledger rows from each
+    /// other: the engine removes a winning row from its candidate pool once something has
+    /// matched it, so two incoming rows aiming at the same ledger row would leave the second
+    /// one live and the count short.
     static let deep = SeedScenario(
         name: "deep",
         now: "2026-01-15T09:00:00Z",
@@ -193,18 +240,28 @@ extension SeedScenario {
                 last4: "0002", currency: "INR", periodStart: "2025-04-01",
                 periodEnd: "2025-05-31", reimportsPrevious: false, rows: deepCardRows),
             SeedStatement(
-                accountName: "SYNTHETIC CARD FOUR", bankCode: "SYNTH_CARD", isCreditCard: true,
+                accountName: deepEmptyCardName, bankCode: "SYNTH_CARD", isCreditCard: true,
                 last4: "0003", currency: "INR", periodStart: "2025-04-01",
                 periodEnd: "2025-04-30", reimportsPrevious: false, rows: []),
             SeedStatement(
                 accountName: deepLedgerName, bankCode: "SYNTH_BANK", isCreditCard: false,
                 last4: "0001", currency: "INR", periodStart: "2025-04-01",
                 periodEnd: "2025-06-30", reimportsPrevious: true, rows: [deepLedgerRows[0]]),
+            // A card whose every row the ledger already had. It ends up holding rows and
+            // showing none of them — the only way an account reaches `hasOnlyExcludedRows`
+            // through the import path, and the state the filter's third empty case needs.
+            SeedStatement(
+                accountName: deepEchoCardName, bankCode: "SYNTH_CARD", isCreditCard: true,
+                last4: "0004", currency: "INR", periodStart: "2025-04-01",
+                periodEnd: "2025-04-30", reimportsPrevious: false,
+                rows: [deepLedgerRows[10], deepLedgerRows[20], deepLedgerRows[30]]),
         ]
     )
 
     static let deepLedgerName = "SYNTHETIC BANK TWO"
     static let deepCardName = "SYNTHETIC CARD THREE"
+    static let deepEmptyCardName = "SYNTHETIC CARD FOUR"
+    static let deepEchoCardName = "SYNTHETIC CARD FIVE"
 
     /// The one purchase that appears on both a ledger and a card — the cross-source pair. It
     /// is declared **on the ledger first**, because the engine's de-duplication keeps the row

@@ -148,13 +148,48 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: 019's **PR C — what the coverage was for**, starting at **T049**
-(`specs/019-debug-test-seeding/tasks.md`). **PR B is done** — T026–T048, every gate green — and
-**an automated run now reaches a populated transaction list**. PR A is merged (#40).
+**⬅️ NEXT: 019's **PR D — honesty and hand-back**, starting at **T080**
+(`specs/019-debug-test-seeding/tasks.md`). **PR C is done** — T049–T079, every gate green — and
+the populated transaction list is now audited across four size × appearance combinations plus
+Increase Contrast, with its filter, paging, currencies and empty states covered. PR A is merged
+(#40); PR B and PR C are on `main`.
 
-**Read `tasks.md` § *PR B — RECORDED* before starting PR C.** It carries six watched breaks, five
-forced deviations, two facts about the element tree that will cost an hour each if rediscovered,
-and — the point of the slice — **what the first accessibility audit of a populated list found**.
+**Read `tasks.md` § *PR C — RECORDED* before starting PR D.** The short version, and it matters
+more than the task list:
+
+⚠️ **FR-038's "watched failing" corrected the plan in four places, all now recorded.** (1) Neither
+one-line break reproduces its defect — both 018 fixes were plural. (2) **A fixture that cannot
+express a defect cannot watch a gate catch it**: `SYNTHETIC BANK ONE` is three short words, both
+parked defects are defects of a *long name at a large text size*, and `small`'s account is now
+`SYNTHETIC INTERNATIONAL REWARDS BANK` permanently. (3) **T074's verdict is (b)** — reinstated
+faithfully, the chip rendered `••••…` over `SYN-T…NE` and **the auditor passed**; `research.md` R10
+is annotated *OBSERVED*. (4) **A label cannot show a truncation** — XCUITest reports a `Text`'s
+string, not its glyphs, so the element still read `•••• 0006`. **Geometry carries FR-038 in both
+cases**, and both were watched red.
+
+⚠️ **Three findings are open, all written up in `.scratch/019-debug-test-seeding/issues/`.**
+`02` — `nothingToShowAnywhere` **and** `accountNothingToShow` are unreachable by any seed, because
+every supersession leaves a live winner and `is_deleted` has no write path; **four of six
+`EmptyKind` cases are audited against a rendered screen**, and T080/T082 inherit the other two.
+`03` — the XXXL audits exclude `.textClipped` and `.dynamicType`, because the shipping row caps its
+account line by design (`018/04`), which also cost FR-038 the instrument R10 nominated. `01` — the
+contrast exclusion from PR B, still open, still T074-adjacent.
+
+⚠️ **`issues/04`: a wall clock measures the machine.** SC-009's five-second bound read 4.65 s in
+`make ios-test` and **7.98 s** in `make a11y-sweep` — same build, same six rows. It now measures the
+**difference** against an unseeded launch: **1.42 s** for the seed plus one navigation. This is the
+`history_perf::s5` lesson one language over; do not write a bare wall clock into a UI test.
+
+- ⚠️ **A throwaway probe file survived into a full `a11y-sweep`** and ran as a 34th test. Nothing in
+  the gate objects to a scratch file in a test target — delete probes in the same command that
+  reads their output.
+- The suites are now four files (`SeededHistoryShape`, `SeededEmptyState`, `SeededAccessibility`
+  and the list suite) plus `SeededLaunch.swift`. **One walk of `deep` costs 115 s / 31 swipes** and
+  deliberately answers every question about that scenario at once; the whole UI suite is ~11 min.
+- `deep` gained a fifth statement (a card whose every row the ledger already had) so an account can
+  reach `hasOnlyExcludedRows`. Live rows stay **160**; declared supersessions went 2 → 5.
+
+**From PR B, still true and still the trap most likely to bite:**
 
 ⚠️ **A1 found two real defects on its first run, and both are fixed.** 018's T116 set
 `.foregroundStyle(.primary)` on the date heading and it was a **no-op**: the bare `.primary` is the
