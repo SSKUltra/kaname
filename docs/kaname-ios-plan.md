@@ -177,12 +177,21 @@ Approach: **fixtures-driven, incremental by bank** — port the top banks first,
   keeps up with an import without taking away the filter or the person's place in it. It added
   schema **v7** (one partial index), `history_page` + `account_summaries`, and moved the front
   door's count out of Swift and into the engine.
-  ⚠️ **The DEBUG-only test-seeding hook slice is still scheduled before the categorize slice.**
-  Without it no automated run can reach a *populated* transaction list at all — the list is
-  behind an import, an import is behind the system document picker, and FR-077 forbids seeding
-  the shipped app. That is what makes SC-012 manual-gate-only for this screen, and it will make
-  it manual-gate-only for every P3 screen after it. Dashboard, budgets, tags, search and export
-  are specified slice by slice from here.
+  ✅ **The DEBUG-only test-seeding slice has landed** (`019-debug-test-seeding`). A launch
+  environment variable writes a named synthetic history through the shipped
+  `Store.importStatement` before any view is evaluated, so an automated run finally reaches a
+  *populated* screen — the list was behind an import, the import behind the system document
+  picker, and no test could drive it. **UI tests went from 6 to 33**, the accessibility auditor
+  now runs against real rows at four size × appearance combinations plus Increase Contrast, and
+  the manual gate for 018 is six of fourteen steps lighter (`specs/018-transaction-list/
+  quickstart.md`). It touched **no Rust and no schema** — the seeding is Swift-only, because one
+  `cargo build --release` artifact links into both Xcode configurations, so no Rust construct can
+  be present in DEBUG and absent from Release. **What every later P3 screen inherits**: a
+  populated screen an automated auditor can reach, for the cost of one scenario declaration in
+  `ios/Sources/DebugSeed/SeedScenarios.swift` and **zero** lines compiled into a Release build.
+  It paid for itself on its first run, finding two shipped defects on the transaction list that
+  forty minutes of manual gate had produced only one of. **The categorize slice is next.**
+  Dashboard, budgets, tags, search and export are specified slice by slice from here.
 - **P4 — Account + entitlement + purchase.** Web (Razorpay) + StoreKit 2 IAP; account-based cross-platform entitlement; server-side receipt validation; gated premium hooks.
 - **P5 — Expand + ship.** Remaining parsers; WidgetKit; App Intents; accessibility pass; TestFlight → App Store.
 - **P6 — Premium on iOS (later).** Cross-device E2E sync, managed AI, AA one-click, broker/CAS sync, split hosting → then **Android** via the shared Rust core.

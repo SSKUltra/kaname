@@ -1,6 +1,17 @@
 # 07 — The pinned date heading has no background, so it renders over the row beneath it
 
-**Status:** needs-triage
+**Status:** resolved (2026-08-17, by 019 PR B)
+
+> **Resolved.** The heading now carries `.frame(maxWidth: .infinity, alignment: .leading)` and
+> `.background(Color(.systemBackground))` — the opaque background this ticket's own analysis names,
+> which FR-068 permits because what it bans is *material*, not opacity. Two things worth carrying
+> forward. It was **reproduced by a machine at the default text size in twelve seconds**, by the
+> first `performAccessibilityAudit` ever run against a populated list (019 A1), where a person had
+> needed XXXL and forty minutes of manual gate to see it — the audit reported it as `.textClipped`
+> plus a contrast verdict, and both went away with the background. And the heading's colour was
+> **also** wrong for a separate reason: T116's `.foregroundStyle(.primary)` was a no-op, because
+> the bare `.primary` is the *hierarchical* style and resolved against the grey already in force.
+> See `.scratch/019-debug-test-seeding/issues/01`.
 
 **Found:** 2026-08-16, on the simulator, while running **G2** to closure (`issues/03`). Content
 size `accessibility-extra-extra-extra-large`, Dark Mode, list filtered to one account, scrolled.

@@ -168,6 +168,51 @@ audit's type list, not yet observed** — it could not be run before the capabil
 exists. If it does not fire, the remedy is a second geometry assertion of A7's shape, **not** a
 weakened criterion.
 
+### What it turned out to be — 019 PR C, T072–T077, measured
+
+Four findings, and the table above is wrong in three places. All of it is recorded rather than
+tidied away, because each correction is a fact about the instruments this repository now relies on.
+
+**1. ⚠️ Neither one-line break reproduces its defect.** Both fixes were *plural*, and reverting one
+line of a three-line fix leaves the screen working.
+
+| Break as specified | What happened | The faithful reinstatement |
+|---|---|---|
+| `axis` → `.horizontal` | **everything stayed green** — the clear button still collapses to a symbol at accessibility sizes, and the chip still fitted | `axis` → `.horizontal` **and** `clearButtonShowsTitle` → `true` |
+| `maximumScopeLines` → `6` | **everything stayed green** — the bound only bites when a name is long enough to want the lines, and `SYNTHETIC BANK ONE` is three short words | the same break, against a fixture whose account name is as long as a real card product's |
+
+The second one is the more useful lesson: **a fixture that cannot express a defect cannot watch a
+gate catch it.** `small`'s account is now `SYNTHETIC INTERNATIONAL REWARDS BANK` for that reason,
+permanently — both parked 018 defects are defects of a *long name at a large text size*, and a
+suite built on a short one would have watched both breaks stay green and called it coverage.
+
+**2. 🚨 T074's verdict: (b). The auditor does not see `018/02`.** Reinstated faithfully, the chip
+rendered `••••…` over `SYN-T…NE` and the clear button read `Show all ac-count s` down four lines —
+the ticket's screenshot, reproduced. **A5 passed.** R10's inference is now *observed to be wrong*,
+and `.textClipped` could not have caught it anyway: at XXXL this screen fires that type by design
+(`issues/03`), so it is red before the break and cannot discriminate.
+
+**3. ⚠️ A test cannot read a truncation from a label.** The obvious sharper instrument — assert the
+chip's rendered text has no `…` — is **inert**. XCUITest reports a `Text`'s *string*, not its
+glyphs: with the screen reading `••••…`, the element's label was still `•••• 0006`. Anything built
+on labels would have passed against the defect while quoting the correct answer back.
+
+**4. T075's fallback, and what actually catches each defect.** Geometry, both times:
+
+| Defect | Instrument that goes red | Recorded failure |
+|---|---|---|
+| `018/02` | **A5b** — the chip's frame must be more than two-thirds of the window at accessibility sizes, because that is what going vertical *means* | `XCTAssertGreaterThan failed: ("163.0") is not greater than ("235.8") — the chip has less than two thirds of the width … so the bar did not go vertical` |
+| `018/03` | **A7** — the bottom-most rendered row's `maxY` against the chip's `minY` | `XCTAssertLessThanOrEqual failed: ("1121.0") is greater than ("456.7") — a row is underneath the filter bar: row (0.0, 784.3, 393.0, 336.7), chip (16.0, 456.7, 360.7, 278.0)` |
+
+⚠️ A7 asserts geometry **before** completeness on purpose. The first version checked "the walk
+reached the last row" first, and under `018/03` that fired instead — true, but it reported a
+missing row where the defect is a covered one. The bar being 278 pt tall instead of 176 pt is the
+sentence a reader needs.
+
+**Neither criterion was weakened and neither defect was re-parked.** What changed is which
+instrument is trusted: on this screen the system auditor is the *weaker* one, and the two
+assertions that carry FR-038 are both measurements of what was drawn.
+
 ## Gotchas discovered during planning
 
 | Trap | What actually happens | Do this |
@@ -209,17 +254,33 @@ Method:
 
 ## Definition of done
 
-- [ ] A seeded launch reaches a populated list from the front door's own control (US1, FR-003)
-- [ ] The rows on screen equal the declaration, in the declared order, with nothing extra (S2–S5)
-- [ ] Ten consecutive seeds of `small` produce an identical screen (SC-010, D1)
-- [ ] `performAccessibilityAudit` passes on the populated list at default and `AccessibilityXXXL`,
-      in Light and Dark, and under Increase Contrast (SC-002, A1–A6)
-- [ ] 018/02 and 018/03 reinstated, **watched red** by A5 and A7 respectively, then reverted
-      (FR-038, SC-006)
-- [ ] Five of six `EmptyKind` cases automated; `nothingImported` decided per Judgement calls §1
-- [ ] The tenth source scan and `make release-audit` both exist, are wired into CI, and have each
-      been watched failing against all five deliberate breaks (FR-030, SC-005)
-- [ ] `make import-audit` now runs in CI — for all ten scans, not just the new one (R19)
-- [ ] A non-seeded launch is byte-for-byte the behaviour it is today (FR-005, FR-022, L1, L6)
-- [ ] Schema still v7; `core/` unchanged; `ImportService.swift` still 398 lines
-- [ ] 018's manual gate record rewritten, with the three unaccounted items named (FR-042–FR-045)
+- [x] A seeded launch reaches a populated list from the front door's own control (US1, FR-003)
+- [x] The rows on screen equal the declaration, in the declared order, with nothing extra (S2–S5)
+- [x] Ten consecutive seeds of `small` produce an identical screen (SC-010, D1)
+- [x] `performAccessibilityAudit` passes on the populated list at default and `AccessibilityXXXL`,
+      in Light and Dark, and under Increase Contrast (SC-002, A1–A6) — ⚠️ **with two recorded
+      exclusions**: `.contrast` everywhere (`issues/01`) and, at XXXL only, `.textClipped` and
+      `.dynamicType` (`issues/03`). Both are stated at the assertion site, and a suppression was
+      **rejected** because it would have hidden the real defect that proved the audit worth running
+- [x] 018/02 and 018/03 reinstated, **watched red**, then reverted (FR-038, SC-006) — ⚠️ by **A5b**
+      and **A7**, both geometry. The auditor **passed** against 018/02; see § *What it turned out
+      to be*, and R10 is annotated OBSERVED
+- [x] `EmptyKind`: **four of six** audited on a rendered screen; the other **three** cases —
+      `nothingImported`, `nothingToShowAnywhere`, `accountNothingToShow` — are **unreachable by any
+      seed** (`issues/02`) and are host-rendered in `ios/Tests/EmptyStateRenderingTests.swift`:
+      executed and asserted, **not audited**
+- [x] The tenth source scan and `make release-audit` both exist, are wired into CI, and have each
+      been watched failing against all five deliberate breaks (FR-030, SC-005) — and re-run against
+      the **real** path in PR C, where breaks 1 and 3 turned out to fail the Release **build**: the
+      compiler is a third gate
+- [x] `make import-audit` now runs in CI — for all ten scans, not just the new one (R19)
+- [x] A non-seeded launch is byte-for-byte the behaviour it is today (FR-005, FR-022, L1, L6) — and
+      a **Release** build handed the instruction is **pixel-identical** to one that was not, with
+      zero log lines mentioning it (T066)
+- [x] **Schema still v7; `core/` unchanged; `ImportService.swift` still 398 lines** — `git diff
+      --stat 72f9423 -- core/` is empty across all four PRs, `SCHEMA_VERSION` is 7, no migration,
+      no table, no column, no index, no `#[uniffi::export]` added or altered. A slice that touched
+      the engine here would have been a slice that stopped going through the front door
+- [x] 018's manual gate record rewritten, with the unaccounted items named (FR-042–FR-045) —
+      ⚠️ **and its "under twenty minutes" left unmeasured**, because every remaining step needs a
+      physical iPhone and none was available. Stated in the record rather than assumed

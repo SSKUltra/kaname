@@ -529,6 +529,19 @@ what option 1 makes happen, is the **view** being drawn for it.
 
 ## R10 — The auditor catches `018/02`; it cannot catch `018/03`. That needs a second instrument
 
+> 🚨 **OBSERVED, 2026-08-18 (019 PR C, T073/T074): the first half of this heading is wrong.**
+> The auditor does **not** catch `018/02`. Reinstated faithfully — the chip rendering `••••…`
+> over `SYN-T…NE`, the ticket's own screenshot reproduced — `performAccessibilityAudit` passed.
+> `.textClipped` could not have discriminated it in any case: at `AccessibilityXXXL` this screen
+> fires that type **by design** (the row caps its account line at one line so the masked digits
+> survive — `.scratch/019-debug-test-seeding/issues/03`), so the audit is red before the break.
+> Two further facts came out of running it, both of which invalidate the obvious workarounds: a
+> `Text`'s **label is the untruncated string**, so no assertion on labels can see an ellipsis;
+> and neither one-line break reproduces its defect, because both 018 fixes were plural. What
+> carries FR-038 is **geometry** in both cases — see `quickstart.md` § *What it turned out to
+> be*. The reasoning below is kept as it was written, because it is the reasoning that sent
+> T074 looking, and being wrong in a recorded way is what made the answer cheap to find.
+
 FR-038 requires the new coverage to be watched failing against two reinstated defects. They are
 not the same kind of defect, and one instrument does not see both.
 

@@ -88,7 +88,26 @@ struct TransactionListView: View {
                         // style by default. Full contrast is restored explicitly, colour only:
                         // no background, no font override, nothing else about the system's
                         // own chrome is re-skinned (FR-066, T116).
-                        .foregroundStyle(.primary)
+                        //
+                        // ⚠️ `Color.primary`, not `.primary`. The bare `.primary` in a
+                        // `foregroundStyle` is the *hierarchical* style — it means "the most
+                        // prominent level **of whatever style is already in force**" — and the
+                        // style already in force on a plain-list header is the grey the header
+                        // wanted in the first place, so it resolved to a no-op and the heading
+                        // shipped at roughly 3.5:1. `Color.primary` is the absolute label
+                        // colour. Found by the first accessibility audit ever run against a
+                        // populated list (019, `issues/01`).
+                        .foregroundStyle(Color.primary)
+                        // And its own opaque background, filling the header's width. A plain
+                        // list pins its heading while the rows scroll **under** it, and a
+                        // heading with nothing behind it is a date read through a
+                        // transaction (`.scratch/018-transaction-list/issues/07`). This is the
+                        // fix that ticket's own resolution names — an opaque background, which
+                        // FR-068 already settles by banning material here rather than
+                        // translucency. It is also what takes the auditor's `.textClipped` and
+                        // one of its contrast verdicts off this screen (019, `issues/01`).
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.systemBackground))
                         .accessibilityLabel(
                             TransactionListStrings.groupAnnouncement(
                                 heading: group.heading, count: group.rows.count))
