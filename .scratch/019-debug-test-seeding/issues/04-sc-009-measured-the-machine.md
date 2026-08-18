@@ -67,6 +67,28 @@ headroom a number taken on somebody else's machine needs.
 The whole journey to a row is still printed and still asserted, generously (20 s), because a
 collapse should fail something. It is a smoke alarm, not a stopwatch.
 
+## ⚠️ Third observation: on CI the noise is bigger than the signal
+
+The corrected version passes on CI, and prints this:
+
+```
+seed-timing: unseeded launch 6.37s, seeded launch 5.84s (the seed itself -0.53s)
+```
+
+**Negative.** The seeded launch was *faster* than the unseeded one — which cannot be true, and is
+not a defect: launch-to-launch variance on a loaded runner (±1 s) is larger than the thing being
+measured (~1 s). The first launch of a pair also pays for costs the second does not: app install,
+first-run warm-up, the automation session coming up.
+
+So the assertion is doing what it should — it would still catch a seed that started costing five
+seconds — but **the printed number is not a measurement on a loaded machine**, and nobody should
+quote it from a CI log. The local figure (0.96 s, on a quiet Mac) is the one to compare against.
+
+**The remedy, for whoever next touches this**: launch once and *discard* it before timing the
+baseline, so both measured launches are warm. It was not done here because the assertion already
+holds and the fix costs a full CI cycle to verify — but the negative reading is the tell, and it
+is written down rather than left for somebody to rediscover as a puzzle.
+
 ## What a later scenario author should watch
 
 `seed-timing:` in the log, and specifically **the seed itself**. If seeding starts costing seconds
