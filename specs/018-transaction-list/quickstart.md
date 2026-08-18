@@ -169,11 +169,109 @@ loaded CI machine.
 
 ## The manual, release-blocking gate
 
-Automated tests cover the *decisions*; they cannot see a *screen*. Everything below is run by a
-person on a device and recorded in the PR that closes PR E. **This slice cannot be signed off
-without it** (SC-012, FR-075, research R9 and R12).
+⚠️ **Rewritten 2026-08-18 by `019-debug-test-seeding`.** Six of these fourteen steps are now run
+by a machine against a **populated** screen — which no automated run could reach when this gate
+was written, because the list is behind an import and the import is behind the system document
+picker. What follows is the current verdict for each step, with the assertion that carries it.
+
+**Nothing here says 018's SC-012 is closed.** It is not: `issues/06`'s three device timings have
+never been measured, and they still need a phone. What changed is how many of the *other* steps a
+person has to run before getting to them.
+
+**Read the verdicts as:** **AUTOMATED** — a named test asserts it, and the test has been watched
+failing; **MANUAL** — a person still runs it, with the reason a machine cannot; **SPLIT** — part
+of it is asserted and part is a judgement.
 
 ### Accessibility (SC-012, FR-065–FR-070)
+
+| # | Check | Verdict | Evidence, or the reason it cannot be automated |
+|---|---|---|---|
+| G1 | At the largest accessibility text size, in the unfiltered list, **no amount is truncated or ellipsised** — scroll at least three screenfuls | **AUTOMATED** | `SeededAccessibilityUITests.testThePopulatedListSurvivesTheLargestTextSize` (A2) and `…InDarkModeAtTheLargestTextSize` (A4). ⚠️ Both exclude `.textClipped` — see `019/issues/03`: the row caps its account line **by design** (`018/04`), so the auditor is red at XXXL before any defect. What holds G1 specifically is `TransactionRowLayout.amountYields == false`, pinned by `TransactionRowLayoutTests`, plus the geometry of A7 |
+| G2 | At the same size, no row's content is clipped by the bottom bar or the home indicator | **AUTOMATED** | `SeededAccessibilityUITests.testTheLastRowClearsTheFilterBarAtTheLargestTextSize` (A7) — geometry, not audit, because the auditor has **no occlusion check**. **Watched red** against `018/03` reinstated: `("1121.0") is greater than ("456.7")` |
+| G3 | VoiceOver reads each row as one coherent sentence: date, description, amount **with currency**, direction **in words**, account — and "transfer" where marked | **SPLIT** | *Presence and content* automated: `SeededTransactionListUITests.testEverySeededRowIsOnScreenExactlyAsDeclared` (S3) matches every row on its **whole** combined label, which is the sentence VoiceOver speaks. *Meaningfulness* — whether that sentence is one a person understands — stays a human judgement, and always will |
+| G4 | The date group heading is announced when the group is entered, and includes the year when it is not the current year | **AUTOMATED** | `SeededAccessibilityUITests.testTheFirstGroupHeadingCarriesItsYear` (A8) and `SeededDeterminismUITests.testEveryDeclaredDateRendersAsDeclared` (D3). `small`'s six days sit in a prior calendar year for exactly this |
+| G5 | The current account filter is announced, and clearing it is reachable and announced | **AUTOMATED** | `SeededEmptyStateUITests.testTheFilterReachesItsFourStates` (E3) drives all four states through the controls a person uses, and `SeededAccessibilityUITests.testTheFilterChipStatesItsWholeScopeAtTheLargestTextSize` (A5b) checks the chip states its **whole** scope. **A5b was watched red** against `018/02` reinstated: `("163.0") is not greater than ("235.8")` |
+| G6 | Reduce Transparency: the list stays legible, glass chrome degrades gracefully, no text on text | **MANUAL** | There is no `simctl` control and no XCUITest API for Reduce Transparency — unlike Increase Contrast, which `make a11y-sweep` sets. FR-043 |
+| G7 | Increase Contrast + Dark Mode: amounts and direction words remain distinguishable **without relying on colour** | **AUTOMATED** | `make a11y-sweep` now runs the seeded suites — **33 UI tests under Increase Contrast**, over a populated screen rather than an empty one. Dark Mode is A3/A4. The "without colour" half is structural and unit-pinned: `TransactionRow.directionSign` and `directionWord` |
+| G8 | While scrolling, the date currently in view stays identifiable | **AUTOMATED** | `SeededLaunch.walk` collects every heading while scrolling the whole list, and D3 asserts the declared set. ⚠️ Strengthened in passing: the pinned heading now carries an **opaque background** (`018/07`, closed by `019/issues/01`) — before that, a row was legible *through* it |
+
+### Performance on device (SC-006, SC-007, SC-008c)
+
+Run on a real iPhone, release build, with the 10,000-row / 8-account corpus installed.
+
+| # | Check | Verdict | Evidence, or the reason it cannot be automated |
+|---|---|---|---|
+| G9 | Time from tapping into the list to the first screenful being readable — **< 1 s** | **MANUAL** | A device measurement on a Release build; a simulator on a busy Mac measures the Mac. `018/issues/06` carries the runbook |
+| G10 | Scroll the full corpus: **no blank row persists for more than a moment**; no stutter that reads as a stall | **MANUAL** | A rendering judgement over 10,000 rows, at speed, by eye. XCUITest's own scrolling is not a person's flick, and "persists for more than a moment" is not a threshold a query can read |
+| G11 | The same measurement as G9 on a 200-row corpus | **MANUAL** | As G9 |
+| G12 | Apply a filter, then clear it — each **< 300 ms**, and the list does not jump | **MANUAL** *(the timing)* | The *behaviour* is automated — E3 applies and clears the filter and asserts what is on screen after each — but **300 ms on a device** is a frame-stepped recording, not an XCUITest clock. ⚠️ `019/issues/04` is the lesson: a wall clock in a UI test measures the machine, and this one read 4.65 s and 7.98 s for the same six rows |
+| G13 | Start an import while the list is open, scrolled and filtered. The list updates when the import commits; the filter and scroll position are preserved; **no partially-written statement is ever visible** | **MANUAL** | ⚠️ Needs a **live import driven through the system document picker**, which is the one interaction seeding structurally cannot stage — avoiding that picker is its entire method. The engine half is `ImportCompletionSignalTests`; the screen half needs a person |
+| G14 | Cancel an import mid-way with the list open. **Nothing changes** on the list | **MANUAL** | As G13, and for the same reason |
+
+**Arithmetic, matching SC-008 exactly: six automated (G1, G2, G4, G5, G7, G8), one split (G3),
+seven remaining manual (G6, G9, G10, G11, G12, G13, G14).** SC-008's amended figure is *six
+automated, eight remaining* — counting G3's manual half as one of the eight, which is the honest
+reading and the one the spec's § *Amendments after `/speckit.plan`* settled. Do not reclassify a
+gate to reach a nicer number.
+
+### ⚠️ The remaining steps have not been re-timed (019 T085)
+
+SC-008 claims the shrunk gate is **under twenty minutes**. That figure is **unmeasured**, and this
+record will not assert it. Every one of the eight remaining steps needs a **physical iPhone** —
+G6 is a device setting with no simulator control, G9–G12 are device timings, G13/G14 need a person
+driving a document picker — and no device was available to the session that rewrote this record.
+
+This is the same deferral as `018/issues/06`, and it is stated plainly rather than folded into a
+claim: the forty-minute figure this slice was justified by came from a **measurement**
+(`018/issues/01`), and the twenty-minute figure it claims deserves one too. When a phone is
+available, run the eight steps and record here the elapsed time, the device, the iOS build, the
+app build commit and the date (FR-045).
+
+### The empty states: five of six audited, and why the sixth is not (019 T082)
+
+`EmptyKind` has six cases. After 019 they are covered like this — and the tally is uneven **by
+construction**, which is why it is written out rather than summarised as a percentage:
+
+| Case | Coverage |
+|---|---|
+| `noTransactionsAnywhere` | **Audited on a rendered screen** — `SeededEmptyStateUITests.testAStoreWithStatementsAndNoTransactionsSaysSo`, via the `barren` scenario |
+| `accountStatementEmpty(name:)` | **Audited** — `barren`, filtered to one of its two accounts |
+| `accountEmptyOthersHaveRows(statementWasEmpty: true)` | **Audited** — `deep`'s zero-row card, filtered to |
+| `accountEmptyOthersHaveRows(statementWasEmpty: false)` | **Audited** — `deep`'s echo card, whose every row lost to the ledger |
+| `nothingToShowAnywhere` | **Executed, not audited** — `ios/Tests/EmptyStateRenderingTests.swift` host-renders it. **Unreachable by any seed** |
+| `nothingImported` | **Executed, not audited** — same file. **Unreachable by any seed** |
+| `accountNothingToShow(name:)` | **Executed, not audited** — same file. **Unreachable by any seed** |
+
+⚠️ The reason all three are unreachable is one engine fact, written up in
+`.scratch/019-debug-test-seeding/issues/02`: **every supersession the import path can produce
+leaves a live winner**, and `is_deleted` has no write path at all. So a store cannot hold rows and
+show none of them, and `nothingImported`'s precondition is exactly the condition under which
+`RootView` hides the route to the list — the front door and the list read the **same**
+`accountSummaries()` call, so the two can never disagree.
+
+"Executed, not audited" is a real distinction and not a hedge: `performAccessibilityAudit` is an
+`XCUIApplication` API and cannot be pointed at a hosted view, so nothing checks those three for
+contrast, clipping, hit regions or Dynamic Type. Before 019 they had **zero** automated executions
+of any kind.
+
+### ⚠️ Two things a seed deliberately cannot express (019 FR-008a)
+
+Neither is a limitation that was worked around, and both close elsewhere:
+
+- **Deleted rows.** `is_deleted` has no write path in `store.rs`'s public API — the only
+  `SET is_deleted = 1` in the repository is raw SQL in an engine test helper. Deletion coverage
+  stays engine-side (`core/crates/kaname-core/tests/history_live.rs`). It closes when — *if* —
+  deleting a transaction becomes something a person can do.
+- **Transfer-flagged rows.** `is_transfer` is written only by `detect_transfers`, which
+  `scripts/import-path-audit.sh` bans the app from calling, so every row of every real install has
+  `is_transfer = 0`. A seeded transfer would be a screen no person can have. It closes when the
+  categorize slice wires transfer detection.
+
+A fixture that can build states the product cannot is a fixture that tests fiction.
+
+### The original checks, as first written
+
+Kept verbatim for the record, because a rewritten gate should show what it rewrote.
 
 | # | Check | Requirement |
 |---|---|---|
@@ -185,13 +283,6 @@ without it** (SC-012, FR-075, research R9 and R12).
 | G6 | Reduce Transparency: the list stays legible, glass chrome degrades gracefully, no text on text | FR-067 |
 | G7 | Increase Contrast + Dark Mode: amounts and direction words remain distinguishable **without relying on colour** | FR-013, FR-068 |
 | G8 | While scrolling, the date currently in view stays identifiable | FR-034 |
-
-### Performance on device (SC-006, SC-007, SC-008c)
-
-Run on a real iPhone, release build, with the 10,000-row / 8-account corpus installed.
-
-| # | Check | Requirement |
-|---|---|---|
 | G9 | Time from tapping into the list to the first screenful being readable — **< 1 s** | SC-006 |
 | G10 | Scroll the full corpus: **no blank row persists for more than a moment**; no stutter that reads as a stall | SC-007 |
 | G11 | The same measurement as G9 on a 200-row corpus — the two should not feel like different apps (the engine half is asserted as ≤ 20% in `cargo test`) | SC-008c |

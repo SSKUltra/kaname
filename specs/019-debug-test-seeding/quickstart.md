@@ -254,17 +254,33 @@ Method:
 
 ## Definition of done
 
-- [ ] A seeded launch reaches a populated list from the front door's own control (US1, FR-003)
-- [ ] The rows on screen equal the declaration, in the declared order, with nothing extra (S2–S5)
-- [ ] Ten consecutive seeds of `small` produce an identical screen (SC-010, D1)
-- [ ] `performAccessibilityAudit` passes on the populated list at default and `AccessibilityXXXL`,
-      in Light and Dark, and under Increase Contrast (SC-002, A1–A6)
-- [ ] 018/02 and 018/03 reinstated, **watched red** by A5 and A7 respectively, then reverted
-      (FR-038, SC-006)
-- [ ] Five of six `EmptyKind` cases automated; `nothingImported` decided per Judgement calls §1
-- [ ] The tenth source scan and `make release-audit` both exist, are wired into CI, and have each
-      been watched failing against all five deliberate breaks (FR-030, SC-005)
-- [ ] `make import-audit` now runs in CI — for all ten scans, not just the new one (R19)
-- [ ] A non-seeded launch is byte-for-byte the behaviour it is today (FR-005, FR-022, L1, L6)
-- [ ] Schema still v7; `core/` unchanged; `ImportService.swift` still 398 lines
-- [ ] 018's manual gate record rewritten, with the three unaccounted items named (FR-042–FR-045)
+- [x] A seeded launch reaches a populated list from the front door's own control (US1, FR-003)
+- [x] The rows on screen equal the declaration, in the declared order, with nothing extra (S2–S5)
+- [x] Ten consecutive seeds of `small` produce an identical screen (SC-010, D1)
+- [x] `performAccessibilityAudit` passes on the populated list at default and `AccessibilityXXXL`,
+      in Light and Dark, and under Increase Contrast (SC-002, A1–A6) — ⚠️ **with two recorded
+      exclusions**: `.contrast` everywhere (`issues/01`) and, at XXXL only, `.textClipped` and
+      `.dynamicType` (`issues/03`). Both are stated at the assertion site, and a suppression was
+      **rejected** because it would have hidden the real defect that proved the audit worth running
+- [x] 018/02 and 018/03 reinstated, **watched red**, then reverted (FR-038, SC-006) — ⚠️ by **A5b**
+      and **A7**, both geometry. The auditor **passed** against 018/02; see § *What it turned out
+      to be*, and R10 is annotated OBSERVED
+- [x] `EmptyKind`: **four of six** audited on a rendered screen; the other **three** cases —
+      `nothingImported`, `nothingToShowAnywhere`, `accountNothingToShow` — are **unreachable by any
+      seed** (`issues/02`) and are host-rendered in `ios/Tests/EmptyStateRenderingTests.swift`:
+      executed and asserted, **not audited**
+- [x] The tenth source scan and `make release-audit` both exist, are wired into CI, and have each
+      been watched failing against all five deliberate breaks (FR-030, SC-005) — and re-run against
+      the **real** path in PR C, where breaks 1 and 3 turned out to fail the Release **build**: the
+      compiler is a third gate
+- [x] `make import-audit` now runs in CI — for all ten scans, not just the new one (R19)
+- [x] A non-seeded launch is byte-for-byte the behaviour it is today (FR-005, FR-022, L1, L6) — and
+      a **Release** build handed the instruction is **pixel-identical** to one that was not, with
+      zero log lines mentioning it (T066)
+- [x] **Schema still v7; `core/` unchanged; `ImportService.swift` still 398 lines** — `git diff
+      --stat 72f9423 -- core/` is empty across all four PRs, `SCHEMA_VERSION` is 7, no migration,
+      no table, no column, no index, no `#[uniffi::export]` added or altered. A slice that touched
+      the engine here would have been a slice that stopped going through the front door
+- [x] 018's manual gate record rewritten, with the unaccounted items named (FR-042–FR-045) —
+      ⚠️ **and its "under twenty minutes" left unmeasured**, because every remaining step needs a
+      physical iPhone and none was available. Stated in the record rather than assumed

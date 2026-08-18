@@ -59,10 +59,14 @@ unreproduced hang, and one new legibility question:
 - **`issues/04`** — **resolved**, and **confirmed by eye at both the default and accessibility
   sizes**. Rows read `···· 1002 · ICICI Amazon Pay Credit…` and `···· 7742 · …`, so two cards of
   one product are finally distinguishable on screen.
-- **`issues/07`** (`needs-triage`) — **new.** The pinned date heading has no background, so at
-  XXXL a row is legible *through* it — text on text, which G6 forbids. Pre-existing since US1,
-  unrelated to 02/03/04. Needs a verdict, because the obvious fix (an opaque background) runs into
-  FR-068's ban on material in the list.
+- **`issues/07`** — **resolved by 019 PR B.** The pinned date heading had no background, so at
+  XXXL a row was legible *through* it. The fix is the one this ticket's own analysis names — an
+  opaque background — and FR-068 permits it, because what FR-068 bans is *material*, not opacity.
+  ⚠️ Two things worth carrying: it was **reproduced by a machine at the default text size in
+  twelve seconds** by the first audit ever run against a populated list, where a person had needed
+  XXXL and forty minutes; and the heading's **colour** was independently wrong, because T116's
+  `.foregroundStyle(.primary)` is the *hierarchical* style and resolved to a no-op against the
+  grey already in force (`.scratch/019-debug-test-seeding/issues/01`).
 - **`issues/05`** (`needs-info`) — a one-off 100% CPU main-thread render hang; sampled, not
   reproduced in three attempts.
 - **`issues/06`** (`ready-for-human`) — **G9, G11, G12 have never been measured.** ~20 minutes
@@ -148,84 +152,61 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: 019's **PR D — honesty and hand-back**, starting at **T080**
-(`specs/019-debug-test-seeding/tasks.md`). **PR C is done** — T049–T079, every gate green — and
-the populated transaction list is now audited across four size × appearance combinations plus
-Increase Contrast, with its filter, paging, currencies and empty states covered. PR A is merged
-(#40); PR B and PR C are on `main`.
+**⬅️ NEXT: the categorize slice.** `019-debug-test-seeding` is **DONE** — T001–T101, all four
+PRs, every gate green. Run `speckit.specify` for the next slice; do **not** re-run it for 019.
 
-**Read `tasks.md` § *PR C — RECORDED* before starting PR D.** The short version, and it matters
-more than the task list:
+**What 019 bought, in one sentence:** an automated run can now open a screen with a person's own
+transactions on it, so the accessibility auditor finally has something to audit — **UI tests went
+from 6 to 33**, and six of 018's fourteen manual gate steps are now run by a machine.
 
-⚠️ **FR-038's "watched failing" corrected the plan in four places, all now recorded.** (1) Neither
-one-line break reproduces its defect — both 018 fixes were plural. (2) **A fixture that cannot
-express a defect cannot watch a gate catch it**: `SYNTHETIC BANK ONE` is three short words, both
-parked defects are defects of a *long name at a large text size*, and `small`'s account is now
-`SYNTHETIC INTERNATIONAL REWARDS BANK` permanently. (3) **T074's verdict is (b)** — reinstated
-faithfully, the chip rendered `••••…` over `SYN-T…NE` and **the auditor passed**; `research.md` R10
-is annotated *OBSERVED*. (4) **A label cannot show a truncation** — XCUITest reports a `Text`'s
-string, not its glyphs, so the element still read `•••• 0006`. **Geometry carries FR-038 in both
-cases**, and both were watched red.
+**What it cost the shipping app:** three lines in `ios/Sources/KanameApp.swift`, inside
+`#if DEBUG`. Nothing else. No Rust file, no FFI change, **schema still v7**.
 
-⚠️ **Three findings are open, all written up in `.scratch/019-debug-test-seeding/issues/`.**
-`02` — `nothingToShowAnywhere` **and** `accountNothingToShow` are unreachable by any seed, because
-every supersession leaves a live winner and `is_deleted` has no write path; **four of six
-`EmptyKind` cases are audited against a rendered screen**, and T080/T082 inherit the other two.
-`03` — the XXXL audits exclude `.textClipped` and `.dynamicType`, because the shipping row caps its
-account line by design (`018/04`), which also cost FR-038 the instrument R10 nominated. `01` — the
-contrast exclusion from PR B, still open, still T074-adjacent.
+⚠️ **It paid for itself on its first run.** The first `performAccessibilityAudit` ever pointed at
+a populated list found two shipped defects: a date heading rendering grey because
+`.foregroundStyle(.primary)` is the *hierarchical* style and resolved to a no-op, and a pinned
+heading with nothing behind it — `018/issues/07`, which a person had found at XXXL after forty
+minutes of manual gate and which a machine reproduced at the **default** text size in twelve
+seconds. Both fixed.
 
-⚠️ **`issues/04`: a wall clock measures the machine.** SC-009's five-second bound read 4.65 s in
-`make ios-test` and **7.98 s** in `make a11y-sweep` — same build, same six rows. It now measures the
-**difference** against an unseeded launch: **1.42 s** for the seed plus one navigation. This is the
-`history_perf::s5` lesson one language over; do not write a bare wall clock into a UI test.
+⚠️ **Four findings are open and written up in `.scratch/019-debug-test-seeding/issues/`.**
+`01` — three `Contrast failed` verdicts on the filter bar that name **no element**, with the
+chip's own text measured at 9.48:1 from the audit's own screenshot; a suppression was rejected
+because the real heading defect *also* named no element. `02` — three `EmptyKind` cases are
+unreachable by any seed (see §7). `03` — at XXXL the list fires `.textClipped` and `.dynamicType`
+by design, so those two types are excluded there and the exclusion cost FR-038 the instrument it
+had planned to use. `04` — a wall clock in a UI test measures the machine.
 
-- ⚠️ **A throwaway probe file survived into a full `a11y-sweep`** and ran as a 34th test. Nothing in
-  the gate objects to a scratch file in a test target — delete probes in the same command that
-  reads their output.
-- The suites are now four files (`SeededHistoryShape`, `SeededEmptyState`, `SeededAccessibility`
-  and the list suite) plus `SeededLaunch.swift`. **One walk of `deep` costs 115 s / 31 swipes** and
-  deliberately answers every question about that scenario at once; the whole UI suite is ~11 min.
-- `deep` gained a fifth statement (a card whose every row the ledger already had) so an account can
-  reach `hasOnlyExcludedRows`. Live rows stay **160**; declared supersessions went 2 → 5.
+⚠️ **What FR-038 taught, and it generalises.** (1) **A fixture that cannot express a defect cannot
+watch a gate catch it** — `SYNTHETIC BANK ONE` is three short words, both parked 018 defects are
+defects of a *long name at a large text size*, and neither break went red until the fixture's
+account name was as long as a real card product's. (2) **The system auditor is the weaker
+instrument here**: reinstated faithfully, `018/02` rendered `••••…` over `SYN-T…NE` and
+`performAccessibilityAudit` **passed**. (3) **A label cannot show a truncation** — XCUITest reports
+a `Text`'s string, not its glyphs. Geometry carries both defects now, and both were watched red.
 
-**From PR B, still true and still the trap most likely to bite:**
+⚠️ **018's SC-012 is still open**, and nothing in this slice closes it. `018/issues/06`'s three
+device timings have never been measured and still need a phone; **T085 could not be run** for the
+same reason, so the "under twenty minutes" figure for the shrunk gate is **unmeasured and is
+recorded as such** in `specs/018-transaction-list/quickstart.md`.
 
-⚠️ **A1 found two real defects on its first run, and both are fixed.** 018's T116 set
-`.foregroundStyle(.primary)` on the date heading and it was a **no-op**: the bare `.primary` is the
-*hierarchical* style, "the most prominent level of whatever style is already in force", and what
-was in force on a plain-list header was the grey the header wanted. It shipped at ~3.5:1. And the
-pinned heading had **no background** — `.scratch/018-transaction-list/issues/07`, parked since
-2026-08-16 as `needs-triage`, found by a person at XXXL after forty minutes of manual gate, and
-reproduced here by a machine at the **default** text size in twelve seconds. Both fixed in
-`TransactionListView`; `018/07` can be closed.
+**Where to read the detail:** `specs/019-debug-test-seeding/tasks.md` §§ *PR B/C — RECORDED*,
+`quickstart.md` § *What it turned out to be*, and the rewritten gate record in
+`specs/018-transaction-list/quickstart.md` § *The manual, release-blocking gate*.
 
-⚠️ **A1 audits every type except `.contrast`, and that is a recorded finding, not a convenience** —
-`.scratch/019-debug-test-seeding/issues/01`. Three `Contrast failed` verdicts remain that name **no
-element**; nine probes narrow them to the bottom filter bar (remove it: 4 → 0; the front door's
-accounts list: 0), and the chip's own text measures **9.48:1** computed from the audit's own
-screenshot. A suppression was **rejected on purpose**: every contrast issue on that screen arrives
-with `element == nil`, *including the real heading defect above*, so "ignore the ones it cannot
-name" would have hidden the very finding that proved the audit was worth running. **T074** — already
-the task for deciding what this instrument can see — inherits the question, and the ticket carries
-the probe table it should start from.
+**The traps this slice found, in one list.** Every one of them fails *quietly* — the shape of
+mistake that reports success. They are written out in `AGENTS.md` § *Seeding a screen with data*
+and summarised here:
 
-- ⚠️ **`SeedScenarios.swift` and `SeedExpectations.swift` are compiled into `KanameUITests` too**,
-  so they may import **Foundation and nothing else** — that bundle links neither the app nor
-  `KanameCore`. This is why direction is a local `SeedDirection` and why the expected-row maths is
-  not in `SeedScenarioBuilder.swift`, which does import the engine.
-- ⚠️ **A row's sentence is not on its cell.** A row and a date heading are both `Cell`s with an
-  empty label; the sentence hangs on a `StaticText` inside, and they are told apart structurally
-  (a row has parts under it, a heading is one line) — never by wording. And a `List` renders a
-  **screenful**, not a list: even six rows do not all fit above the filter bar, so every count and
-  order assertion goes through `SeededLaunch.walk`, one pass collecting rows *and* headings.
-- ⚠️ **A seeded store outlives the suite that wrote it.** The `empty` scenario exists for this: the
-  reset without the seed, run in `tearDown`, or the shipped front-door audits assert a fresh
-  install against an accounts list. Appearance is pinned per test for the same class of reason —
-  `XCUIDevice.shared.appearance` is simulator-wide and sticky, like `content_size`.
-- **SC-009 measured 4.63 s** (`seed-timing:` in the log) against a 5 s bound, and the `deep` walk
-  costs **113 s** of the UI suite's 423 s. Shrink a scenario if it tightens; never move the seed
-  off the launch path.
+- **A row's sentence is not on its cell**, and a date heading is a cell too — tell them apart
+  structurally, never by wording. And a `List` renders a **screenful**, not a list.
+- **A seeded store outlives the suite that wrote it**; so does `XCUIDevice.shared.appearance`.
+  The `empty` scenario and `SeededLaunch.pin` exist for those two.
+- **Two credit cards never de-duplicate, silently** — cross-source dedup compares a ledger against
+  a card and nothing else. Only the fixture's own row count notices.
+- **A wall clock in a UI test measures the machine** (`issues/04`).
+- **Adding a file needs `make ios-gen`** — and a suite that never ran reports success. This one bit
+  twice: once in PR A against the Release audit, once in PR D against a new unit-test file.
 
 **Still true from PR A**, and it will bite anyone adding a file:
 
@@ -307,12 +288,13 @@ that `performAccessibilityAudit` fires `.textClipped` for 018/02 is **inferred, 
 seven iOS audit types have no occlusion check — so T074 determines it and T075 falls back to a
 second geometry assertion rather than a weakened criterion.
 
-**State at hand-off (2026-08-17, everything pushed, `main` clean):** 016 has **nothing open**;
-018 has `issues/06` (deferred, needs a phone — the only thing between 018 and SC-012),
-`issues/07` (`needs-triage`, but really `ready-for-agent`: an opaque background on the pinned
-date heading, which FR-068 already settles) and `issues/05` (`wontfix`, with its reopen
-conditions written down). Green on both gates: 16 core suites, 275 iOS tests in 53 suites, 6 UI
-tests, lint 0 violations, all nine audit scans.
+**State at hand-off (2026-08-18, everything committed, `main` clean):** 016 has **nothing open**;
+018 has `issues/06` (deferred, needs a phone — **still the only thing between 018 and SC-012**)
+and `issues/05` (`wontfix`, with its reopen conditions written down); **`issues/07` is resolved**
+by 019. 019 has four findings open, all `ready-for-human` and all written up
+(`.scratch/019-debug-test-seeding/issues/01`–`04`). Green on both gates: 310 core tests,
+**278 iOS unit tests in 54 suites**, **33 UI tests**, lint 0 violations, ten audit scans, the
+Release absence audit, and `make a11y-sweep` over a populated screen.
 
 **What 017's reference pass measured** (13 real statements, on the holder's machine, counts
 only): statements reading **zero** transactions **10 → 0**; **unrecognised 2 → 0**. Re-run it
@@ -1072,6 +1054,56 @@ changes don't need linting/building/testing.
   `StoreProvider.shared()` is the process's one `Store`, which is a correctness requirement:
   two connections would be two locks, and a page read could land inside an atomic import.
 - `tests/parity.rs` — the golden harness (readers + reconcile/dedup/coverage/transfer).
+
+### Seeding a screen with data (019) — the seam every later P3 screen inherits
+
+- **`KANAME_SEED_SCENARIO`** on `XCUIApplication.launchEnvironment` (**bare** — the
+  `TEST_RUNNER_` prefix is the app-hosted *unit*-test rule and delivers nothing here). Declared
+  scenarios: `small` (6 rows, one account, a long product name, a prior calendar year), `deep`
+  (160 live rows, four accounts, five statements, two currencies, five declared supersessions),
+  `barren` (two statements, no transactions), `empty` (the reset without the seed).
+- **`ios/Sources/DebugSeed/`** — `SeedScenarios.swift` (the declaration) + `SeedExpectations.swift`
+  (what a test derives from it) are compiled into **`KanameUITests` as well**, so the rows written
+  and the rows asserted are one literal. ⚠️ Both may import **Foundation and nothing else**: that
+  bundle links neither the app nor `KanameCore`. `SeedScenarioBuilder.swift` turns a statement into
+  an `ImportRequest`; `DebugSeed.swift` resets the database and writes it through the shipped
+  `Store.importStatement`. All of it inside `#if DEBUG`.
+- **`ios/UITests/SeededLaunch.swift`** — launch with the locale pinned, walk the whole list
+  (rows + headings + same-screen duplicates + swipe count in one pass), filter and clear through
+  the controls a person uses, read the rendered empty state, pin the appearance.
+- **Two gates prove it cannot ship**: `make import-audit`'s **tenth scan** (every file under
+  `DebugSeed/` opens with `#if DEBUG`; nothing outside it names the surface except `KanameApp
+  .swift`'s three guarded lines) and **`make release-audit`** (~16 s — it builds its own Release
+  binary and fails as *inconclusive* unless it first finds a symbol and a literal it knows are
+  there; a stripped binary has 156 symbols against 4,534, so a naive scan would pass for the wrong
+  reason). **CI now runs `make import-audit` and lints `UITests`**, both for the first time.
+- **Adding a scenario costs zero lines compiled into a Release build** (SC-015), and the
+  engine was **not touched**: schema stays **v7**, no migration, no `#[uniffi::export]`. Seeding
+  cannot be a Rust concern — one `cargo build --release` artifact links into *both* Xcode
+  configurations, so no Rust construct is present in DEBUG and absent from Release.
+
+### ⚠️ Open findings carried out of 019 — three states the product cannot produce
+
+- **`is_deleted` has no write path.** Nothing in `store.rs`'s public API sets it; the only
+  `SET is_deleted = 1` in the repository is raw SQL in an engine test helper. A seed therefore
+  cannot express a deleted row, and deletion coverage stays engine-side
+  (`tests/history_live.rs`). **Closes when — if — deleting a transaction becomes something a
+  person can do.**
+- **`is_transfer` is written only by `detect_transfers`**, which `import-path-audit.sh` bans the
+  app from calling, so every row of every real install has `is_transfer = 0`. A seeded transfer
+  would be a screen no person can have. **Closes when the categorize slice wires detection.**
+- **Three `EmptyKind` cases are unreachable by any seed** — `nothingImported`,
+  `nothingToShowAnywhere` and `accountNothingToShow` — because **every supersession the import
+  path can produce leaves a live winner** (a re-import keeps the row the account already had;
+  cross-source keeps the earlier account's), so a store cannot hold rows and show none of them;
+  and `nothingImported`'s precondition is exactly the condition under which `RootView` hides the
+  route to the list, both read from the **same** `accountSummaries()` call. They are host-rendered
+  in `ios/Tests/EmptyStateRenderingTests.swift` — **executed and asserted, not audited**, because
+  `performAccessibilityAudit` is an `XCUIApplication` API. Evidence:
+  `.scratch/019-debug-test-seeding/issues/02`.
+
+⚠️ **None of the three was worked around.** A fixture that can build states the product cannot is
+a fixture that tests fiction (FR-008a).
 
 ### ⚠️ Open findings carried out of 018 — evidence, not opinions
 

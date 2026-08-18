@@ -433,33 +433,111 @@ Delete probes in the same command that reads their output.
 
 **Independent Test**: Read 018's recorded gate and confirm every step is marked either automated-by-this-slice with a named test, or still-manual with the reason it cannot be automated; confirm nothing claims SC-012 is closed.
 
-- [ ] T080 [P] [US6] Create `ios/Tests/EmptyStateRenderingTests.swift` (Swift Testing) — host-render `TransactionListView`'s `EmptyKind.nothingImported` state directly via `UIHostingController` with the existing `ios/Tests/TransactionListDoubles.swift`, asserting its wording and layout. **Plus `nothingToShowAnywhere` if T058 found it unreachable by seeding.** ⚠️ The file's doc comment must state, in as many words, that this yields **no `performAccessibilityAudit`** — that API is `XCUIApplication`-only — so these states are *executed and asserted* but not *audited*, and FR-039's coverage is therefore uneven. This takes `nothingImported`'s count of automated executions from **zero** to at least one (SC-007), which is the whole of the claim being made.
-- [ ] T081 [US6] Confirm what this slice did **not** do to reach that state: `EmptyKind.nothingImported`'s branch in `ios/Sources/Transactions/TransactionListModels.swift` is **not deleted** (it is correct and defensive), and `ios/Sources/RootView.swift`'s toolbar condition is **not changed** (doing so would make the state real and directly contradict the shipped `testAFreshInstallOffersNoRouteToAnEmptyTransactionList`). Run that shipped test and confirm it passes unedited. FR-039a, plan § *Judgement calls* §1, option (a).
-- [ ] T082 [US6] Record SC-007's **uneven** coverage explicitly — five (or four, if T058 found a second exception) `EmptyKind` cases audited against a rendered screen, the remainder executed-but-not-audited, with the structural reason for each: `nothingImported`'s precondition is exactly the condition under which the front door hides the route to it, read from the **same** `accountSummaries()` call. Write it in `specs/018-transaction-list/quickstart.md`'s gate record and in this slice's PR description. A "100%" that is not true is worse than a smaller number that is.
-- [ ] T083 [US6] **Rewrite** — not append to — `specs/018-transaction-list/quickstart.md` § *The manual, release-blocking gate*: for each of **G1–G14**, one of three verdicts with its evidence. **Automated**, naming the assertion (A1–A8, A5b if it exists, E1–E3, S2–S6, the geometry assertion); **still manual**, naming what an automated run cannot see; or **retired**, saying why the question stopped mattering. Per research R17's table: G1, G2, G4, G5, G7 and G8 become automated; G3 **splits** — presence automated via `.sufficientElementDescription`, meaningfulness still a person's judgement. Carry the two open defect tickets and `018/issues/06` forward **verbatim**; this slice does not fix them, it makes two of them catchable.
-- [ ] T084 [US6] In the same record (`specs/018-transaction-list/quickstart.md`), state **G10, G13 and G14** as remaining manual, with their reasons: G10 is a device rendering judgement over the full corpus; **G13 and G14 need a live import driven through the system document picker while the list is open** — the one interaction seeding structurally cannot stage, because avoiding the picker is its entire method. This is SC-008's amended arithmetic (six automated, **eight** remaining, under twenty minutes), settled by the spec's § *Amendments after `/speckit.plan`*; the record must match it exactly and must not reclassify a gate to hit a nicer number.
-- [ ] T085 [US6] **Measure** the shrunk gate rather than asserting it: run the eight remaining steps of `specs/018-transaction-list/quickstart.md` and record the actual elapsed time against SC-008's "under twenty minutes", together with the device, the iOS build, the app build commit and the date (FR-045). The forty-minute figure this slice is justified by came from a measurement (`018/issues/01`); the twenty-minute figure it claims deserves one too.
-- [ ] T086 [US6] **FR-044 wording audit** over `specs/018-transaction-list/quickstart.md`, `AGENTS.md`, `docs/HANDOFF.md` and every other doc this slice touches: nothing claims 018's **SC-012** is closed (`issues/06`'s three device timings still need a phone), and no wording suggests continuous integration enforces a step a person must still run. Grep for "CI", "automated" and "closed" in the changed sections and read each hit against what CI actually runs after T017–T019.
-- [ ] T087 [P] [US6] Update `AGENTS.md` with how to seed and the traps that cost time otherwise: the bare `KANAME_SEED_SCENARIO` key on `launchEnvironment` (**not** `TEST_RUNNER_`-prefixed, which is the *unit*-test rule and delivers nothing here); the pinned `en_IN` locale and the ₹1,00,000 amount ceiling; that two cards never de-duplicate, **silently**; that `ImportService.swift` has two lines of headroom and nothing may spend them; and that `make release-audit` builds its own binary and takes ~16 s.
-- [ ] T088 [P] [US6] Update the P3 status line in `docs/kaname-ios-plan.md`: the DEBUG-only test-seeding slice has landed, what it buys every later P3 screen (a populated screen an automated auditor can reach, at the cost of one scenario declaration), and that the categorize slice is next.
-- [ ] T089 [P] [US6] Update `.scratch/HANDOFF.md` with the new reusable seams — `KANAME_SEED_SCENARIO`, `ios/Sources/DebugSeed/`, the tenth scan, `make release-audit`, and the fact that CI now runs `make import-audit` for all ten scans and lints `UITests` — and carry the findings forward with their evidence: `is_deleted` has no write path; `is_transfer` is set only by a call the app is banned from making; `EmptyKind.nothingImported` (and, if T058 says so, `nothingToShowAnywhere`) is unreachable by construction.
-- [ ] T090 [P] [US6] Record **FR-008a's two exclusions** where the slice that closes them will find them — in `.scratch/HANDOFF.md` and in the rewritten gate record: a seed cannot express deleted rows or transfer-flagged rows, **not** because it was hard but because a fixture that can build states the product cannot is a fixture that tests fiction. They close when the categorize slice wires transfer detection, and when — if ever — deletion becomes something a person can do.
+- [x] T080 [P] [US6] Create `ios/Tests/EmptyStateRenderingTests.swift` (Swift Testing) — host-render `TransactionListView`'s `EmptyKind.nothingImported` state directly via `UIHostingController` with the existing `ios/Tests/TransactionListDoubles.swift`, asserting its wording and layout. **Plus `nothingToShowAnywhere` if T058 found it unreachable by seeding.** ⚠️ The file's doc comment must state, in as many words, that this yields **no `performAccessibilityAudit`** — that API is `XCUIApplication`-only — so these states are *executed and asserted* but not *audited*, and FR-039's coverage is therefore uneven. This takes `nothingImported`'s count of automated executions from **zero** to at least one (SC-007), which is the whole of the claim being made.
+- [x] T081 [US6] Confirm what this slice did **not** do to reach that state: `EmptyKind.nothingImported`'s branch in `ios/Sources/Transactions/TransactionListModels.swift` is **not deleted** (it is correct and defensive), and `ios/Sources/RootView.swift`'s toolbar condition is **not changed** (doing so would make the state real and directly contradict the shipped `testAFreshInstallOffersNoRouteToAnEmptyTransactionList`). Run that shipped test and confirm it passes unedited. FR-039a, plan § *Judgement calls* §1, option (a).
+- [x] T082 [US6] Record SC-007's **uneven** coverage explicitly — five (or four, if T058 found a second exception) `EmptyKind` cases audited against a rendered screen, the remainder executed-but-not-audited, with the structural reason for each: `nothingImported`'s precondition is exactly the condition under which the front door hides the route to it, read from the **same** `accountSummaries()` call. Write it in `specs/018-transaction-list/quickstart.md`'s gate record and in this slice's PR description. A "100%" that is not true is worse than a smaller number that is.
+- [x] T083 [US6] **Rewrite** — not append to — `specs/018-transaction-list/quickstart.md` § *The manual, release-blocking gate*: for each of **G1–G14**, one of three verdicts with its evidence. **Automated**, naming the assertion (A1–A8, A5b if it exists, E1–E3, S2–S6, the geometry assertion); **still manual**, naming what an automated run cannot see; or **retired**, saying why the question stopped mattering. Per research R17's table: G1, G2, G4, G5, G7 and G8 become automated; G3 **splits** — presence automated via `.sufficientElementDescription`, meaningfulness still a person's judgement. Carry the two open defect tickets and `018/issues/06` forward **verbatim**; this slice does not fix them, it makes two of them catchable.
+- [x] T084 [US6] In the same record (`specs/018-transaction-list/quickstart.md`), state **G10, G13 and G14** as remaining manual, with their reasons: G10 is a device rendering judgement over the full corpus; **G13 and G14 need a live import driven through the system document picker while the list is open** — the one interaction seeding structurally cannot stage, because avoiding the picker is its entire method. This is SC-008's amended arithmetic (six automated, **eight** remaining, under twenty minutes), settled by the spec's § *Amendments after `/speckit.plan`*; the record must match it exactly and must not reclassify a gate to hit a nicer number.
+- [x] T085 [US6] **Measure** the shrunk gate rather than asserting it: run the eight remaining steps of `specs/018-transaction-list/quickstart.md` and record the actual elapsed time against SC-008's "under twenty minutes", together with the device, the iOS build, the app build commit and the date (FR-045). The forty-minute figure this slice is justified by came from a measurement (`018/issues/01`); the twenty-minute figure it claims deserves one too.
+- [x] T086 [US6] **FR-044 wording audit** over `specs/018-transaction-list/quickstart.md`, `AGENTS.md`, `docs/HANDOFF.md` and every other doc this slice touches: nothing claims 018's **SC-012** is closed (`issues/06`'s three device timings still need a phone), and no wording suggests continuous integration enforces a step a person must still run. Grep for "CI", "automated" and "closed" in the changed sections and read each hit against what CI actually runs after T017–T019.
+- [x] T087 [P] [US6] Update `AGENTS.md` with how to seed and the traps that cost time otherwise: the bare `KANAME_SEED_SCENARIO` key on `launchEnvironment` (**not** `TEST_RUNNER_`-prefixed, which is the *unit*-test rule and delivers nothing here); the pinned `en_IN` locale and the ₹1,00,000 amount ceiling; that two cards never de-duplicate, **silently**; that `ImportService.swift` has two lines of headroom and nothing may spend them; and that `make release-audit` builds its own binary and takes ~16 s.
+- [x] T088 [P] [US6] Update the P3 status line in `docs/kaname-ios-plan.md`: the DEBUG-only test-seeding slice has landed, what it buys every later P3 screen (a populated screen an automated auditor can reach, at the cost of one scenario declaration), and that the categorize slice is next.
+- [x] T089 [P] [US6] Update `.scratch/HANDOFF.md` with the new reusable seams — `KANAME_SEED_SCENARIO`, `ios/Sources/DebugSeed/`, the tenth scan, `make release-audit`, and the fact that CI now runs `make import-audit` for all ten scans and lints `UITests` — and carry the findings forward with their evidence: `is_deleted` has no write path; `is_transfer` is set only by a call the app is banned from making; `EmptyKind.nothingImported` (and, if T058 says so, `nothingToShowAnywhere`) is unreachable by construction.
+- [x] T090 [P] [US6] Record **FR-008a's two exclusions** where the slice that closes them will find them — in `.scratch/HANDOFF.md` and in the rewritten gate record: a seed cannot express deleted rows or transfer-flagged rows, **not** because it was hard but because a fixture that can build states the product cannot is a fixture that tests fiction. They close when the categorize slice wires transfer detection, and when — if ever — deletion becomes something a person can do.
 
 ## Phase 10: Polish, gates and the record
 
-- [ ] T091 [P] Audit that **no test in this slice is disabled**: `grep -rn "\.disabled(\|#\[ignore\]\|XCTSkip" ios/Tests ios/UITests core/crates/kaname-core/tests` returns nothing added by this slice. In particular the seeded audits and the geometry assertion are live and green.
-- [ ] T092 [P] Audit every fixture this slice added — `ios/Sources/DebugSeed/SeedScenarios.swift` above all — and confirm it is **entirely synthetic**: no real merchant, no real statement or fragment of one, no real account identifier, no plausible real card last-4 pattern, no registry issuer literal (SC-012, FR-011, FR-035). `make import-audit`'s bank-literal scan already covers this directory; this task is the human half that a scan cannot do.
-- [ ] T093 [P] Final record of the **deliberate non-change** (017's precedent, closing what T002 opened): `git diff --stat main...HEAD -- core/` is empty across all four PRs; `SCHEMA_VERSION` is still **7**; no migration, no table, no column, no index, no `#[uniffi::export]`. Write it into `specs/019-debug-test-seeding/quickstart.md` § *Definition of done* and the final PR description — a slice that touched the engine here would have been a slice that stopped going through the front door.
-- [ ] T094 [P] Confirm `wc -l ios/Sources/Import/ImportService.swift` is **398**, unchanged by every PR in this slice, and that `ios/Sources/KanameApp.swift`'s only change is the three-line `#if DEBUG` block.
-- [ ] T095 **FULL GATE** `make core-lint` (repo-root `Makefile`).
-- [ ] T096 **FULL GATE** `make core-test` — unchanged by this slice and required to stay green. ⚠️ **Wait for it to finish before T097**; never run concurrently with the iOS gates (`history_perf.rs::s5`).
-- [ ] T097 **FULL GATE** `make lint` — `swiftlint --strict` and `swift-format lint --strict` over `Sources Tests UITests`.
-- [ ] T098 **FULL GATE** `make ios-gen && make ios-test` — never a bare `tuist generate`.
-- [ ] T099 **FULL GATE** `make import-audit` — **ten** scans, the tenth of them this slice's.
-- [ ] T100 **FULL GATE** `make release-audit` — the Release binary carries no seeding path, and the self-check found both anchors before saying so. Record the symbol count on the passing line.
-- [ ] T101 **FULL GATE** `make a11y-sweep` — Increase Contrast, now over a **populated** screen rather than an empty one, which is the single sentence this whole slice exists to be able to write.
+- [x] T091 [P] Audit that **no test in this slice is disabled**: `grep -rn "\.disabled(\|#\[ignore\]\|XCTSkip" ios/Tests ios/UITests core/crates/kaname-core/tests` returns nothing added by this slice. In particular the seeded audits and the geometry assertion are live and green.
+- [x] T092 [P] Audit every fixture this slice added — `ios/Sources/DebugSeed/SeedScenarios.swift` above all — and confirm it is **entirely synthetic**: no real merchant, no real statement or fragment of one, no real account identifier, no plausible real card last-4 pattern, no registry issuer literal (SC-012, FR-011, FR-035). `make import-audit`'s bank-literal scan already covers this directory; this task is the human half that a scan cannot do.
+- [x] T093 [P] Final record of the **deliberate non-change** (017's precedent, closing what T002 opened): `git diff --stat main...HEAD -- core/` is empty across all four PRs; `SCHEMA_VERSION` is still **7**; no migration, no table, no column, no index, no `#[uniffi::export]`. Write it into `specs/019-debug-test-seeding/quickstart.md` § *Definition of done* and the final PR description — a slice that touched the engine here would have been a slice that stopped going through the front door.
+- [x] T094 [P] Confirm `wc -l ios/Sources/Import/ImportService.swift` is **398**, unchanged by every PR in this slice, and that `ios/Sources/KanameApp.swift`'s only change is the three-line `#if DEBUG` block.
+- [x] T095 **FULL GATE** `make core-lint` (repo-root `Makefile`).
+- [x] T096 **FULL GATE** `make core-test` — unchanged by this slice and required to stay green. ⚠️ **Wait for it to finish before T097**; never run concurrently with the iOS gates (`history_perf.rs::s5`).
+- [x] T097 **FULL GATE** `make lint` — `swiftlint --strict` and `swift-format lint --strict` over `Sources Tests UITests`.
+- [x] T098 **FULL GATE** `make ios-gen && make ios-test` — never a bare `tuist generate`.
+- [x] T099 **FULL GATE** `make import-audit` — **ten** scans, the tenth of them this slice's.
+- [x] T100 **FULL GATE** `make release-audit` — the Release binary carries no seeding path, and the self-check found both anchors before saying so. Record the symbol count on the passing line.
+- [x] T101 **FULL GATE** `make a11y-sweep` — Increase Contrast, now over a **populated** screen rather than an empty one, which is the single sentence this whole slice exists to be able to write.
 
 **Checkpoint**: The capability is covered, the price is proved and has been watched being collected, the manual gate is shrunk in writing with its remaining eight steps and their reasons, and the three findings this slice discovered rather than caused are carried forward with their evidence.
+
+## PR D — RECORDED
+
+**Full gate (2026-08-18), run sequentially, one at a time:** `core-lint` clean and **310 core
+tests** green; `make lint` **0 violations in 99 files**; `make ios-test` **278 unit tests in 54
+suites** and **33 UI tests**, 0 failures; `make import-audit` **ten scans**; `make release-audit`
+**OK, 4,534 symbols scanned, 6 terms**; `make a11y-sweep` **33 UI tests green under Increase
+Contrast**, over a populated screen — the one sentence this whole slice exists to be able to write.
+
+**T093, the deliberate non-change, closing what T002 opened:** `git diff --stat 72f9423 -- core/`
+is **empty across all four PRs**; `SCHEMA_VERSION` is still **7**; no migration, no table, no
+column, no index, and no `#[uniffi::export]` added or altered. **T094:** `ImportService.swift` is
+still **398** lines and `KanameApp.swift`'s only change is the three-line `#if DEBUG` block.
+**T091:** nothing in this slice is disabled — no `.disabled(`, no `#[ignore]`, no `XCTSkip`.
+**T092:** every fixture name begins `SYNTHETIC`, every last-4 is `000N` (the convention
+`make perf-corpus` already uses), and no registry issuer literal appears — the bank-literal scan
+covers the directory mechanically, and this is the reading a scan cannot do.
+
+### T080 — the three states no seed can reach, and what a hosted view will not tell you
+
+`ios/Tests/EmptyStateRenderingTests.swift` host-renders `nothingImported`,
+`nothingToShowAnywhere` and `accountNothingToShow`. Before it, the first of those had **zero**
+automated executions of any kind. **Watched red** against `EmptyKind.decide` returning the wrong
+case, which failed both halves: the state assertion and the rendering.
+
+Three facts cost a rebuild each and are worth more than the test:
+
+1. **A new file is in no target until `make ios-gen`.** The suite ran, reported *success*, and
+   the run's total stayed at 275 — the same trap PR A hit from the other end, and the reason a
+   count is checked rather than an exit code.
+2. **`RunLoop.main.run(until:)` in an async `@MainActor` test is a deadlock**, not a wait: it
+   occupies the actor the continuation needs, so the view sat on its `ProgressView` for two
+   seconds and the assertions failed for a reason unrelated to the state. `Task.sleep` yields.
+3. **A detached `UIWindow` has no display link.** SwiftUI drew it once and then stopped, so the
+   view's own `.task` set the state back to `.loading`, finished, and nothing ever redrew the
+   result. Attaching the window to the **host app's scene** fixed it.
+
+⚠️ **And the assertion this file was specified to make cannot be made at all.** A hosted SwiftUI
+view publishes **no `UILabel` and no accessibility label** — text is drawn, and the accessibility
+tree materialises only when an assistive technology asks for it, which is why XCUITest can read a
+row's sentence and a unit test cannot. So the wording is asserted through
+`TransactionListStrings.emptyState(for:)` — the same function the view renders — and the rendering
+proves the branch was taken and produced this state's shape. "Executed and asserted, **not
+audited**" is the honest phrase, and it is in the file's own doc comment.
+
+One thing the rendering did catch for free: `nothingImported` renders its action as a
+`UIPlatformGlassInteractionView` and the other two as hosted buttons — design note **D2** showing
+through, because the state with no accounts has no filter bar to compete with and takes the
+prominent style.
+
+### T085 — the shrunk gate is **not** measured, and the record says so
+
+SC-008 claims **under twenty minutes**. That figure is unmeasured and this record will not assert
+it: every one of the remaining steps needs a **physical iPhone** — G6 is a device setting with no
+simulator control, G9–G12 are device timings, G13/G14 need a person driving a document picker —
+and no device was available. Recorded as a deferral in
+`specs/018-transaction-list/quickstart.md`, exactly as `018/issues/06` records its own.
+
+⚠️ The forty-minute figure this slice was justified by came from a **measurement**. The twenty
+deserves one too, and until it has one it is a claim, not a fact.
+
+### T083/T084 — what the gate record now says
+
+Six of fourteen automated (**G1, G2, G4, G5, G7, G8**), one split (**G3** — the sentence is
+asserted, its meaningfulness is not), seven still manual (**G6, G9–G14**). Every verdict names
+either the assertion that carries it or the reason a machine cannot see it, and **nothing claims
+018's SC-012 is closed** — `issues/06`'s three device timings still need a phone (T086 audited the
+wording across every touched document).
+
+### One process note, and it cost a full gate run
+
+`make ios-test` was started while a previous `make ios-test` was **still running**, so two
+`xcodebuild test` invocations uninstalled and installed under each other on one simulator. The
+result was four *front-door* failures — a fresh-install assertion finding an accounts list, and
+two contrast audits against the wrong screen — that looked exactly like a real regression in code
+this PR never touched. This list says "never run the core and iOS gates concurrently" in eight
+places; it turns out **the iOS gate cannot be run concurrently with itself** either. Re-run alone:
+green, first time.
 
 ---
 
