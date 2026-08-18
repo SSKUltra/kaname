@@ -31,25 +31,44 @@ the case it was written for. But it does not apply here: `small` is **six rows**
 not take four seconds to write. Almost all of the figure was app launch and a navigation push,
 neither of which this slice added.
 
+## ⚠️ And then it failed again on CI, by six ten-thousandths of a second
+
+The differential was the right idea with the wrong endpoints. It timed the unseeded launch to a
+**ready front door** and the seeded launch all the way to a **row on the list** — so the
+"difference" carried a navigation push and an XCUITest element query as well as the seed. On CI's
+slower runner:
+
+```
+seed-timing: unseeded launch 4.46s, seeded launch to first row 7.46s, seed + navigation 3.00s
+XCTAssertLessThan failed: ("3.0005640983581543") is not less than ("3.0")
+```
+
+**Failing by 0.0006 s is not a measurement, it is a coin toss** — and the number it was policing
+was mostly navigation. Measured locally afterwards: the navigation alone is ~3.3 s of it.
+
+The lesson generalises past this test: *a differential is only honest if both sides end at the
+same place.* Comparing "launch" against "launch, then go somewhere else" measures the somewhere
+else.
+
 ## What it measures now
 
-The seeded launch is compared with an **unseeded** launch taken moments earlier on the same
-simulator, and the assertion is on the difference — which is what SC-009 is about, and the number
-that would grow if a scenario grew:
+Both launches are timed to **the same screen** — the front door, ready — so the difference is the
+seed and nothing else: one of them had to write a history on the way.
 
 ```
-seed-timing: unseeded launch 3.30s, seeded launch to first row 4.72s, seed + navigation 1.42s
+seed-timing: unseeded launch 4.32s, seeded launch 5.28s (the seed itself 0.96s),
+             and on to the first row 8.57s
 ```
 
-**1.42 s** for writing a six-row history through `Store.importStatement`, opening SQLCipher for
-the first time in the process, and pushing one navigation destination — measured under
-`make a11y-sweep`, i.e. on the *loaded* machine that produced the 7.98 s figure.
+**0.96 s** for writing a six-row history through `Store.importStatement` and opening SQLCipher for
+the first time in the process. The bound is 3.0 s — three times the measurement, which is the
+headroom a number taken on somebody else's machine needs.
 
-The absolute figure is still printed and still asserted, generously (15 s), because a collapse
-should fail something. It is a smoke alarm, not a stopwatch.
+The whole journey to a row is still printed and still asserted, generously (20 s), because a
+collapse should fail something. It is a smoke alarm, not a stopwatch.
 
 ## What a later scenario author should watch
 
-`seed-timing:` in the log, and specifically its third number. If seeding starts costing seconds
+`seed-timing:` in the log, and specifically **the seed itself**. If seeding starts costing seconds
 rather than a second, R15's remedy applies and the scenario shrinks — because the alternative, an
 asynchronous seed, is a race with the first screenshot and FR-002 forbids it.

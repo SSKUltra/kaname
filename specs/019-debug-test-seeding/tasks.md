@@ -529,6 +529,22 @@ either the assertion that carries it or the reason a machine cannot see it, and 
 018's SC-012 is closed** — `issues/06`'s three device timings still need a phone (T086 audited the
 wording across every touched document).
 
+### ⚠️ CI caught what three local gate runs did not (`issues/04`, second correction)
+
+The timing assertion failed on the pull request by **0.0006 s**:
+`("3.0005640983581543") is not less than ("3.0")`. It had already been rewritten once — from a
+bare wall clock to a differential against an unseeded launch — and the differential was still
+wrong, because its two sides ended in **different places**: the unseeded run stopped at a ready
+front door, the seeded run went on to a row on the list. So the "difference" carried a navigation
+push and an element query, which on CI's slower runner are most of it.
+
+Both launches are now timed to **the same screen**, and the number that comes out is the seed
+alone: **0.96 s**, against a 3.0 s bound. The lesson generalises past this test — *a differential
+is only honest if both sides end at the same place.*
+
+⚠️ Three local `make ios-test` runs and a `make a11y-sweep` all passed this assertion before CI
+failed it. A margin that thin is not a gate, and the local machine is not the slowest machine.
+
 ### One process note, and it cost a full gate run
 
 `make ios-test` was started while a previous `make ios-test` was **still running**, so two
