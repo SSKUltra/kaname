@@ -171,6 +171,17 @@ pub fn default_categories() -> Vec<Category> {
     crate::categorize::default_categories()
 }
 
+/// The stable merchant portion of a narration — what a person's merchant memory is keyed on —
+/// or `None` when nothing specific enough to remember survives (FR-027, FR-027d).
+///
+/// Exported as a **free function** so the interface can show the portion *before* the memory is
+/// formed (FR-026a) without a store round-trip, and so that the platform never derives anything
+/// itself: there is one rule and it lives here (FR-076).
+#[uniffi::export]
+pub fn merchant_portion(narration: String) -> Option<String> {
+    crate::merchant::merchant_portion(&narration)
+}
+
 /// Identify the statement issuer from extracted document text.
 #[uniffi::export]
 pub fn detect_issuer(full_text: String) -> Option<Issuer> {

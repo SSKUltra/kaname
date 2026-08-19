@@ -23,6 +23,32 @@ use rust_decimal::Decimal;
 
 const KEY: &str = "2f1c8a9e4b7d6035112233445566778899aabbccddeeff00112233445566aabb";
 
+/// Open the encrypted database directly — needed for the two facts the public API deliberately
+/// does not express: reading the memory table (a memory is not a rule, M11) and installing the
+/// trigger C7 uses to force the second write to fail.
+fn open_sqlcipher(path: &str) -> rusqlite::Connection {
+    let conn = rusqlite::Connection::open(path).expect("open sqlcipher");
+    conn.pragma_update(None, "key", format!("x'{KEY}'"))
+        .expect("set key");
+    conn.pragma_update(None, "foreign_keys", true)
+        .expect("foreign keys");
+    conn
+}
+
+/// Every memory the store holds, as `(merchant_portion, category_id)` pairs.
+fn memories(path: &str) -> Vec<(String, String)> {
+    let conn = open_sqlcipher(path);
+    let mut stmt = conn
+        .prepare("SELECT merchant_portion, category_id FROM merchant_memory ORDER BY 1")
+        .expect("prepare");
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query")
+        .collect::<rusqlite::Result<Vec<(String, String)>>>()
+        .expect("collect");
+    rows
+}
+
 struct TestDb {
     dir: PathBuf,
     path: String,
@@ -304,6 +330,85 @@ fn correcting_an_unknown_transaction_is_not_found() {
         provenance(&store, &account_id, &txn_id),
         before,
         "a failed correction must not touch another row"
+    );
+}
+
+/// **C4** — a deliberate blank teaches nothing. There is no way to say "always leave this
+/// merchant undecided", because that is not a thing a person can mean: `remember` is honoured
+/// only when a category was actually chosen (spec amendment §3, judgement call §4).
+///
+/// The portion is still reported, so the interface can say what it *would* have remembered
+/// rather than going quiet for a reason the person cannot see.
+#[test]
+fn a_deliberate_blank_forms_no_memory_even_when_remembering_was_asked_for() {
+    let db = TestDb::new("c4");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+    let (_, txn_id) = imported_account(&store);
+
+    let outcome = store
+        .set_transaction_category(txn_id, None, true)
+        .expect("correction to no category");
+
+    assert!(
+        !outcome.memory_formed,
+        "a blank is a decision about a row, never about a merchant"
+    );
+    assert_eq!(
+        outcome.merchant_portion,
+        Some("synthcafe".to_string()),
+        "the app must still be able to name what it did not remember"
+    );
+    assert_eq!(
+        memories(&db.path),
+        Vec::<(String, String)>::new(),
+        "the memory table must be untouched"
+    );
+}
+
+/// **C7** — the row and the memory are one transaction. The second write is forced to fail by a
+/// trigger, and the first must be gone with it (FR-023).
+///
+/// A memory that outlived the correction that formed it would go on teaching the app a category
+/// the person is no longer looking at — and nothing in the app would ever show them why.
+#[test]
+fn a_failed_memory_write_rolls_the_correction_back() {
+    let db = TestDb::new("c7");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+    let (account_id, txn_id) = imported_account(&store);
+    let before = provenance(&store, &account_id, &txn_id);
+
+    // The only way to make the *second* write fail while the first succeeds: no constraint on
+    // `merchant_memory` can be violated by a row whose category the transaction update has
+    // already accepted.
+    {
+        let conn = open_sqlcipher(&db.path);
+        conn.execute_batch(
+            "CREATE TRIGGER refuse_memory BEFORE INSERT ON merchant_memory \
+             BEGIN SELECT RAISE(ABORT, 'refused'); END;",
+        )
+        .expect("trigger");
+    }
+
+    let err = store
+        .set_transaction_category(
+            txn_id.clone(),
+            Some(CategoryRef::Builtin {
+                code: "GROCERIES".to_string(),
+            }),
+            true,
+        )
+        .expect_err("the memory write was refused");
+    assert!(matches!(err, StoreError::Sql { .. }), "got {err:?}");
+
+    assert_eq!(
+        provenance(&store, &account_id, &txn_id),
+        before,
+        "the correction must not survive the memory that failed to form"
+    );
+    assert_eq!(
+        memories(&db.path),
+        Vec::<(String, String)>::new(),
+        "and neither must a half-written memory"
     );
 }
 

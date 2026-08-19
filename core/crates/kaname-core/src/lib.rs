@@ -23,6 +23,7 @@ pub mod categorize;
 pub mod coverage;
 pub mod dedup;
 mod ffi;
+pub mod merchant;
 pub mod model;
 pub mod statement;
 pub mod store;
@@ -42,11 +43,11 @@ pub use ffi::{
     au_bank_claims, categorize, categorize_batch, check_balance_chain, compute_coverage,
     cross_source_duplicates, default_categories, detect_issuer, detect_transfers,
     federal_bank_claims, federal_claims, hdfc_bank_claims, hdfc_claims, icici_bank_claims,
-    icici_claims, iob_claims, read_au_bank_statement, read_federal_bank_statement,
-    read_federal_statement, read_hdfc_bank_statement, read_hdfc_statement,
-    read_icici_bank_statement, read_icici_statement, read_iob_statement, read_sbi_statement,
-    read_statement, read_yes_statement, reconcile_statement, sbi_claims, yes_claims, Issuer,
-    ReaderError, StatementKind,
+    icici_claims, iob_claims, merchant_portion, read_au_bank_statement,
+    read_federal_bank_statement, read_federal_statement, read_hdfc_bank_statement,
+    read_hdfc_statement, read_icici_bank_statement, read_icici_statement, read_iob_statement,
+    read_sbi_statement, read_statement, read_yes_statement, reconcile_statement, sbi_claims,
+    yes_claims, Issuer, ReaderError, StatementKind,
 };
 pub use model::{Direction, Transaction};
 pub use statement::balance_chain::{ChainResult, ChainStatus, Suspect};
@@ -55,10 +56,11 @@ pub use statement::{
     DirectionSource, LedgerMetadata, LineWords, ParsedStatement, ParsedTransaction, Word,
 };
 pub use store::{
-    AccountMark, AccountSummary, CategorizeSummary, DedupSummary, HistoryCursor, HistoryPage,
-    HistoryQuery, HistoryRow, ImportAccountTarget, ImportOutcome, ImportRequest, NewAccount,
-    NewCategory, NewImportTransaction, NewStatement, NewTransaction, StatementSource, Store,
-    StoreError, StoredAccount, StoredStatement, StoredTransaction, TransferSummary, PAGE_SQL,
+    AccountImpact, AccountMark, AccountSummary, CategorizeSummary, CorrectionOutcome, DedupSummary,
+    HistoryCursor, HistoryPage, HistoryQuery, HistoryRow, ImportAccountTarget, ImportOutcome,
+    ImportRequest, MemoryImpact, NewAccount, NewCategory, NewImportTransaction, NewStatement,
+    NewTransaction, StatementSource, Store, StoreError, StoredAccount, StoredStatement,
+    StoredTransaction, TransferSummary, PAGE_SQL,
 };
 pub use transfer::{TransferInput, TransferPair};
 

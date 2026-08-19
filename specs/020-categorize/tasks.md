@@ -218,17 +218,17 @@ list should gain `.NotFound` in PR D, where Swift is touched anyway.
 
 **Purpose**: turn a narration into the portion a memory can be keyed on, deterministically, with its known weaknesses written down rather than hidden.
 
-- [ ] T041 [P] [US3] Create `fixtures/categorization/merchant_portion.json` per `data-model.md` §7 — narration in, expected portion out, one case per shape named in FR-027a–FR-027e. 🚨 **No real VPA, no real UPI handle, no real account number** (Principle I): every value is synthetic and must look it.
-- [ ] T042 [P] [US3] Create `core/crates/kaname-core/tests/merchant_portion.rs` with the harness import and the fixture loader, no assertions yet.
-- [ ] T043 [US3] RED **P3** and **P4** in `core/crates/kaname-core/tests/merchant_portion.rs`: every FR-027d case returns `None`, and the empty string and a whitespace-only string return `None` **without panicking**. Watch both fail.
-- [ ] T044 [US3] RED **P1** in `core/crates/kaname-core/tests/merchant_portion.rs`: every case in `fixtures/categorization/merchant_portion.json` (FR-027e), driven from the file so adding a case adds an assertion. Watch it fail.
-- [ ] T045 [US3] RED 🚨 **P2** in `core/crates/kaname-core/tests/merchant_portion.rs`: the four `UPI-SWIGGY-*` shapes yield **one identical portion**. This is the assertion that catches SC-008's failure mode — a memory that can only ever match the row it came from. Watch it fail.
-- [ ] T046 [US3] RED **P5** in `core/crates/kaname-core/tests/merchant_portion.rs`: research R15's three priced limitations asserted **as they actually behave** — `NEFT-N123-EMPLOYER…` → `n123 employer`, `MTR1924 LALBAGH` → `lalbagh`, `swiggy` ≠ `swiggy bangalore` — each with a comment naming R15. A fixture that encodes known weaknesses is what tells the next person when they change.
-- [ ] T047 [US3] RED **P6** in `core/crates/kaname-core/tests/merchant_portion.rs`: `fixtures/dedup/cross_source/basic.json` still passes **unedited** — `normalize_narration` did not move and dedup did not change shape underneath this.
-- [ ] T048 [US3] GREEN: create `core/crates/kaname-core/src/merchant.rs` with a free `fn merchant_portion(&str) -> Option<String>` implementing the four ordered steps of `data-model.md` §4 — normalize via the **unchanged** `dedup::normalize_narration`; split on the separator set, in which `@` and `.` are **deliberately not separators**; drop the 69-word closed stop-list plus pure-numeric and single-character segments; keep the first **2** segments. Register the module in `core/crates/kaname-core/src/lib.rs`. ⚠️ Do not modify `categorize.rs` or `dedup.rs`.
-- [ ] T049 [US3] Export `merchant_portion` over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs` (FR-021, FR-076 — the Swift side derives nothing).
-- [ ] T050 ⚠️ **BUILD** — `make core-xcframework` then `make ios-gen`. FFI surface changed.
-- [ ] T051 **DELIBERATE BREAK** — change the kept-segment count from 2 to 3 in `core/crates/kaname-core/src/merchant.rs`. Expected: **P2 RED** (the four Swiggy shapes stop collapsing to one portion). Revert, then `make core-test` — P1–P6 green.
+- [x] T041 [P] [US3] Create `fixtures/categorization/merchant_portion.json` per `data-model.md` §7 — narration in, expected portion out, one case per shape named in FR-027a–FR-027e. 🚨 **No real VPA, no real UPI handle, no real account number** (Principle I): every value is synthetic and must look it.
+- [x] T042 [P] [US3] Create `core/crates/kaname-core/tests/merchant_portion.rs` with the harness import and the fixture loader, no assertions yet.
+- [x] T043 [US3] RED **P3** and **P4** in `core/crates/kaname-core/tests/merchant_portion.rs`: every FR-027d case returns `None`, and the empty string and a whitespace-only string return `None` **without panicking**. Watch both fail.
+- [x] T044 [US3] RED **P1** in `core/crates/kaname-core/tests/merchant_portion.rs`: every case in `fixtures/categorization/merchant_portion.json` (FR-027e), driven from the file so adding a case adds an assertion. Watch it fail.
+- [x] T045 [US3] RED 🚨 **P2** in `core/crates/kaname-core/tests/merchant_portion.rs`: the four `UPI-SWIGGY-*` shapes yield **one identical portion**. This is the assertion that catches SC-008's failure mode — a memory that can only ever match the row it came from. Watch it fail.
+- [x] T046 [US3] RED **P5** in `core/crates/kaname-core/tests/merchant_portion.rs`: research R15's three priced limitations asserted **as they actually behave** — `NEFT-N123-EMPLOYER…` → `n123 employer`, `MTR1924 LALBAGH` → `lalbagh`, `swiggy` ≠ `swiggy bangalore` — each with a comment naming R15. A fixture that encodes known weaknesses is what tells the next person when they change.
+- [x] T047 [US3] RED **P6** in `core/crates/kaname-core/tests/merchant_portion.rs`: `fixtures/dedup/cross_source/basic.json` still passes **unedited** — `normalize_narration` did not move and dedup did not change shape underneath this.
+- [x] T048 [US3] GREEN: create `core/crates/kaname-core/src/merchant.rs` with a free `fn merchant_portion(&str) -> Option<String>` implementing the four ordered steps of `data-model.md` §4 — normalize via the **unchanged** `dedup::normalize_narration`; split on the separator set, in which `@` and `.` are **deliberately not separators**; drop the 69-word closed stop-list plus pure-numeric and single-character segments; keep the first **2** segments. Register the module in `core/crates/kaname-core/src/lib.rs`. ⚠️ Do not modify `categorize.rs` or `dedup.rs`.
+- [x] T049 [US3] Export `merchant_portion` over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs` (FR-021, FR-076 — the Swift side derives nothing).
+- [x] T050 ⚠️ **BUILD** — `make core-xcframework` then `make ios-gen`. FFI surface changed.
+- [x] T051 **DELIBERATE BREAK** — change the kept-segment count from 2 to 3 in `core/crates/kaname-core/src/merchant.rs`. Expected: **P2 RED** (the four Swiggy shapes stop collapsing to one portion). Revert, then `make core-test` — P1–P6 green.
 
 **Checkpoint**: a narration reliably yields a portion, and its limits are recorded in tests.
 
@@ -236,17 +236,17 @@ list should gain `.NotFound` in PR D, where Swift is touched anyway.
 
 **Purpose**: one row per merchant portion, written in the same transaction as the correction, consulted *before* the stack.
 
-- [ ] T052 [P] [US3] Create `core/crates/kaname-core/tests/merchant_memory.rs` with the harness import, no assertions yet.
-- [ ] T053 [US3] RED **M3** in `core/crates/kaname-core/tests/merchant_memory.rs`: correct the same merchant twice to different categories → `merchant_memory` has exactly **one** row and it names the **second** category (FR-031, FR-033). Watch it fail.
-- [ ] T054 [US3] RED **M11** in `core/crates/kaname-core/tests/merchant_memory.rs`: `list_merchant_rules()` returns the same thing before and after memories exist (FR-035, plan § *Judgement calls* §1 — a memory is not a rule and must not appear as one).
-- [ ] T055 [US3] GREEN: upsert into `merchant_memory` inside `set_transaction_category`'s existing transaction when `remember` is true, in `core/crates/kaname-core/src/store.rs`. The `PRIMARY KEY` is what makes M3 true — an `INSERT OR REPLACE` on the portion, not an append.
-- [ ] T056 **DELIBERATE BREAK** — drop the `PRIMARY KEY` from `merchant_memory` in the v8 migration in `core/crates/kaname-core/src/store.rs` and re-migrate a fresh store. Expected: **M3 RED** (two rows for one merchant). Revert, re-migrate, re-run.
-- [ ] T057 [US3] RED **C4** (deferred from PR A) in `core/crates/kaname-core/tests/store_correction.rs`: correct to `None` with `remember: true` → `memory_formed == false` and `merchant_memory` unchanged. Nothing is remembered about a deliberate blank.
-- [ ] T058 [US3] RED **C7** (deferred from PR A) in `core/crates/kaname-core/tests/store_correction.rs`: a category and a memory are written in one transaction — force a failure on the second write and assert the first is rolled back.
-- [ ] T059 [US3] GREEN: make the correction-plus-memory write atomic in `core/crates/kaname-core/src/store.rs`; C4 and C7 green.
-- [ ] T060 [US3] RED **M1** in `core/crates/kaname-core/tests/merchant_memory.rs`: form a memory, import a new statement containing that merchant → the new rows land in the remembered category with `categorised_by = 'PERSON_MEMORY'` (FR-030).
-- [ ] T061 [US3] RED **M2** in `core/crates/kaname-core/tests/merchant_memory.rs`: a memory beats a CC narration rule **and** a T1 builtin for the same row (FR-032). This test is what plan § *Judgement calls* §2 actually encodes — write the judgement call's sentence into the test as a comment.
-- [ ] T062 [US3] GREEN: consult `merchant_memory` in `core/crates/kaname-core/src/store.rs` **beside** the categorization stack and **before** it, per `contracts/engine-categorize.md` §5. ⚠️ Do not add a tier to `categorize.rs`; a memory is not a rule.
+- [x] T052 [P] [US3] Create `core/crates/kaname-core/tests/merchant_memory.rs` with the harness import, no assertions yet.
+- [x] T053 [US3] RED **M3** in `core/crates/kaname-core/tests/merchant_memory.rs`: correct the same merchant twice to different categories → `merchant_memory` has exactly **one** row and it names the **second** category (FR-031, FR-033). Watch it fail.
+- [x] T054 [US3] RED **M11** in `core/crates/kaname-core/tests/merchant_memory.rs`: `list_merchant_rules()` returns the same thing before and after memories exist (FR-035, plan § *Judgement calls* §1 — a memory is not a rule and must not appear as one).
+- [x] T055 [US3] GREEN: upsert into `merchant_memory` inside `set_transaction_category`'s existing transaction when `remember` is true, in `core/crates/kaname-core/src/store.rs`. The `PRIMARY KEY` is what makes M3 true — an `INSERT OR REPLACE` on the portion, not an append.
+- [x] T056 **DELIBERATE BREAK** — drop the `PRIMARY KEY` from `merchant_memory` in the v8 migration in `core/crates/kaname-core/src/store.rs` and re-migrate a fresh store. Expected: **M3 RED** (two rows for one merchant). Revert, re-migrate, re-run.
+- [x] T057 [US3] RED **C4** (deferred from PR A) in `core/crates/kaname-core/tests/store_correction.rs`: correct to `None` with `remember: true` → `memory_formed == false` and `merchant_memory` unchanged. Nothing is remembered about a deliberate blank.
+- [x] T058 [US3] RED **C7** (deferred from PR A) in `core/crates/kaname-core/tests/store_correction.rs`: a category and a memory are written in one transaction — force a failure on the second write and assert the first is rolled back.
+- [x] T059 [US3] GREEN: make the correction-plus-memory write atomic in `core/crates/kaname-core/src/store.rs`; C4 and C7 green.
+- [x] T060 [US3] RED **M1** in `core/crates/kaname-core/tests/merchant_memory.rs`: form a memory, import a new statement containing that merchant → the new rows land in the remembered category with `categorised_by = 'PERSON_MEMORY'` (FR-030).
+- [x] T061 [US3] RED **M2** in `core/crates/kaname-core/tests/merchant_memory.rs`: a memory beats a CC narration rule **and** a T1 builtin for the same row (FR-032). This test is what plan § *Judgement calls* §2 actually encodes — write the judgement call's sentence into the test as a comment.
+- [x] T062 [US3] GREEN: consult `merchant_memory` in `core/crates/kaname-core/src/store.rs` **beside** the categorization stack and **before** it, per `contracts/engine-categorize.md` §5. ⚠️ Do not add a tier to `categorize.rs`; a memory is not a rule.
 
 **Checkpoint**: the app remembers, and the memory wins.
 
@@ -254,20 +254,108 @@ list should gain `.NotFound` in PR D, where Swift is touched anyway.
 
 **Purpose**: state the blast radius, then apply exactly the set that was previewed — nothing more, nothing else.
 
-- [ ] T063 **DELIBERATE BREAK** — consult the memory *after* the categorization stack in `core/crates/kaname-core/src/store.rs`. Expected: **M2 RED** (the CC rule wins). Revert. This is the break that proves ordering is behaviour, not style.
-- [ ] T064 [US3] RED **M4** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview_memory_application` never includes a `'PERSON'` row (FR-035d) — a hand-corrected row is not collateral.
-- [ ] T065 [US3] RED **M5** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview` → `apply` writes exactly the previewed rows with `'PERSON_MEMORY'` and returns the previewed count.
-- [ ] T066 [US3] RED 🚨 **M7** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview` → `apply` with a **trimmed** id list returns `StaleSet` and writes nothing. This is the assertion that proves FR-035b is enforced **in the engine**, so that no present or future interface can turn the second action into a bulk edit.
-- [ ] T067 [US3] RED **M6** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview` → delete/insert a matching row → `apply` returns `StaleSet` and **writes nothing** (FR-035f).
-- [ ] T068 [US3] RED **M8** in `core/crates/kaname-core/tests/merchant_memory.rs`: `apply` twice — the second writes 0 and changes nothing (FR-035h).
-- [ ] T069 [US3] RED **M9** in `core/crates/kaname-core/tests/merchant_memory.rs`: `apply` where one row's write would fail → nothing is written (FR-035g).
-- [ ] T070 [US3] RED **M10** in `core/crates/kaname-core/tests/merchant_memory.rs`: a memory's category is deleted → the foreign key means the memory cannot exist → nothing is applied (FR-034).
-- [ ] T071 [US3] GREEN: implement `preview_memory_application(portion) -> MemoryImpact` and `apply_memory_application(portion, expecting: Vec<String>) -> Result<u32>` in `core/crates/kaname-core/src/store.rs`. `apply` **recomputes the affected set and compares it for set equality** with `expecting` — not a subset check, not a length check — and returns `StaleSet` on any difference (`contracts/engine-categorize.md` §2.4).
-- [ ] T072 [US3] Export both functions and the `MemoryImpact` / `StaleSet` types over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs`.
-- [ ] T073 ⚠️ **BUILD** — `make core-xcframework` then `make ios-gen`. FFI surface changed.
-- [ ] T074 **DELIBERATE BREAK** — change the set-equality check in `apply_memory_application` to a **subset** check. Expected: **M7 RED**, M5/M6/M8 green. Revert. (A subset check is the shape this bug takes in the wild: it looks careful and it silently permits a trimmed list.)
-- [ ] T075 **DELIBERATE BREAK** — remove the recompute-and-compare entirely and apply `expecting` verbatim. Expected: **M6 RED**. Revert.
-- [ ] T076 **GATE** — `make core-fmt && make core-lint && make core-test`. ⚠️ Never concurrently with `make ios-test`.
+- [x] T063 **DELIBERATE BREAK** — consult the memory *after* the categorization stack in `core/crates/kaname-core/src/store.rs`. Expected: **M2 RED** (the CC rule wins). Revert. This is the break that proves ordering is behaviour, not style.
+- [x] T064 [US3] RED **M4** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview_memory_application` never includes a `'PERSON'` row (FR-035d) — a hand-corrected row is not collateral.
+- [x] T065 [US3] RED **M5** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview` → `apply` writes exactly the previewed rows with `'PERSON_MEMORY'` and returns the previewed count.
+- [x] T066 [US3] RED 🚨 **M7** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview` → `apply` with a **trimmed** id list returns `StaleSet` and writes nothing. This is the assertion that proves FR-035b is enforced **in the engine**, so that no present or future interface can turn the second action into a bulk edit.
+- [x] T067 [US3] RED **M6** in `core/crates/kaname-core/tests/merchant_memory.rs`: `preview` → delete/insert a matching row → `apply` returns `StaleSet` and **writes nothing** (FR-035f).
+- [x] T068 [US3] RED **M8** in `core/crates/kaname-core/tests/merchant_memory.rs`: `apply` twice — the second writes 0 and changes nothing (FR-035h).
+- [x] T069 [US3] RED **M9** in `core/crates/kaname-core/tests/merchant_memory.rs`: `apply` where one row's write would fail → nothing is written (FR-035g).
+- [x] T070 [US3] RED **M10** in `core/crates/kaname-core/tests/merchant_memory.rs`: a memory's category is deleted → the foreign key means the memory cannot exist → nothing is applied (FR-034).
+- [x] T071 [US3] GREEN: implement `preview_memory_application(portion) -> MemoryImpact` and `apply_memory_application(portion, expecting: Vec<String>) -> Result<u32>` in `core/crates/kaname-core/src/store.rs`. `apply` **recomputes the affected set and compares it for set equality** with `expecting` — not a subset check, not a length check — and returns `StaleSet` on any difference (`contracts/engine-categorize.md` §2.4).
+- [x] T072 [US3] Export both functions and the `MemoryImpact` / `StaleSet` types over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs`.
+- [x] T073 ⚠️ **BUILD** — `make core-xcframework` then `make ios-gen`. FFI surface changed.
+- [x] T074 **DELIBERATE BREAK** — change the set-equality check in `apply_memory_application` to a **subset** check. Expected: **M7 RED**, M5/M6/M8 green. Revert. (A subset check is the shape this bug takes in the wild: it looks careful and it silently permits a trimmed list.)
+- [x] T075 **DELIBERATE BREAK** — remove the recompute-and-compare entirely and apply `expecting` verbatim. Expected: **M6 RED**. Revert.
+- [x] T076 **GATE** — `make core-fmt && make core-lint && make core-test`. ⚠️ Never concurrently with `make ios-test`.
+
+## PR B — RECORDED
+
+*What the queue said would happen, what actually happened, and the five places they differed.*
+
+**Baseline (PR A close)**: 324 tests. **After PR B**: **348 tests** (+24), `make core-fmt` /
+`make core-lint` clean, `make core-test` green in one clean run (exit 0, no `FAILED`). Six
+derivation tests, two `merchant.rs` unit tests, eleven memory tests (M1–M11), C4 and C7, and the
+three shared `tests/common` assertions that every new integration-test binary re-runs.
+**No tracked Swift file touched** — `ios/Generated/` and `ios/Frameworks/*.xcframework` are
+git-ignored build artifacts, so the two mandatory `make core-xcframework && make ios-gen` runs
+(T050, T073) leave the tree clean.
+
+**The five places the queue and reality differed. Every one of them is the queue being wrong in a
+way that would have looked like success.**
+
+1. 🚨 **T051's break turns P1 and P5 red — not P2, and P2 is what the queue named.** Keeping 3
+   segments instead of 2 changes `synthetic cafe` → `synthetic cafe coffee` and `n123 employer` →
+   `n123 employer private`, but the four `UPI-SWIGGY-*` shapes each have exactly **one** surviving
+   segment, so they still collapse to one portion and **P2 stays green**. Had the break been run
+   and only P2 watched, it would have read as "the break didn't take" and the maximum count would
+   have looked untested. The break that *does* reach P2 was run instead and is the more
+   informative one: **stop discarding reference tokens** (drop the entirely-digits rule, raise
+   `REFERENCE_DIGITS` out of reach) and P2 fails with `swiggy 123456` against `swiggy` — SC-008's
+   exact failure mode, a memory that can only ever match the row it came from. **What actually
+   protects SC-008 is the reference-token discard, not the segment count.** Both breaks are
+   recorded; both were reverted.
+2. **T056's break fails harder than predicted, and better.** Dropping the `PRIMARY KEY` does not
+   produce "two rows for one merchant": SQLite refuses the write outright with `ON CONFLICT clause
+   does not match any PRIMARY KEY or UNIQUE constraint`, so **M3 goes red at the first
+   correction**. The constraint is not merely relied upon by the upsert, it is *required* by it —
+   a stronger guarantee than the queue assumed, and one that cannot decay silently.
+3. **C7 passed on its first run**, because T055's implementation was already one transaction. A
+   test that has never been red proves nothing, so the atomicity was broken on purpose — commit
+   the row update, then open a second transaction for the memory — and C7 went red with
+   `(Some("GROCERIES"), Some("PERSON")) != (Some("FOOD_AND_DINING"), Some("T1_SOURCE_CATEGORY"))`:
+   the correction survived a failed memory write. Reverted. T059 was therefore satisfied by T055
+   rather than by new code, which is recorded rather than dressed up as a separate step.
+4. ⚠️ **M6 cannot be staged by importing another matching row.** The first attempt did exactly
+   what T067 says ("delete/insert a matching row") by importing one — and the assertion "a refused
+   apply writes nothing" failed **for a legitimate reason**: an import re-categorizes the
+   account's undecided rows, so the *import* applied the memory to two of the previewed rows
+   before `apply_memory` was ever called. The test cannot tell that apart from a partial apply.
+   M6 now removes a row instead (`is_deleted = 1`, direct SQL — the route the public API
+   deliberately does not offer), and the comment in the test says why. **This is also a real fact
+   about the feature**: a preview goes stale simply because an import happened, and `StaleSet` is
+   what a person meets when it does.
+5. **A trigger body cannot carry a bound parameter** (`trigger cannot use variables`), so M9's
+   "refuse one row's write" trigger inlines the id with `format!`. A test-harness detail, recorded
+   because the failure message names neither the trigger nor the parameter.
+
+**Two naming discrepancies in the design documents, resolved toward the contract.**
+`tasks.md` T071/T074 call the second function `apply_memory_application`;
+`contracts/engine-categorize.md` §2.4 and `data-model.md` §3.4 both call it **`apply_memory`**,
+and that is what shipped. Likewise T072 and T049 say to export in `src/ffi.rs`: the free
+`merchant_portion` **is** exported there (as the owned-`String` wrapper, following
+`detect_issuer`'s established shape, with `merchant::merchant_portion(&str)` staying pure for
+Rust callers), but `Store`'s methods and the `uniffi::Record` types are exported from `store.rs`,
+exactly as `data-model.md` §3.4 says — there was no choice to make.
+
+**One documentation defect, carried rather than hidden.** Research R14 calls the stop-list "69
+words" and then lists **76**. The list is what is fixed in full, so the list is what shipped; a
+unit test now pins `STOP_WORDS.len() == 76`, asserts no duplicates and asserts every entry is
+lower-case (an upper-case entry would silently never match, since segments are lower-cased by
+normalization). `merchant.rs`'s doc comment names the discrepancy so the next reader does not
+"fix" the list to match the prose.
+
+**Three decisions worth carrying into PR C and PR D.**
+
+- **`apply_memory`'s write is guarded on `PERSON`, not on `ENGINE_MAY_DECIDE`** — deliberately.
+  This write *is* a person deciding, so it must be able to replace an earlier `PERSON_MEMORY`
+  (FR-031a: a later offer includes the rows the previous one changed), while never touching a
+  hand correction. Spelling it `AND categorised_by IS NOT '{PERSON}'` also keeps
+  `every_category_update_in_the_store_is_guarded` honest: the statement says whose decision it is
+  in the same words the affected-set predicate does. Using `ENGINE_MAY_DECIDE` here would have
+  made a second offer silently write 0 rows.
+- **The affected set is computed by one function, `affected_by_memory_in`**, called by both the
+  preview and the apply. The staleness check is only meaningful if the two answer the same
+  question; two spellings would make the agreement a coincidence. The portion match cannot be
+  SQL — it is derived in Rust per row — so the query narrows and Rust matches.
+- **`categorize.rs` and `dedup.rs` are untouched**, as FR-027c requires. The memory is read in
+  `categorize_account_in` *before* the stack (`load_merchant_memories` beside the catalog and the
+  rules), and P6 plus the unchanged `fixtures/dedup/cross_source/basic.json` and
+  `fixtures/categorization/basic.json` are the proof.
+
+**Deferred, with reasons.** C5 still belongs to PR C (T085) — the uncategorized set does not exist
+yet. `HistoryRow.category_id`, `HistoryQuery.uncategorized_only` and `uncategorized_count()` are
+untouched here; PR B added no read-side narrowing and no plan-shape assertion.
 
 ---
 

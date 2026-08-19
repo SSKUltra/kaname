@@ -19,6 +19,7 @@
 //! [`crate::default_categories`], `transactions`) and a transaction/account round-trip.
 //! Wiring the engines (categorize/dedup/coverage/transfer) to the store is a later slice.
 
+use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -308,6 +309,13 @@ pub enum StoreError {
     /// Carries no row data — only which kind of thing was not found.
     #[error("no such {kind}")]
     NotFound { kind: String },
+    /// The set of transactions a memory would change is no longer the set the caller was shown.
+    ///
+    /// 🚨 Returned on **any** difference, including a caller that trimmed the list. That is what
+    /// puts FR-035b in the engine rather than in an interface: "apply to just these three" is
+    /// refused, so no present or future caller can turn the second action into a bulk edit.
+    #[error("the set of affected transactions changed ({expected} expected, {found} found)")]
+    StaleSet { expected: u32, found: u32 },
 }
 
 impl From<rusqlite::Error> for StoreError {
@@ -606,6 +614,31 @@ pub struct NewCategory {
 pub struct CategorizeSummary {
     pub categorized: u32,
     pub uncategorized: u32,
+}
+
+/// The blast radius of applying a memory to the transactions already imported — stated before
+/// anything is written (FR-035a–FR-035d).
+///
+/// `transaction_ids` is also the **staleness token**: it is handed back to
+/// [`Store::apply_memory`] and compared for set equality, so the rows the person agreed to are
+/// the rows that change, or none are. Ids rather than a digest (research R17): no hashing crate,
+/// the count and the accounts come out of the same call, and — the point — a *trimmed* list is
+/// detectably different from the set the engine recomputes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MemoryImpact {
+    /// Every live row the second action would change, newest first.
+    pub transaction_ids: Vec<String>,
+    /// Which accounts those rows are in, by display name, so the radius can be stated in a
+    /// person's terms rather than as a bare number (FR-035c).
+    pub accounts: Vec<AccountImpact>,
+}
+
+/// One account's share of a [`MemoryImpact`].
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountImpact {
+    pub account_id: String,
+    pub display_name: String,
+    pub count: u32,
 }
 
 /// The outcome of [`Store::set_transaction_category`]: what the correction would remember, and
@@ -1138,10 +1171,16 @@ impl Store {
     /// transfer detection can quietly take the decision back. A deliberate blank is protected
     /// exactly as strongly as a category, because it is exactly as much of a decision.
     ///
-    /// `remember` asks for the choice to be remembered for this merchant. **It is accepted and
-    /// deliberately ignored in this slice's first pull request** — the merchant memory and its
-    /// derivation land in the next one, and `CorrectionOutcome::memory_formed` is therefore
-    /// always `false` here. This is a staging decision, not a bug.
+    /// `remember` forms or replaces the memory for this row's merchant — but **only** when all
+    /// three of `remember`, a chosen category and a derived portion are present. A deliberate
+    /// blank teaches nothing (FR-027d and spec amendment §3): there is no way to say "always
+    /// leave this merchant undecided", because that is not a thing a person can mean.
+    /// [`CorrectionOutcome::merchant_portion`] is populated whenever derivation succeeded, even
+    /// when no memory formed, so the interface can say plainly what it *would* have remembered.
+    ///
+    /// **One transaction.** The row and the memory are written together or not at all (FR-023):
+    /// a memory that outlived the correction that formed it would teach the app a category the
+    /// person is no longer looking at.
     ///
     /// Errors with [`StoreError::NotFound`] when the id names no live transaction, and when the
     /// category names no row (the foreign key gives the second for free).
@@ -1151,9 +1190,23 @@ impl Store {
         category: Option<CategoryRef>,
         remember: bool,
     ) -> Result<CorrectionOutcome, StoreError> {
-        let _ = remember;
         let mut conn = self.lock();
         let tx = conn.transaction()?;
+
+        // Read the narration before the write, from the same transaction: the portion is derived
+        // from what the document said, and the correction does not change that.
+        let narration: Option<String> = tx
+            .query_row(
+                &format!("SELECT description_raw FROM transactions WHERE id = ?1 AND {LIVE}"),
+                params![transaction_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(narration) = narration else {
+            return Err(StoreError::NotFound {
+                kind: "transaction".to_string(),
+            });
+        };
 
         let category_id = category.as_ref().map(category_ref_to_id);
         let updated = tx.execute(
@@ -1168,12 +1221,124 @@ impl Store {
                 kind: "transaction".to_string(),
             });
         }
+
+        let merchant_portion = crate::merchant::merchant_portion(&narration);
+        let mut memory_formed = false;
+        if let (true, Some(portion), Some(category_id)) =
+            (remember, merchant_portion.as_deref(), category_id)
+        {
+            // `ON CONFLICT … DO UPDATE` is FR-033's newest-wins expressed as a replacement
+            // rather than as an ordering, which is why the table needs no timestamp and the
+            // engine still reads no clock.
+            tx.execute(
+                "INSERT INTO merchant_memory (merchant_portion, category_id) VALUES (?1, ?2) \
+                 ON CONFLICT (merchant_portion) DO UPDATE SET category_id = excluded.category_id",
+                params![portion, category_id],
+            )?;
+            memory_formed = true;
+        }
         tx.commit()?;
 
         Ok(CorrectionOutcome {
-            merchant_portion: None,
-            memory_formed: false,
+            merchant_portion,
+            memory_formed,
         })
+    }
+
+    /// What applying a merchant's memory to the transactions already imported would change —
+    /// stated in full, and written nowhere (FR-035a–FR-035d).
+    ///
+    /// The importing pass applies a memory to rows arriving *afterwards*; this is the separate,
+    /// explicit second action for the rows a person already has. Read-only, and calling it twice
+    /// with no intervening change returns the same answer.
+    ///
+    /// [`MemoryImpact::transaction_ids`] is the token [`Store::apply_memory`] checks: what the
+    /// person agreed to is what gets written, or nothing does.
+    pub fn preview_memory_application(
+        &self,
+        merchant_portion: String,
+    ) -> Result<MemoryImpact, StoreError> {
+        let conn = self.lock();
+        let Some((_, rows)) = affected_by_memory_in(&conn, &merchant_portion)? else {
+            return Ok(MemoryImpact {
+                transaction_ids: Vec::new(),
+                accounts: Vec::new(),
+            });
+        };
+
+        let mut accounts: Vec<AccountImpact> = Vec::new();
+        for row in &rows {
+            match accounts.iter_mut().find(|a| a.account_id == row.account_id) {
+                Some(account) => account.count += 1,
+                None => accounts.push(AccountImpact {
+                    account_id: row.account_id.clone(),
+                    display_name: row.account_name.clone(),
+                    count: 1,
+                }),
+            }
+        }
+        accounts.sort_by(|a, b| {
+            a.display_name
+                .cmp(&b.display_name)
+                .then_with(|| a.account_id.cmp(&b.account_id))
+        });
+
+        Ok(MemoryImpact {
+            transaction_ids: rows.into_iter().map(|row| row.id).collect(),
+            accounts,
+        })
+    }
+
+    /// Apply a merchant's memory to the rows a person was shown — **exactly** those rows.
+    ///
+    /// 🚨 The affected set is recomputed inside the writing transaction and compared to
+    /// `expected_transaction_ids` for **set equality**. Any difference — a row that appeared, a
+    /// row that left, or a caller that trimmed the list to a chosen few — is
+    /// [`StoreError::StaleSet`], and nothing is written. A subset check would look careful and
+    /// would silently permit the trimmed list, which is the shape this bug takes in the wild;
+    /// a count-only token could not see one row swapped for another.
+    ///
+    /// Writes [`PERSON_MEMORY`] provenance, in one transaction, all or nothing (FR-035g). Rows a
+    /// person corrected **by hand** are never touched (FR-035d) — the guard on the write says so
+    /// in the same words the affected-set predicate does.
+    pub fn apply_memory(
+        &self,
+        merchant_portion: String,
+        expected_transaction_ids: Vec<String>,
+    ) -> Result<u32, StoreError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+
+        let (category_id, rows) = affected_by_memory_in(&tx, &merchant_portion)?
+            .unwrap_or_else(|| (String::new(), Vec::new()));
+
+        let found: BTreeSet<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+        let expected: BTreeSet<&str> = expected_transaction_ids
+            .iter()
+            .map(String::as_str)
+            .collect();
+        if found != expected {
+            return Err(StoreError::StaleSet {
+                expected: expected.len() as u32,
+                found: found.len() as u32,
+            });
+        }
+
+        let mut written = 0u32;
+        {
+            // Guarded on `PERSON` rather than on `ENGINE_MAY_DECIDE`: this write *is* a person
+            // deciding, so it may replace an earlier `PERSON_MEMORY` (FR-031a — a later offer
+            // includes the rows the previous one changed), but never a hand correction.
+            let mut update = tx.prepare(&format!(
+                "UPDATE transactions SET category_id = ?2, categorised_by = '{PERSON_MEMORY}' \
+                 WHERE id = ?1 AND {LIVE} AND categorised_by IS NOT '{PERSON}'"
+            ))?;
+            for row in &rows {
+                written += update.execute(params![row.id, category_id])? as u32;
+            }
+        }
+        tx.commit()?;
+        Ok(written)
     }
 
     /// Persist a T2 merchant-map entry (the "memory") and return its row id. The referenced
@@ -1434,6 +1599,7 @@ pub fn categorize_account_in(
     let merchants = crate::categorize::prepare_merchants(&load_merchant_rules(tx)?);
     let rules = crate::categorize::prepare_rules(&load_rules(tx)?);
     let source_map = load_source_category_mappings(tx)?;
+    let memories = load_merchant_memories(tx)?;
     let pending = load_account_transactions(tx, account_id, &bank_code, is_credit_card)?;
 
     let mut summary = CategorizeSummary::default();
@@ -1443,6 +1609,16 @@ pub fn categorize_account_in(
              WHERE id = ?1 AND {ENGINE_MAY_DECIDE}"
         ))?;
         for (txn_id, txn) in &pending {
+            // The memory is consulted **beside** the stack and **before** it — not as a tier
+            // inside it (research R8). A tier would make a person's instruction one more rule
+            // to be outranked; here it is a different kind of fact, and it wins.
+            let remembered = crate::merchant::merchant_portion(&txn.description)
+                .and_then(|portion| memories.get(&portion).cloned());
+            if let Some(category_id) = remembered {
+                update.execute(params![txn_id, category_id, PERSON_MEMORY])?;
+                summary.categorized += 1;
+                continue;
+            }
             match crate::categorize::categorize(txn, &catalog, &merchants, &rules, &source_map) {
                 Some(decision) => {
                     update.execute(params![
@@ -2139,6 +2315,86 @@ fn load_categories(conn: &Connection) -> Result<Vec<Category>, StoreError> {
             })
         })
         .collect()
+}
+
+/// One row a memory would change.
+struct AffectedRow {
+    id: String,
+    account_id: String,
+    account_name: String,
+}
+
+/// The rows applying `portion`'s memory would change, newest first, with the category it would
+/// write — or `None` when there is no such memory.
+///
+/// **Spelled once, used by both the preview and the apply**, because the entire guarantee is
+/// that the two answer the same question: a preview computed one way and an apply computed
+/// another would make the staleness check a coincidence.
+///
+/// The portion match cannot live in SQL — it is derived in Rust from each row's narration
+/// (FR-027b's exact equality on the derived portion, not on the stored text) — so the candidate
+/// rows are narrowed in the query and matched here.
+fn affected_by_memory_in(
+    conn: &Connection,
+    portion: &str,
+) -> Result<Option<(String, Vec<AffectedRow>)>, StoreError> {
+    let category_id: Option<String> = conn
+        .query_row(
+            "SELECT category_id FROM merchant_memory WHERE merchant_portion = ?1",
+            params![portion],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(category_id) = category_id else {
+        return Ok(None);
+    };
+
+    let mut stmt = conn.prepare(&format!(
+        "SELECT t.id, t.account_id, a.name, t.description_raw \
+         FROM transactions t JOIN accounts a ON a.id = t.account_id \
+         WHERE {LIVE} \
+           AND t.categorised_by IS NOT '{PERSON}' \
+           AND NOT (t.categorised_by IS '{PERSON_MEMORY}' AND t.category_id IS ?1) \
+         ORDER BY t.date DESC, t.id ASC"
+    ))?;
+    let candidates = stmt
+        .query_map(params![category_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let rows = candidates
+        .into_iter()
+        .filter(|(_, _, _, narration)| {
+            crate::merchant::merchant_portion(narration).as_deref() == Some(portion)
+        })
+        .map(|(id, account_id, account_name, _)| AffectedRow {
+            id,
+            account_id,
+            account_name,
+        })
+        .collect();
+    Ok(Some((category_id, rows)))
+}
+
+/// Every merchant a person has taught the app, as `portion -> category_id`.
+///
+/// Loaded once per account run, beside the catalog and the rules — but **not** into them: a
+/// memory is a different kind of fact from a rule, and `list_merchant_rules` must never grow
+/// one (FR-035, M11).
+fn load_merchant_memories(conn: &Connection) -> Result<HashMap<String, String>, StoreError> {
+    let mut stmt = conn.prepare("SELECT merchant_portion, category_id FROM merchant_memory")?;
+    let memories = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<HashMap<String, String>>>()?;
+    Ok(memories)
 }
 
 /// The T2 merchant map, priority order (lowest first), with each entry's `CategoryRef`

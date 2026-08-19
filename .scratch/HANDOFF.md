@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/019-debug-test-seeding/`, starting at T001 (PR A, the absence proof).**
+**The live one is `specs/020-categorize/`, starting at T077 (PR C, the read side).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -152,13 +152,48 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: `020-categorize` PR B — the memory.** Start at **T041** in
-`specs/020-categorize/tasks.md`. Work is on branch **`020-categorize`** (4 commits, clean tree,
+**⬅️ NEXT: `020-categorize` PR C — the read side.** Start at **T077** in
+`specs/020-categorize/tasks.md`. Work is on branch **`020-categorize`** (6 commits, clean tree,
 not yet pushed or opened as a PR).
 
 ⚠️ **Do NOT re-run `speckit.specify` / `plan` / `tasks` for 020** — all three are committed
 (`adf9206`, `8268268`, `2d05d56`), Q1–Q3 are answered (D / B / C), and the design is locked.
 019 is **DONE** — T001–T101, all four PRs, every gate green; do not re-run it either.
+
+**020 PR B is DONE** (T041–T076, **324 → 348 core tests**, fmt + lint clean, **no tracked Swift
+file touched**). It shipped the derivation (`core/src/merchant.rs` + its 33-case fixture), the
+`merchant_memory` upsert inside `set_transaction_category`'s existing transaction, the
+consultation of that memory in `categorize_account_in` **before** the stack, and
+`preview_memory_application` / `apply_memory` with set-equality staleness.
+`specs/020-categorize/tasks.md` § *PR B — RECORDED* has the full account; the five things worth
+carrying:
+
+- 🚨 **T051's break turns P1 and P5 red, not P2 — the queue named the wrong test.** Keeping three
+  segments instead of two does not stop the four `UPI-SWIGGY-*` shapes collapsing, because each
+  has exactly **one** surviving segment. What actually protects SC-008 is the **reference-token
+  discard**: remove it and P2 fails with `swiggy 123456` against `swiggy`. Both breaks were run;
+  both reverted.
+- ⚠️ **M6 cannot be staged by importing another matching row**, which is what T067 says to do. An
+  import re-categorizes the account's undecided rows through the same memory, so the rows change
+  for a *legitimate* reason and the test cannot tell that apart from a partial apply. M6 removes
+  a row instead. The underlying fact matters for PR D: **a preview goes stale because an import
+  happened**, and `StaleSet` is what the person meets when it does.
+- **`apply_memory` is guarded on `PERSON`, not on `ENGINE_MAY_DECIDE`**, deliberately: the write
+  *is* a person deciding, so it must replace an earlier `PERSON_MEMORY` (FR-031a) while never
+  touching a hand correction. `ENGINE_MAY_DECIDE` there would make a second offer write 0 rows.
+- **C7 passed on its first run and was broken on purpose to prove it can fail** (commit the row,
+  then open a second transaction for the memory → C7 red). T059 was satisfied by T055's code, not
+  by new code, and that is recorded rather than dressed up.
+- **Two doc discrepancies, resolved toward the contract**: the function is **`apply_memory`**
+  (not `apply_memory_application`), and research R14's "69-word" stop-list actually lists **76** —
+  the list shipped, with a unit test pinning the count, no duplicates and no upper-case entry.
+
+⚠️ **PR B changed the FFI surface twice** (the free `merchant_portion`, then `MemoryImpact` /
+`AccountImpact` / `StaleSet` / the two `Store` methods); both `make core-xcframework` **then**
+`make ios-gen` runs are done and the Swift bindings are present
+(`previewMemoryApplication`, `applyMemory`, `merchantPortion`). PR C changes it again (T086/T087).
+⚠️ `cargo` is not on the default PATH: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"`.
+⚠️ Never run `make core-test` and `make ios-test` concurrently (`history_perf::s5` is wall-clock).
 
 **020 PR A is DONE** (`5ce166b`, T001–T040, **310 → 324 core tests**, lint clean, privacy audit
 OK, **no tracked Swift file touched**). It shipped schema **v8** — additive only, a
@@ -176,17 +211,12 @@ things worth carrying:
 - ⚠️ **The two guards are not independent, and the queue assumed they were.** Removing the
   *load*-site guard turns nothing red — the write-site guard covers C1 alone. **C8** now pins it:
   without it the stack decides a category, reports it as `categorized`, and writes nothing.
-- **PR A deferred C4/C7 to PR B and C5 to PR C**, with reasons. `set_transaction_category` takes
-  `remember` and **deliberately ignores it** — that is documented in the method so the next
-  reader does not read it as a bug. PR B is where it starts meaning something.
+- **PR A deferred C4/C7 to PR B and C5 to PR C**, with reasons. **C4 and C7 are now paid**;
+  **C5 is still open and belongs to T085.**
 - **One finding for PR D**: `everyStoreFailureMapsToTheSameThing` in
   `ios/Tests/TransactionHistoryServiceTests.swift` is now one case short of the "every" in its
-  name (`.NotFound`). Harmless today — the mapping takes `_: Error` and discards it.
-
-⚠️ **PR B changes the FFI surface** (`merchant_portion` as a free `#[uniffi::export]`), so
-`make core-xcframework` **then** `make ios-gen` is mandatory — never a bare `tuist generate`.
-⚠️ `cargo` is not on the default PATH: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"`.
-⚠️ Never run `make core-test` and `make ios-test` concurrently (`history_perf::s5` is wall-clock).
+  name (`.NotFound`) — and **`.StaleSet` makes it two short as of PR B**. Harmless today — the
+  mapping takes `_: Error` and discards it.
 
 **What 019 bought, in one sentence:** an automated run can now open a screen with a person's own
 transactions on it, so the accessibility auditor finally has something to audit — **UI tests went
