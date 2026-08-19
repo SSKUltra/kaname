@@ -60,7 +60,7 @@ pub use store::{
     HistoryCursor, HistoryPage, HistoryQuery, HistoryRow, ImportAccountTarget, ImportOutcome,
     ImportRequest, MemoryImpact, NewAccount, NewCategory, NewImportTransaction, NewStatement,
     NewTransaction, StatementSource, Store, StoreError, StoredAccount, StoredStatement,
-    StoredTransaction, TransferSummary, PAGE_SQL,
+    StoredTransaction, TransferSummary, PAGE_SQL, PAGE_SQL_UNANSWERED, UNCATEGORIZED_COUNT_SQL,
 };
 pub use transfer::{TransferInput, TransferPair};
 

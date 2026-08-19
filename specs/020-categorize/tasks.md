@@ -367,17 +367,17 @@ untouched here; PR B added no read-side narrowing and no plan-shape assertion.
 
 **Purpose**: one query, two axes, and a count that cannot drift from the page it counts.
 
-- [ ] T077 [US4] Add `uncategorized_only: bool` (defaulting to `false`) to `HistoryQuery` in `core/crates/kaname-core/src/model.rs`. A default of `false` is what makes FR-046 cheap: every existing caller keeps its exact behaviour.
-- [ ] T078 [US4] RED **H1** in `core/crates/kaname-core/tests/history_paging.rs`: with `uncategorized_only: false`, pages are **byte-identical** to today (FR-046). Green today by construction — written first so T091's and PR F's breaks have something to turn red.
-- [ ] T079 [US4] RED **H2** in `core/crates/kaname-core/tests/history_paging.rs`: with `uncategorized_only: true`, the result is exactly `LIVE ∧ UNANSWERED` — and a `'PERSON'` deliberate blank is **excluded** (plan § *Spec amendments* §1). Watch it fail.
-- [ ] T080 [US4] RED **H3** in `core/crates/kaname-core/tests/history_paging.rs`: the narrowing composes with `account_id` — both axes, one query (FR-039).
-- [ ] T081 [US4] RED **H4** in `core/crates/kaname-core/tests/history_paging.rs`: paging across a narrowed set is stable and complete — no row seen twice, none skipped (FR-040).
-- [ ] T082 [US4] RED **H6** in `core/crates/kaname-core/tests/history_paging.rs`: `HistoryRow.category_id` is populated and matches `category_name`'s category. (This is what lets the picker mark the current category by id rather than by display-name match — platform rule K3.)
-- [ ] T083 [US4] RED **H5** in `core/crates/kaname-core/tests/history_paging.rs`: `uncategorized_count()` equals the number of rows a full narrowed walk returns. The two definitions cannot drift because they are spelled from the same `UNANSWERED` constant — this test is the proof, and it is the reason T011 spells it once.
-- [ ] T084 [US4] GREEN: narrow `PAGE_SQL` and add `uncategorized_count()` in `core/crates/kaname-core/src/store.rs`, both referencing the `UNANSWERED` constant from T011. No second spelling of the predicate anywhere.
-- [ ] T085 [US4] RED then GREEN **C5** (deferred from PR A) in `core/crates/kaname-core/tests/store_correction.rs`: a corrected row is **not** in the uncategorized set, whether it carries a category or a deliberate blank (plan § *Spec amendments* §1). C5 could not be written in PR A because the uncategorized set did not exist; this task is where the deferral is paid.
-- [ ] T086 [US4] Export `uncategorized_count` and the new query field over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs`.
-- [ ] T087 ⚠️ **BUILD** — `make core-xcframework` then `make ios-gen`. FFI surface changed.
+- [x] T077 [US4] Add `uncategorized_only: bool` (defaulting to `false`) to `HistoryQuery` in `core/crates/kaname-core/src/model.rs`. A default of `false` is what makes FR-046 cheap: every existing caller keeps its exact behaviour.
+- [x] T078 [US4] RED **H1** in `core/crates/kaname-core/tests/history_paging.rs`: with `uncategorized_only: false`, pages are **byte-identical** to today (FR-046). Green today by construction — written first so T091's and PR F's breaks have something to turn red.
+- [x] T079 [US4] RED **H2** in `core/crates/kaname-core/tests/history_paging.rs`: with `uncategorized_only: true`, the result is exactly `LIVE ∧ UNANSWERED` — and a `'PERSON'` deliberate blank is **excluded** (plan § *Spec amendments* §1). Watch it fail.
+- [x] T080 [US4] RED **H3** in `core/crates/kaname-core/tests/history_paging.rs`: the narrowing composes with `account_id` — both axes, one query (FR-039).
+- [x] T081 [US4] RED **H4** in `core/crates/kaname-core/tests/history_paging.rs`: paging across a narrowed set is stable and complete — no row seen twice, none skipped (FR-040).
+- [x] T082 [US4] RED **H6** in `core/crates/kaname-core/tests/history_paging.rs`: `HistoryRow.category_id` is populated and matches `category_name`'s category. (This is what lets the picker mark the current category by id rather than by display-name match — platform rule K3.)
+- [x] T083 [US4] RED **H5** in `core/crates/kaname-core/tests/history_paging.rs`: `uncategorized_count()` equals the number of rows a full narrowed walk returns. The two definitions cannot drift because they are spelled from the same `UNANSWERED` constant — this test is the proof, and it is the reason T011 spells it once.
+- [x] T084 [US4] GREEN: narrow `PAGE_SQL` and add `uncategorized_count()` in `core/crates/kaname-core/src/store.rs`, both referencing the `UNANSWERED` constant from T011. No second spelling of the predicate anywhere.
+- [x] T085 [US4] RED then GREEN **C5** (deferred from PR A) in `core/crates/kaname-core/tests/store_correction.rs`: a corrected row is **not** in the uncategorized set, whether it carries a category or a deliberate blank (plan § *Spec amendments* §1). C5 could not be written in PR A because the uncategorized set did not exist; this task is where the deferral is paid.
+- [x] T086 [US4] Export `uncategorized_count` and the new query field over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs`.
+- [x] T087 ⚠️ **BUILD** — `make core-xcframework` then `make ios-gen`. FFI surface changed.
 
 **Checkpoint**: the narrowed read exists and its count is the same question asked once.
 
@@ -385,12 +385,84 @@ untouched here; PR B added no read-side narrowing and no plan-shape assertion.
 
 > ⚠️ **The trap in this phase.** The count's *optimal* plan **is** a `SCAN` — of a partial index containing only the rows being counted, which is exactly what makes it get cheaper as the person works through the worklist. `history_perf.rs::s1` carries a blanket "no step contains SCAN" rule. **Q3 must not inherit it.** A copy-paste of `s1` here is red for the correct query, and the tempting fix is to weaken `s1`. Do neither: `s1` and `s2` are not edited, not weakened and not excepted.
 
-- [ ] T088 [US4] RED **Q1** in `core/crates/kaname-core/tests/history_perf.rs`: `s1` and `s2` are **unchanged and still green** after v8 — `PAGE_SQL`'s plan is byte-identical (research R13). Run them; do not touch them.
-- [ ] T089 [US4] RED **Q2** in `core/crates/kaname-core/tests/history_perf.rs`: the narrowed page's plan contains a `SEARCH` on a **named** index and no `TEMP B-TREE`.
-- [ ] T090 [US4] RED ⚠️ **Q3** in `core/crates/kaname-core/tests/history_perf.rs`: `uncategorized_count()`'s plan **names `idx_txn_unanswered_account_date`**. Assert the index **name**, not the absence of `SCAN`. Add a comment above the test saying why, so the next person who copies `s1` into this file stops.
-- [ ] T091 **DELIBERATE BREAK** — drop `idx_txn_unanswered_account_date` from the v8 migration in `core/crates/kaname-core/src/store.rs` and re-migrate. Expected: **Q3 RED, `s1` and `s2` still GREEN**. Revert and re-migrate. (If `s1` also goes red, the index is doing something Q1 said it would not.)
-- [ ] T092 [US4] Record in the PR description: research R13's plans were measured with **system SQLite 3.45.3, not the SQLCipher build**. Q1–Q3 assert against the **real store**, which is what actually settles it — and say plainly what they do not settle (see T178).
-- [ ] T093 **GATE** — `make core-lint && make core-test`. ⚠️ Never concurrently with `make ios-test` — `s5` is wall-clock.
+- [x] T088 [US4] RED **Q1** in `core/crates/kaname-core/tests/history_perf.rs`: `s1` and `s2` are **unchanged and still green** after v8 — `PAGE_SQL`'s plan is byte-identical (research R13). Run them; do not touch them.
+- [x] T089 [US4] RED **Q2** in `core/crates/kaname-core/tests/history_perf.rs`: the narrowed page's plan contains a `SEARCH` on a **named** index and no `TEMP B-TREE`.
+- [x] T090 [US4] RED ⚠️ **Q3** in `core/crates/kaname-core/tests/history_perf.rs`: `uncategorized_count()`'s plan **names `idx_txn_unanswered_account_date`**. Assert the index **name**, not the absence of `SCAN`. Add a comment above the test saying why, so the next person who copies `s1` into this file stops.
+- [x] T091 **DELIBERATE BREAK** — drop `idx_txn_unanswered_account_date` from the v8 migration in `core/crates/kaname-core/src/store.rs` and re-migrate. Expected: **Q3 RED, `s1` and `s2` still GREEN**. Revert and re-migrate. (If `s1` also goes red, the index is doing something Q1 said it would not.)
+- [x] T092 [US4] Record in the PR description: research R13's plans were measured with **system SQLite 3.45.3, not the SQLCipher build**. Q1–Q3 assert against the **real store**, which is what actually settles it — and say plainly what they do not settle (see T178).
+- [x] T093 **GATE** — `make core-lint && make core-test`. ⚠️ Never concurrently with `make ios-test` — `s5` is wall-clock.
+
+
+---
+
+## PR C — RECORDED
+
+*What the queue said would happen, what actually happened, and the four places they differed.*
+
+**Baseline (PR B close)**: 348 tests. **After PR C**: **358 tests** (+10) — H1–H6, Q1–Q3 and the
+deferred C5. `make core-lint` clean, `make core-test` green in one run (19 binaries, 0 failures),
+`make lint` clean (99 files, 0 violations) and `make ios-test` **TEST SUCCEEDED** (33 UI tests).
+
+**T092 — what Q1–Q3 settle, and what they do not (the record T178 asks for).** Research R13's plan
+survey was taken on **system SQLite 3.45.3**, not the SQLCipher build the engine links. Q1–Q3 now
+assert against the **real store**, and they reproduce R13's predicted shapes exactly:
+
+```text
+Q2 narrowed page: ["SEARCH t USING INDEX idx_txn_unanswered_account_date (account_id=? AND date<?)"]
+Q3 count:         ["SCAN transactions USING INDEX idx_txn_unanswered_account_date"]
+```
+
+That settles **three** queries — `PAGE_SQL`, `PAGE_SQL_UNANSWERED` and `UNCATEGORIZED_COUNT_SQL` —
+on one corpus shape (8 accounts, 10,000 rows) at one SQLCipher version on one machine. It does not
+settle the rest of R13's survey, any other statement in the store, or how any of them plan on a
+device. Three green tests are not a survey and are not recorded as one.
+
+**The four places the queue and reality differed.**
+
+1. 🚨 **PR C could not be engine-only, and the queue says it is.** `HistoryRow` gaining
+   `category_id` (T082) breaks **every Swift memberwise construction of it** — ten call sites
+   across seven files — because uniffi generates an initializer with no default for a new field.
+   The alternative was `#[uniffi(default = None)]`, which would have kept the Swift tree
+   compiling untouched; it was **rejected**, because a test double that can silently omit a fact
+   the engine always populates is exactly the quiet failure this repository keeps finding. The ten
+   sites now state their category id, and the two that carry a name carry an id beside it.
+2. ⚠️ **`Q2` does not gate the v8 index — only `Q3` does.** T091's break (drop
+   `idx_txn_unanswered_account_date`) was run and turned **Q3 red with `s1`, `s2` and `Q1` green**,
+   as predicted. What was *not* predicted: **Q2 also stayed green**, because the narrowed page
+   falls back to `idx_txn_live_account_date`, which is still a `SEARCH` on a named index with no
+   `TEMP B-TREE`. Q2 is a gate on the *shape* of the narrowed read, not on the index existing. If
+   Q3 is ever weakened, nothing else in the suite notices the index going missing.
+3. **The predicate is spelled once by a macro, not by the constant.** T084 says both readers
+   reference the `UNANSWERED` constant; a `const` cannot be interpolated into another `const`, so
+   `PAGE_SQL` and `PAGE_SQL_UNANSWERED` are two expansions of one new `page_sql!` macro and the
+   count is `UNCATEGORIZED_COUNT_SQL`, built from `live_predicate!()` + `unanswered_predicate!()`.
+   There is still exactly one spelling of each rule in the crate; `UNANSWERED` keeps its
+   `#[allow(dead_code)]` because it is now a *name* for the rule rather than a reader of it.
+   **H1 pins `PAGE_SQL`'s full text** so the refactor could not have changed a byte in silence —
+   it is the assertion that made the macro safe to introduce.
+4. **T085's C5 passed on its first run**, because T084 had already satisfied it. It was therefore
+   broken on purpose — the provenance arm removed from `unanswered_predicate!()` — and **C5 and H2
+   both went red**, with H2's message naming the deliberate blank. ⚠️ **H5 stayed green under that
+   break**, correctly: it asserts the count and the list agree, and under the break they agreed on
+   the wrong set. H5 is a drift gate, never a correctness one, and reading it as the latter would
+   be a mistake in PR F.
+
+**One FFI-surface note, repeating PR B's.** T086 says to export in `src/ffi.rs`;
+`#[uniffi::export] impl Store` in `store.rs` already covers every `pub fn`, so `uncategorizedCount`
+and `HistoryQuery.uncategorizedOnly` (with its Swift default `= false`, which is why the one
+shipped Swift caller needed no edit) appeared in the bindings from the mandatory
+`make core-xcframework` → `make ios-gen` run (T087). There was no separate export to write.
+
+⚠️ **The wall-clock gates were re-run on a machine under load, and the baseline was measured
+rather than assumed.** `make core-test` was green in one clean run; a later re-run of
+`history_perf` alone failed `s4` (worst page 73.7 ms against a 25 ms budget, median 4.4 ms — one
+outlier page) and `s5`, on a host showing **load average 120** with an unrelated `ffmpeg` at 392%
+CPU. Rather than declare it noise, `HEAD` was stashed to and measured under the same load: **`s4`
+fails there too, and worse — worst page 127.2 ms.** The failure is the machine, not this pull
+request, and that is what the comparison is for. `s3`–`s7` are only meaningful on a quiet host.
+
+**Deferred, unchanged.** `018/06`'s three device timings still need a phone (T176), and nothing in
+PR C touches them.
 
 ---
 

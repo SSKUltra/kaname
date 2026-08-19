@@ -37,6 +37,7 @@ struct TransactionAccessibilityTests {
                 direction: .debit,
                 currency: "INR",
                 categoryName: category,
+                categoryId: category.map { _ in "SYNTHETIC_CATEGORY" },
                 isTransfer: isTransfer
             ))
     }
@@ -51,7 +52,7 @@ struct TransactionAccessibilityTests {
                 id: "credit", accountId: "account-1", accountName: "Everyday Savings",
                 accountLast4: "1123", date: "2026-07-15", descriptionRaw: "SYNTHETIC SALARY",
                 amount: TransactionCorpus.decimal("450.00"), direction: .credit, currency: "INR",
-                categoryName: nil, isTransfer: false))
+                categoryName: nil, categoryId: nil, isTransfer: false))
 
         // A sign a person can see, and a word a person can hear. The row carries no colour for
         // direction at all — there is nothing to remove (FR-013, FR-071, SC-014).

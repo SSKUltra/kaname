@@ -34,6 +34,7 @@ struct TransactionCategoryTests {
                 direction: .debit,
                 currency: "INR",
                 categoryName: category,
+                categoryId: category.map { _ in "SYNTHETIC_CATEGORY" },
                 isTransfer: isTransfer
             ))
     }
@@ -111,7 +112,8 @@ struct TransactionCategoryTests {
             HistoryRow(
                 id: "row", accountId: "account-1", accountName: "Cash Wallet", accountLast4: nil,
                 date: "2026-07-15", descriptionRaw: "", amount: TransactionCorpus.decimal("1.00"),
-                direction: .credit, currency: "INR", categoryName: nil, isTransfer: false))
+                direction: .credit, currency: "INR", categoryName: nil,
+                categoryId: nil, isTransfer: false))
 
         let announced = bare.accessibilityLabel
         #expect(announced.contains(TransactionListStrings.missingDescription))

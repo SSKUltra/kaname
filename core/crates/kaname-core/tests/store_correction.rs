@@ -16,8 +16,8 @@ use std::str::FromStr;
 
 use chrono::NaiveDate;
 use kaname_core::{
-    CategoryRef, Direction, ImportAccountTarget, ImportRequest, NewAccount, NewImportTransaction,
-    SourceCategoryMapping, StatementSource, Store, StoreError,
+    CategoryRef, Direction, HistoryQuery, ImportAccountTarget, ImportRequest, NewAccount,
+    NewImportTransaction, SourceCategoryMapping, StatementSource, Store, StoreError,
 };
 use rust_decimal::Decimal;
 
@@ -271,6 +271,120 @@ fn a_deliberate_blank_is_protected_like_a_category() {
         (None, Some("PERSON".to_string())),
         "the source map would re-fill this row if the blank were not a decision"
     );
+}
+
+/// **C5** — a corrected row leaves the uncategorized set, whether the person chose a category
+/// or chose *no category at all* (spec amendment §1).
+///
+/// Deferred from PR A, where the set did not exist yet. The deliberate blank is the half that
+/// matters: it still has `category_id IS NULL`, so a worklist defined by FR-037's original
+/// wording would offer it back forever and SC-010's "the list can reach zero" would be
+/// unreachable for anyone who used FR-007 as intended. The provenance arm of `UNANSWERED` is
+/// what makes the difference, and this is the test that would notice it going missing.
+#[test]
+fn a_corrected_row_is_not_in_the_uncategorized_set() {
+    let db = TestDb::new("c5");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+    let account_id = store.insert_account(account()).expect("account");
+    store
+        .insert_source_category_mapping(SourceCategoryMapping {
+            bank_code: "HDFC".to_string(),
+            source_category: "FOOD".to_string(),
+            category: CategoryRef::Builtin {
+                code: "FOOD_AND_DINING".to_string(),
+            },
+        })
+        .expect("source category map");
+    let rows = vec![
+        import_txn("UPI-SYNTHCAFE-100001", "410.00", Some("FOOD")),
+        import_txn("UPI-SYNTHFUEL-100002", "820.00", None),
+        import_txn("UPI-SYNTHBOOKS-100003", "155.00", None),
+    ];
+    store
+        .import_statement(import_request(
+            ImportAccountTarget::Existing {
+                id: account_id.clone(),
+                last4: None,
+            },
+            rows.clone(),
+        ))
+        .expect("import");
+
+    let id_of = |needle: &str| {
+        store
+            .list_transactions(account_id.clone())
+            .expect("list transactions")
+            .into_iter()
+            .find(|row| row.description_raw.contains(needle))
+            .expect("the row")
+            .id
+    };
+    let fuel = id_of("SYNTHFUEL");
+    let books = id_of("SYNTHBOOKS");
+
+    let mut both = vec![books.clone(), fuel.clone()];
+    both.sort();
+    assert_eq!(
+        worklist(&store),
+        both,
+        "the two rows the stack could not answer, and only those"
+    );
+    assert_eq!(store.uncategorized_count().expect("count"), 2);
+
+    store
+        .set_transaction_category(
+            fuel.clone(),
+            Some(CategoryRef::Builtin {
+                code: "TRANSPORT".to_string(),
+            }),
+            false,
+        )
+        .expect("a category");
+    assert_eq!(worklist(&store), vec![books.clone()]);
+    assert_eq!(store.uncategorized_count().expect("count"), 1);
+
+    store
+        .set_transaction_category(books.clone(), None, false)
+        .expect("a deliberate blank");
+    assert!(
+        worklist(&store).is_empty(),
+        "a row the person deliberately left blank has been answered"
+    );
+    assert_eq!(store.uncategorized_count().expect("count"), 0);
+
+    // And the next import does not put either of them back on the list.
+    store
+        .import_statement(import_request(
+            ImportAccountTarget::Existing {
+                id: account_id.clone(),
+                last4: None,
+            },
+            rows,
+        ))
+        .expect("re-import");
+    assert!(
+        worklist(&store).is_empty(),
+        "an import re-opened a decision"
+    );
+    assert_eq!(store.uncategorized_count().expect("count"), 0);
+}
+
+/// Every row on the worklist, by id, sorted — the narrowed read, read as a set.
+fn worklist(store: &Store) -> Vec<String> {
+    let mut ids: Vec<String> = store
+        .history_page(HistoryQuery {
+            account_id: None,
+            cursor: None,
+            limit: 200,
+            uncategorized_only: true,
+        })
+        .expect("the worklist")
+        .rows
+        .into_iter()
+        .map(|row| row.id)
+        .collect();
+    ids.sort();
+    ids
 }
 
 /// **C8** — the summary counts only the rows the engine was allowed to decide about.

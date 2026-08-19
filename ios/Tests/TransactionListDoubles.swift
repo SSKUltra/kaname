@@ -79,6 +79,7 @@ func historyRow(
         direction: .debit,
         currency: "INR",
         categoryName: nil,
+        categoryId: nil,
         isTransfer: false
     )
 }

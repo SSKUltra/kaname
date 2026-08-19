@@ -199,8 +199,12 @@ macro_rules! unanswered_predicate {
 /// never reach zero, because every row a person deliberately left blank would return to it.
 ///
 /// Declared here rather than with its first reader because it is half of the v8 index's `WHERE`
-/// (built from the macro above) and the two must be the same bytes. The worklist queries that
-/// read it land in the next pull request.
+/// (built from the macro above) and the two must be the same bytes.
+///
+/// [`PAGE_SQL_UNANSWERED`] and [`UNCATEGORIZED_COUNT_SQL`] are built from the same macro at
+/// compile time, so there is exactly one spelling of the rule in the crate; this constant is
+/// that spelling under a name Rust code and the structural tests can refer to, which is why it
+/// carries an `allow` rather than a reader.
 #[allow(dead_code)]
 const UNANSWERED: &str = unanswered_predicate!();
 
@@ -268,22 +272,49 @@ const SCHEMA_V8: &str = concat!(
     ";"
 );
 
-/// The one statement every combined-history read executes — filtered or not, first page or
-/// resumed. `?1` is the account, `?2`/`?3` the resume point and `?4` the page size; a first
-/// page binds the identity cursor `('9999-12-31', 0)`, so there is no separate first-page code
-/// path and no separate filtered one (FR-042).
+/// The one statement every combined-history read executes — filtered or not, narrowed or not,
+/// first page or resumed. `?1` is the account, `?2`/`?3` the resume point and `?4` the page
+/// size; a first page binds the identity cursor `('9999-12-31', 0)`, so there is no separate
+/// first-page code path and no separate filtered one (FR-042).
+///
+/// The narrowing is a parameter of this macro rather than a second statement so that the two
+/// forms cannot drift: they are the same bytes apart from one `AND`.
+macro_rules! page_sql {
+    ($narrowing:expr) => {
+        concat!(
+            "SELECT t.id, t.account_id, t.date, t.description_raw, t.amount, t.direction, \
+             t.currency, t.category_id, t.is_transfer, t.rowid \
+             FROM transactions t \
+             WHERE t.account_id = ?1 AND ",
+            live_predicate!(),
+            $narrowing,
+            " AND (t.date < ?2 OR (t.date = ?2 AND t.rowid > ?3)) \
+             ORDER BY t.date DESC, t.rowid ASC \
+             LIMIT ?4"
+        )
+    };
+}
+
+/// The page statement, unnarrowed — **byte-identical to the one 018 shipped**, which H1 pins
+/// and `s1`/`s2` measure the plan of.
 ///
 /// Public because the filter's structural proof (F3) and the plan-shape gates (S1, S2) assert
 /// against this exact text: a second page statement anywhere would fail them.
-pub const PAGE_SQL: &str = concat!(
-    "SELECT t.id, t.account_id, t.date, t.description_raw, t.amount, t.direction, \
-     t.currency, t.category_id, t.is_transfer, t.rowid \
-     FROM transactions t \
-     WHERE t.account_id = ?1 AND ",
+pub const PAGE_SQL: &str = page_sql!("");
+
+/// The page statement, narrowed to the rows nothing has answered yet — [`PAGE_SQL`] plus
+/// [`UNANSWERED`], which is also the second half of `idx_txn_unanswered_account_date`'s
+/// `WHERE`, so the worklist read is served by the index that holds exactly its rows.
+pub const PAGE_SQL_UNANSWERED: &str = page_sql!(concat!(" AND ", unanswered_predicate!()));
+
+/// The store-wide worklist count. Public for the same reason [`PAGE_SQL`] is: Q3 asserts the
+/// plan of *this* text, so a count that grew a second spelling would be measuring a statement
+/// nothing runs.
+pub const UNCATEGORIZED_COUNT_SQL: &str = concat!(
+    "SELECT count(*) FROM transactions WHERE ",
     live_predicate!(),
-    " AND (t.date < ?2 OR (t.date = ?2 AND t.rowid > ?3)) \
-     ORDER BY t.date DESC, t.rowid ASC \
-     LIMIT ?4"
+    " AND ",
+    unanswered_predicate!()
 );
 
 /// A typed, non-panicking error for every fallible store operation (a `uniffi::Error`, so
@@ -397,6 +428,15 @@ pub struct HistoryQuery {
     /// Rows wanted. Clamped to `1..=200`; an out-of-range value is clamped, never an error —
     /// a page of 0 would be an infinite scroll loop in the caller.
     pub limit: u32,
+    /// `false` = every live row, exactly as before. `true` = only the rows nothing has
+    /// answered yet ([`UNANSWERED`]), which composes with `account_id` rather than replacing
+    /// it (FR-039).
+    ///
+    /// The default is `false` because that is what makes FR-046 cheap: a caller that does not
+    /// know the field exists reads precisely what it read before, through the same statement
+    /// and the same plan.
+    #[uniffi(default = false)]
+    pub uncategorized_only: bool,
 }
 
 /// One live transaction, ready to render. It carries no storage internals — no
@@ -417,6 +457,10 @@ pub struct HistoryRow {
     pub currency: String,
     /// The category's display name, or `None` for uncategorized (FR-017).
     pub category_name: Option<String>,
+    /// The category's **id**, or `None` for uncategorized. An id and not a name because the
+    /// picker's "current" mark is an identity question: two categories may be renamed to the
+    /// same words, and a mark that matched on words would follow the rename.
+    pub category_id: Option<String>,
     pub is_transfer: bool,
 }
 
@@ -1030,7 +1074,13 @@ impl Store {
         }
 
         let categories = category_names_in(&conn)?;
-        let mut stmt = conn.prepare(PAGE_SQL)?;
+        // The narrowing is the *only* difference between the worklist read and the whole
+        // history: same cursor, same ordering, same limit, same merge (FR-040).
+        let mut stmt = conn.prepare(if query.uncategorized_only {
+            PAGE_SQL_UNANSWERED
+        } else {
+            PAGE_SQL
+        })?;
 
         // One already-sorted buffer per account, each read from the resume point the cursor
         // carries — or from the identity cursor, which is what makes a first page the same
@@ -1136,6 +1186,20 @@ impl Store {
                 }
             })
             .collect())
+    }
+
+    /// How many transactions, across every account, nothing has answered yet — `LIVE` and
+    /// [`UNANSWERED`], the same predicate the narrowed page reads (FR-041b).
+    ///
+    /// **Counted in SQL**, never by filtering a broader read platform-side: 018 deliberately
+    /// moved the front door's count out of Swift and into the engine, and this does not
+    /// reintroduce it (FR-043, FR-078). H5 is the proof that the count and the list it opens
+    /// are the same question: both statements are built from `unanswered_predicate!()`, so
+    /// there is no second spelling for them to drift apart on.
+    pub fn uncategorized_count(&self) -> Result<u32, StoreError> {
+        let conn = self.lock();
+        let count: i64 = conn.query_row(UNCATEGORIZED_COUNT_SQL, [], |row| row.get(0))?;
+        Ok(count.max(0) as u32)
     }
 
     /// The category catalog — the 23 seeded [`crate::default_categories`] plus any user
@@ -1965,7 +2029,10 @@ fn map_history_row(
             amount: amount_from_sql(&amount)?,
             direction: direction_from_sql(&direction)?,
             currency: row.get(6)?,
-            category_name: category_id.and_then(|id| categories.get(&id).cloned()),
+            category_name: category_id
+                .as_ref()
+                .and_then(|id| categories.get(id).cloned()),
+            category_id,
             is_transfer: row.get::<_, i64>(8)? != 0,
         },
         row.get(9)?,

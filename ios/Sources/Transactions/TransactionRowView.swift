@@ -102,6 +102,7 @@ struct TransactionRowView: View {
                     direction: .debit,
                     currency: "INR",
                     categoryName: nil,
+                    categoryId: nil,
                     isTransfer: false
                 )))
     }
