@@ -152,15 +152,49 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: the categorize slice.** `019-debug-test-seeding` is **DONE** — T001–T101, all four
-PRs, every gate green. Run `speckit.specify` for the next slice; do **not** re-run it for 019.
+**⬅️ NEXT: `020-categorize` PR B — the memory.** Start at **T041** in
+`specs/020-categorize/tasks.md`. Work is on branch **`020-categorize`** (4 commits, clean tree,
+not yet pushed or opened as a PR).
+
+⚠️ **Do NOT re-run `speckit.specify` / `plan` / `tasks` for 020** — all three are committed
+(`adf9206`, `8268268`, `2d05d56`), Q1–Q3 are answered (D / B / C), and the design is locked.
+019 is **DONE** — T001–T101, all four PRs, every gate green; do not re-run it either.
+
+**020 PR A is DONE** (`5ce166b`, T001–T040, **310 → 324 core tests**, lint clean, privacy audit
+OK, **no tracked Swift file touched**). It shipped schema **v8** — additive only, a
+`merchant_memory` table and one partial index — the three predicates spelled once, the
+`set_transaction_category` write path with `'PERSON'` provenance, and guards on both engine
+write paths. `specs/020-categorize/tasks.md` § *PR A — RECORDED* has the full account; the four
+things worth carrying:
+
+- 🚨 **`NULL NOT IN ('PERSON', 'PERSON_MEMORY')` is `NULL`, not `TRUE`.** Watched: with the naive
+  guard, **C2 went red and C1 stayed green** — every row an import had just inserted was
+  discarded and *nothing errored*. `ENGINE_MAY_DECIDE` must keep its `IS NULL OR` arm forever.
+- **Two live defects were fixed, both watched failing first**: a re-import wrote
+  `FOOD_AND_DINING / T1_SOURCE_CATEGORY` over a person's `GROCERIES / PERSON`, and
+  `detect_transfers` wrote `CREDIT_CARD_BILL_PAYMENT` over a person's `SHOPPING`.
+- ⚠️ **The two guards are not independent, and the queue assumed they were.** Removing the
+  *load*-site guard turns nothing red — the write-site guard covers C1 alone. **C8** now pins it:
+  without it the stack decides a category, reports it as `categorized`, and writes nothing.
+- **PR A deferred C4/C7 to PR B and C5 to PR C**, with reasons. `set_transaction_category` takes
+  `remember` and **deliberately ignores it** — that is documented in the method so the next
+  reader does not read it as a bug. PR B is where it starts meaning something.
+- **One finding for PR D**: `everyStoreFailureMapsToTheSameThing` in
+  `ios/Tests/TransactionHistoryServiceTests.swift` is now one case short of the "every" in its
+  name (`.NotFound`). Harmless today — the mapping takes `_: Error` and discards it.
+
+⚠️ **PR B changes the FFI surface** (`merchant_portion` as a free `#[uniffi::export]`), so
+`make core-xcframework` **then** `make ios-gen` is mandatory — never a bare `tuist generate`.
+⚠️ `cargo` is not on the default PATH: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"`.
+⚠️ Never run `make core-test` and `make ios-test` concurrently (`history_perf::s5` is wall-clock).
 
 **What 019 bought, in one sentence:** an automated run can now open a screen with a person's own
 transactions on it, so the accessibility auditor finally has something to audit — **UI tests went
 from 6 to 33**, and six of 018's fourteen manual gate steps are now run by a machine.
 
 **What it cost the shipping app:** three lines in `ios/Sources/KanameApp.swift`, inside
-`#if DEBUG`. Nothing else. No Rust file, no FFI change, **schema still v7**.
+`#if DEBUG`. Nothing else. No Rust file, no FFI change — **schema was v7, and 020 PR A took it
+to v8**.
 
 ⚠️ **It paid for itself on its first run.** The first `performAccessibilityAudit` ever pointed at
 a populated list found two shipped defects: a date heading rendering grey because
