@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/020-categorize/`, starting at T077 (PR C, the read side).**
+**The live one is `specs/020-categorize/`, starting at T094 (PR D, correcting one transaction).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -152,9 +152,50 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: `020-categorize` PR C — the read side.** Start at **T077** in
-`specs/020-categorize/tasks.md`. Work is on branch **`020-categorize`** (6 commits, clean tree,
-not yet pushed or opened as a PR).
+**⬅️ NEXT: `020-categorize` PR D — correcting one transaction.** Start at **T094** in
+`specs/020-categorize/tasks.md`. ⚠️ T094–T096 come **before any code lands** in
+`ios/Sources/Categorize/`: four of `import-path-audit.sh`'s ten scans are scoped to
+`ios/Sources/Transactions/`, so new code in a new directory would be unwatched by exactly the
+scans that exist to watch it. Widen first, prove the widening reaches (T096's throwaway probe),
+then write the surface. Work is on branch **`020-categorize`** (7 commits, clean tree, not yet
+pushed or opened as a PR).
+
+**020 PR C is DONE** (`e42bcf4`, T077–T093, **348 → 358 core tests**, every gate green:
+core-lint, core-test, lint, `ios-test` **TEST SUCCEEDED** (33 UI tests), `import-audit` ten scans
+OK). It shipped `HistoryQuery.uncategorized_only`, `HistoryRow.category_id`,
+`Store::uncategorized_count()`, the `page_sql!` macro that spells the page statement once, and
+Q1–Q3. `specs/020-categorize/tasks.md` § *PR C — RECORDED* has the full account; the five things
+worth carrying:
+
+- 🚨 **PR C could not be engine-only, and the queue says it is.** A new `HistoryRow` field breaks
+  **every Swift memberwise construction of it** — ten call sites, seven files — because uniffi
+  generates an initializer with no default for a new field. `#[uniffi(default = None)]` would have
+  kept the Swift tree untouched and was **rejected**: a double that can silently omit a fact the
+  engine always populates is the exact quiet failure this repo keeps finding. Expect the same the
+  next time a `uniffi::Record` grows a field. (`HistoryQuery`'s new field *does* carry a default —
+  it is an **input**, and FR-046's "every existing caller keeps its behaviour" is the point.)
+- ⚠️ **Q2 does not gate the v8 index — only Q3 does.** T091's break turned Q3 red with `s1`, `s2`
+  and Q1 green as predicted; **Q2 stayed green too**, because the narrowed page falls back to the
+  v7 index and is still a `SEARCH` on a named index with no `TEMP B-TREE`. If Q3 is ever weakened,
+  nothing else in the suite notices `idx_txn_unanswered_account_date` going missing.
+- ⚠️ **H5 is a drift gate, not a correctness one.** Break the provenance arm of
+  `unanswered_predicate!()` and C5 and H2 go red — **H5 stays green**, because the count and the
+  list agreed, on the wrong set. Do not read a green H5 in PR F as "the worklist is right".
+- **One predicate, one spelling — via the macro, not the constant.** A `const` cannot be
+  interpolated into another `const`, so `PAGE_SQL` / `PAGE_SQL_UNANSWERED` are two expansions of
+  one `page_sql!` and the count is `UNCATEGORIZED_COUNT_SQL`. `UNANSWERED` keeps its
+  `#[allow(dead_code)]`: it is now a *name* for the rule, not a reader of it. **H1 pins
+  `PAGE_SQL`'s full text**, which is the only reason the macro was safe to introduce.
+- **R13's plans are now measured on the real SQLCipher store** and reproduce exactly: `SEARCH t
+  USING INDEX idx_txn_unanswered_account_date` for the narrowed page, `SCAN transactions USING
+  INDEX idx_txn_unanswered_account_date` for the count. That settles **three** statements on one
+  corpus on one machine — T178's "not a survey" is recorded as such.
+
+⚠️ **A wall-clock failure is a claim about the machine until you measure the machine.** A re-run of
+`history_perf` alone failed `s4` (worst page 73.7 ms, budget 25 ms) and `s5` on a host at **load
+average 120** with an unrelated `ffmpeg` at 392% CPU. `HEAD` was stashed to and run under the same
+load: **`s4` fails there too, worse — 127.2 ms.** Two minutes of `git stash` settled it. Do that
+before chasing `s3`–`s7`.
 
 ⚠️ **Do NOT re-run `speckit.specify` / `plan` / `tasks` for 020** — all three are committed
 (`adf9206`, `8268268`, `2d05d56`), Q1–Q3 are answered (D / B / C), and the design is locked.
