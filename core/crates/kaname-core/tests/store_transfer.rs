@@ -403,3 +403,125 @@ fn a_row_the_stack_cannot_match_is_still_left_uncategorized() {
     assert_eq!(summary.uncategorized, 1);
     assert_eq!(read(&store, &a, 1).category_id, None);
 }
+
+/// 🔴 **T1** — transfer detection may not overwrite a category a person chose.
+///
+/// ⚠️ This hole is **unreachable from the shipping app**: `import-path-audit.sh`'s ninth scan
+/// bans Swift from calling `detectTransfers` at all, and this slice does not wire it up. It is
+/// fixed anyway, and tested in Rust because nothing else can reach it — the guarantee belongs
+/// to the engine, not to the current absence of a caller.
+#[test]
+fn detection_does_not_overwrite_a_category_a_person_chose() {
+    let db = TempDb::new("person-vs-detector");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+
+    let bank = store
+        .insert_account(account("HDFC Savings", false))
+        .unwrap();
+    let card = store.insert_account(account("HDFC Card", true)).unwrap();
+
+    store
+        .insert_transaction(txn(
+            &bank,
+            4,
+            "CREDIT CARD PAYMENT",
+            "5000.00",
+            Direction::Debit,
+        ))
+        .unwrap();
+    store
+        .insert_transaction(txn(
+            &card,
+            4,
+            "PAYMENT RECEIVED",
+            "5000.00",
+            Direction::Credit,
+        ))
+        .unwrap();
+
+    let outflow_id = read(&store, &bank, 0).id;
+    store
+        .set_transaction_category(
+            outflow_id,
+            Some(CategoryRef::Builtin {
+                code: "SHOPPING".to_string(),
+            }),
+            false,
+        )
+        .expect("correction");
+
+    store.detect_transfers().expect("detect");
+
+    let outflow = read(&store, &bank, 0);
+    assert_eq!(outflow.category_id.as_deref(), Some("SHOPPING"));
+    assert_eq!(outflow.categorised_by.as_deref(), Some("PERSON"));
+}
+
+/// **T2** — detection's own outcomes are unchanged by the guard: the same pairs, the same
+/// groups, the same summary. Green today; written so the T1 fix has something keeping it
+/// honest, because the cheap way to make T1 pass is to stop detecting.
+#[test]
+fn detection_finds_the_same_pairs_when_no_row_is_a_persons() {
+    let db = TempDb::new("unchanged-outcomes");
+    let store = Store::open(db.path.clone(), KEY.to_string()).expect("open");
+
+    let bank = store
+        .insert_account(account("HDFC Savings", false))
+        .unwrap();
+    let card = store.insert_account(account("HDFC Card", true)).unwrap();
+    let other = store
+        .insert_account(account("ICICI Savings", false))
+        .unwrap();
+
+    store
+        .insert_transaction(txn(
+            &bank,
+            4,
+            "CREDIT CARD PAYMENT",
+            "5000.00",
+            Direction::Debit,
+        ))
+        .unwrap();
+    store
+        .insert_transaction(txn(
+            &card,
+            4,
+            "PAYMENT RECEIVED",
+            "5000.00",
+            Direction::Credit,
+        ))
+        .unwrap();
+    store
+        .insert_transaction(txn(&bank, 10, "NEFT TO SELF", "2000.00", Direction::Debit))
+        .unwrap();
+    store
+        .insert_transaction(txn(
+            &other,
+            10,
+            "NEFT FROM SELF",
+            "2000.00",
+            Direction::Credit,
+        ))
+        .unwrap();
+
+    let summary = store.detect_transfers().expect("detect");
+    assert_eq!(summary.pairs_linked, 2);
+    assert_eq!(summary.credit_card_payments, 1);
+
+    let bill = read(&store, &bank, 0);
+    let self_transfer = read(&store, &bank, 1);
+    assert_eq!(
+        bill.category_id.as_deref(),
+        Some("CREDIT_CARD_BILL_PAYMENT")
+    );
+    assert_eq!(self_transfer.category_id.as_deref(), Some("SELF_TRANSFER"));
+    assert_eq!(
+        bill.transfer_group_id,
+        read(&store, &card, 0).transfer_group_id
+    );
+    assert_eq!(
+        self_transfer.transfer_group_id,
+        read(&store, &other, 0).transfer_group_id
+    );
+    assert_ne!(bill.transfer_group_id, self_transfer.transfer_group_id);
+}

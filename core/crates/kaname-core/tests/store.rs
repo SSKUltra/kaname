@@ -192,13 +192,13 @@ fn migration_is_idempotent_across_reopens() {
 
     let first_id = {
         let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
-        assert_eq!(store.schema_version().unwrap(), 7);
+        assert_eq!(store.schema_version().unwrap(), 8);
         store.insert_account(sample_account()).expect("insert")
     };
 
     // Re-open: migrations must be a no-op, the version unchanged, and the data intact.
     let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
-    assert_eq!(store.schema_version().unwrap(), 7);
+    assert_eq!(store.schema_version().unwrap(), 8);
     let accounts = store.list_accounts().expect("list");
     assert_eq!(
         accounts.len(),
@@ -211,24 +211,25 @@ fn migration_is_idempotent_across_reopens() {
 }
 
 #[test]
-fn reopening_a_v7_store_is_a_no_op() {
-    let db = TempDb::new("v7-no-op");
+fn reopening_a_v8_store_is_a_no_op() {
+    let db = TempDb::new("v8-no-op");
 
     let first_id = {
         let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
-        assert_eq!(store.schema_version().unwrap(), 7);
+        assert_eq!(store.schema_version().unwrap(), 8);
         store.insert_account(sample_account()).expect("insert")
     };
 
     // A re-open must not re-run the migration, re-create the index, or alter a row.
     let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
-    assert_eq!(store.schema_version().unwrap(), 7);
+    assert_eq!(store.schema_version().unwrap(), 8);
     let accounts = store.list_accounts().expect("list");
     assert_eq!(accounts.len(), 1);
     assert_eq!(accounts[0].id, first_id);
     assert_eq!(store.list_categories().expect("categories").len(), 23);
-    // `CREATE INDEX` is not `IF NOT EXISTS`: a second open that re-ran the v7 migration
-    // would have failed above rather than reached here.
+    // Neither v7's nor v8's `CREATE INDEX` is `IF NOT EXISTS`, and v8's `CREATE TABLE` is not
+    // either: a second open that re-ran a migration would have failed above rather than
+    // reached here.
 }
 
 #[test]
@@ -237,12 +238,12 @@ fn reopening_a_v6_store_is_a_no_op() {
 
     let first_id = {
         let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 1");
-        assert_eq!(store.schema_version().unwrap(), 7);
+        assert_eq!(store.schema_version().unwrap(), 8);
         store.insert_account(sample_account()).expect("insert")
     };
 
     let store = Store::open(db.path.clone(), KEY.to_string()).expect("open 2");
-    assert_eq!(store.schema_version().unwrap(), 7);
+    assert_eq!(store.schema_version().unwrap(), 8);
     let accounts = store.list_accounts().expect("list");
     assert_eq!(accounts.len(), 1);
     assert_eq!(accounts[0].id, first_id);

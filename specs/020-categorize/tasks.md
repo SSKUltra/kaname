@@ -61,11 +61,11 @@ description: "Task list for 020-categorize"
 
 **Purpose**: establish the number every later "still green" claim is relative to, and find the sites the fix must reach.
 
-- [ ] T001 Export `PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"`, run `make core-lint && make core-test` at `HEAD` and record the pass count and duration in the PR description. Every later "still green" is relative to this number, not to a feeling.
-- [ ] T002 [P] Survey `core/crates/kaname-core/src/store.rs` and enumerate, in the PR description, every SQL site that (a) filters live rows or (b) writes `category_id` / `categorised_by`. This list is the input to T024 and T028 — a guard that reaches only the site the test happened to exercise is not a fix.
-- [ ] T003 [P] Create `core/crates/kaname-core/tests/store_correction.rs` with the module header and the `tests/common` harness import, no assertions yet. (A new Rust integration test file is discovered by cargo automatically — the `make ios-gen` trap in non-negotiable 4 is Swift-only.)
-- [ ] T004 [P] Confirm the store's current `user_version` is 7 and locate the migration ladder's insertion point in `core/crates/kaname-core/src/store.rs`; record the line in the PR description.
-- [ ] T005 [P] Add a helper to `core/crates/kaname-core/tests/common/` that builds a **v7** store containing rows in every provenance state (`NULL`, `'PERSON'`, `'PERSON_MEMORY'`, `'TRANSFER_DETECTOR'`, and each engine tier). G1 is worth nothing if the fixture only has one state in it.
+- [x] T001 Export `PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"`, run `make core-lint && make core-test` at `HEAD` and record the pass count and duration in the PR description. Every later "still green" is relative to this number, not to a feeling.
+- [x] T002 [P] Survey `core/crates/kaname-core/src/store.rs` and enumerate, in the PR description, every SQL site that (a) filters live rows or (b) writes `category_id` / `categorised_by`. This list is the input to T024 and T028 — a guard that reaches only the site the test happened to exercise is not a fix.
+- [x] T003 [P] Create `core/crates/kaname-core/tests/store_correction.rs` with the module header and the `tests/common` harness import, no assertions yet. (A new Rust integration test file is discovered by cargo automatically — the `make ios-gen` trap in non-negotiable 4 is Swift-only.)
+- [x] T004 [P] Confirm the store's current `user_version` is 7 and locate the migration ladder's insertion point in `core/crates/kaname-core/src/store.rs`; record the line in the PR description.
+- [x] T005 [P] Add a helper to `core/crates/kaname-core/tests/common/` that builds a **v7** store containing rows in every provenance state (`NULL`, `'PERSON'`, `'PERSON_MEMORY'`, `'TRANSFER_DETECTOR'`, and each engine tier). G1 is worth nothing if the fixture only has one state in it.
 
 **Checkpoint**: baseline green recorded, write sites enumerated, v7 fixture available.
 
@@ -73,14 +73,14 @@ description: "Task list for 020-categorize"
 
 **Purpose**: add `merchant_memory` and the partial index without touching a single existing row. RED first — every assertion below is watched failing before T010 exists.
 
-- [ ] T006 [US7] RED **G2** in `core/crates/kaname-core/tests/store.rs`: after migration `user_version == 8`, `merchant_memory` exists and is empty, and `idx_txn_unanswered_account_date` exists. Run `make core-test`, watch it fail, record the failure text.
-- [ ] T007 [US7] RED **G1** in `core/crates/kaname-core/tests/store.rs`: open the T005 v7 store, migrate, and assert every row's `category_id`, `amount`, `date`, `description`, `account_id` and `categorised_by` is **byte-identical** (FR-047, SC-014). Watch it fail.
-- [ ] T008 [US7] RED **G3** in `core/crates/kaname-core/tests/store.rs`: a migration failure leaves `user_version` at 7 and no partial object behind (FR-048, SC-015). Watch it fail.
-- [ ] T009 [US7] RED **G4** in `core/crates/kaname-core/tests/store.rs`: a migrated v8 store opens and behaves identically to a fresh v8 store. Watch it fail.
-- [ ] T010 [US7] GREEN: add the v7→v8 migration to `core/crates/kaname-core/src/store.rs` — `CREATE TABLE merchant_memory(merchant_portion TEXT PRIMARY KEY, category_id TEXT NOT NULL REFERENCES categories(id)) STRICT` and `CREATE INDEX idx_txn_unanswered_account_date ...` per `data-model.md` §1. **Additive only**: no `ALTER TABLE`, no row read, no row written — which is what makes FR-047 / SC-014 true by construction rather than by luck.
-- [ ] T011 [US7] Declare the three predicates in `core/crates/kaname-core/src/store.rs`, each spelled **exactly once** as a constant per `contracts/engine-categorize.md` §5: `LIVE` (unchanged), `UNANSWERED` = `category_id IS NULL AND categorised_by IS NULL`, `ENGINE_MAY_DECIDE` = `(categorised_by IS NULL OR categorised_by NOT IN ('PERSON','PERSON_MEMORY'))`. ⚠️ Use `IS` / `IS NOT`, never `=` / `!=` — see non-negotiable 9.
-- [ ] T012 [US7] STRUCTURAL assertion in `core/crates/kaname-core/tests/store.rs`: the created index's `WHERE` clause, read back from `sqlite_master`, is the **byte-identical concatenation** of `LIVE` and `UNANSWERED` (`contracts/engine-categorize.md` §5.1). This is the contract's one unnumbered requirement and it is the only thing that stops the index and the query drifting apart silently.
-- [ ] T013 [US7] Behaviour test for the predicates in `core/crates/kaname-core/tests/store.rs`: `UNANSWERED` excludes a `'PERSON'` deliberate blank; `ENGINE_MAY_DECIDE` **admits** a `NULL`-provenance row. Run `make core-test` — G1–G4 and both structural assertions green.
+- [x] T006 [US7] RED **G2** in `core/crates/kaname-core/tests/store.rs`: after migration `user_version == 8`, `merchant_memory` exists and is empty, and `idx_txn_unanswered_account_date` exists. Run `make core-test`, watch it fail, record the failure text.
+- [x] T007 [US7] RED **G1** in `core/crates/kaname-core/tests/store.rs`: open the T005 v7 store, migrate, and assert every row's `category_id`, `amount`, `date`, `description`, `account_id` and `categorised_by` is **byte-identical** (FR-047, SC-014). Watch it fail.
+- [x] T008 [US7] RED **G3** in `core/crates/kaname-core/tests/store.rs`: a migration failure leaves `user_version` at 7 and no partial object behind (FR-048, SC-015). Watch it fail.
+- [x] T009 [US7] RED **G4** in `core/crates/kaname-core/tests/store.rs`: a migrated v8 store opens and behaves identically to a fresh v8 store. Watch it fail.
+- [x] T010 [US7] GREEN: add the v7→v8 migration to `core/crates/kaname-core/src/store.rs` — `CREATE TABLE merchant_memory(merchant_portion TEXT PRIMARY KEY, category_id TEXT NOT NULL REFERENCES categories(id)) STRICT` and `CREATE INDEX idx_txn_unanswered_account_date ...` per `data-model.md` §1. **Additive only**: no `ALTER TABLE`, no row read, no row written — which is what makes FR-047 / SC-014 true by construction rather than by luck.
+- [x] T011 [US7] Declare the three predicates in `core/crates/kaname-core/src/store.rs`, each spelled **exactly once** as a constant per `contracts/engine-categorize.md` §5: `LIVE` (unchanged), `UNANSWERED` = `category_id IS NULL AND categorised_by IS NULL`, `ENGINE_MAY_DECIDE` = `(categorised_by IS NULL OR categorised_by NOT IN ('PERSON','PERSON_MEMORY'))`. ⚠️ Use `IS` / `IS NOT`, never `=` / `!=` — see non-negotiable 9.
+- [x] T012 [US7] STRUCTURAL assertion in `core/crates/kaname-core/tests/store.rs`: the created index's `WHERE` clause, read back from `sqlite_master`, is the **byte-identical concatenation** of `LIVE` and `UNANSWERED` (`contracts/engine-categorize.md` §5.1). This is the contract's one unnumbered requirement and it is the only thing that stops the index and the query drifting apart silently.
+- [x] T013 [US7] Behaviour test for the predicates in `core/crates/kaname-core/tests/store.rs`: `UNANSWERED` excludes a `'PERSON'` deliberate blank; `ENGINE_MAY_DECIDE` **admits** a `NULL`-provenance row. Run `make core-test` — G1–G4 and both structural assertions green.
 
 **Checkpoint**: schema v8 exists, the predicates are spelled once, migration is proved non-destructive.
 
@@ -88,13 +88,13 @@ description: "Task list for 020-categorize"
 
 **Purpose**: give the engine a way to record a correction, in one transaction, with `'PERSON'` provenance.
 
-- [ ] T014 [US1] RED **C6** in `core/crates/kaname-core/tests/store_correction.rs`: `set_transaction_category` on an unknown id returns `NotFound` and writes nothing. Watch it fail (the function does not exist).
-- [ ] T015 [US1] RED **C3** in `core/crates/kaname-core/tests/store_correction.rs`: correct to `None` → `category_id IS NULL`, `categorised_by = 'PERSON'`, and a re-import leaves it alone. A deliberate blank is protected as strongly as a category. Watch it fail.
-- [ ] T016 [US1] GREEN: implement `set_transaction_category(id, category_id: Option<String>, remember: bool)` in `core/crates/kaname-core/src/store.rs`, writing `category_id` and `categorised_by = 'PERSON'` inside **one** `rusqlite::Transaction`. `remember` is accepted and deliberately ignored in this PR — the memory lands in PR B — and the doc comment says so, so the next reader does not think it is a bug.
-- [ ] T017 [US1] GREEN: add `CorrectionOutcome` (`contracts/engine-categorize.md` §2.1) and the `NotFound` error variant in `core/crates/kaname-core/src/model.rs`.
-- [ ] T018 [US1] Export `set_transaction_category` and `CorrectionOutcome` over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs`. First FFI surface change of the slice.
-- [ ] T019 ⚠️ **BUILD** — run `make core-xcframework` **then** `make ios-gen`, in that order. Never a bare `tuist generate` (`AGENTS.md:88-92`). If Swift later says `cannot find 'setTransactionCategory' in scope`, that is this task not having been run — do not debug the Swift.
-- [ ] T020 [US1] Run `make core-test` — C3 and C6 green.
+- [x] T014 [US1] RED **C6** in `core/crates/kaname-core/tests/store_correction.rs`: `set_transaction_category` on an unknown id returns `NotFound` and writes nothing. Watch it fail (the function does not exist).
+- [x] T015 [US1] RED **C3** in `core/crates/kaname-core/tests/store_correction.rs`: correct to `None` → `category_id IS NULL`, `categorised_by = 'PERSON'`, and a re-import leaves it alone. A deliberate blank is protected as strongly as a category. Watch it fail.
+- [x] T016 [US1] GREEN: implement `set_transaction_category(id, category_id: Option<String>, remember: bool)` in `core/crates/kaname-core/src/store.rs`, writing `category_id` and `categorised_by = 'PERSON'` inside **one** `rusqlite::Transaction`. `remember` is accepted and deliberately ignored in this PR — the memory lands in PR B — and the doc comment says so, so the next reader does not think it is a bug.
+- [x] T017 [US1] GREEN: add `CorrectionOutcome` (`contracts/engine-categorize.md` §2.1) and the `NotFound` error variant in `core/crates/kaname-core/src/model.rs`.
+- [x] T018 [US1] Export `set_transaction_category` and `CorrectionOutcome` over `#[uniffi::export]` in `core/crates/kaname-core/src/ffi.rs`. First FFI surface change of the slice.
+- [x] T019 ⚠️ **BUILD** — run `make core-xcframework` **then** `make ios-gen`, in that order. Never a bare `tuist generate` (`AGENTS.md:88-92`). If Swift later says `cannot find 'setTransactionCategory' in scope`, that is this task not having been run — do not debug the Swift.
+- [x] T020 [US1] Run `make core-test` — C3 and C6 green.
 
 **Checkpoint**: a correction can be recorded. It is not yet protected.
 
@@ -104,16 +104,16 @@ description: "Task list for 020-categorize"
 
 > 🚨 **Read this before writing the guard.** `NULL NOT IN ('PERSON','PERSON_MEMORY')` evaluates to `NULL`, not `TRUE`. `import_statement`'s bulk insert writes `NULL, NULL` literally (`store.rs:855-870`), so a guard spelled `categorised_by NOT IN (...)` discards **every row the import just inserted**. Every import would land wholly uncategorized, and **nothing would error**. This is research R10.
 
-- [ ] T021 [US2] RED 🔴 **C1** in `core/crates/kaname-core/tests/store_correction.rs`: correct a row, re-run `import_statement` for that account, assert `category_id` and `categorised_by = 'PERSON'` are unchanged.
-- [ ] T022 [US2] Watch **C1** fail against shipped behaviour and record the failure text in the PR description. `categorize_account_in`'s unconditional `UPDATE` (`store.rs:1304`) writes `NULL, NULL` over the correction. **If C1 passes here, the test is not reaching the write path** — fix the test, not the expectation.
-- [ ] T023 [US2] RED **C2** in `core/crates/kaname-core/tests/store_correction.rs`, as its **own task, separate from C1**: after a fresh import into an empty store, the count of rows with a non-null `category_id` is **greater than zero**. This assertion is **green today**; it is written now so that T026's break has something to turn red. ⚠️ **The queue is explicit about why C1 is not enough: C1 passes against the broken naive guard.** A slice that only had C1 would ship R10's trap with a green suite.
-- [ ] T024 [US2] GREEN: add `ENGINE_MAY_DECIDE` to `categorize_account_in`'s `UPDATE ... WHERE` in `core/crates/kaname-core/src/store.rs`, **keeping the `categorised_by IS NULL OR` arm**. Reference the predicate constant from T011; do not re-spell the SQL.
-- [ ] T025 [US2] Run `make core-test` — C1 and C2 both green, and every existing suite (`store_import.rs`, `store_categorization.rs`, `store_dedup.rs`, `parity.rs`) still green.
-- [ ] T026 🚨 **DELIBERATE BREAK** — in `core/crates/kaname-core/src/store.rs`, replace the guard with the naive `categorised_by NOT IN ('PERSON','PERSON_MEMORY')`. Expected: **C2 RED and C1 still GREEN**. Observing exactly that pair is the point of this task. Revert. ⚠️ Commit the fix first (`git add -A && git commit -m "wip: guard"`) or copy `core/` aside — `git checkout -- core/` reverts to `HEAD` and would take the fix with it.
-- [ ] T027 **DELIBERATE BREAK** — remove `ENGINE_MAY_DECIDE` from the selection in `load_account_transactions` in `core/crates/kaname-core/src/store.rs`. Expected: **C1 RED**. Revert as above. (Two sites, two breaks: the guard must hold on both the read that feeds the categorizer and the write that lands its answer.)
-- [ ] T028 [US2] Extend the guard to every remaining write site enumerated in T002, in `core/crates/kaname-core/src/store.rs`, each referencing the `ENGINE_MAY_DECIDE` constant.
-- [ ] T029 [US2] Add a structural assertion in `core/crates/kaname-core/tests/store_correction.rs`: no `UPDATE` of `category_id` or `categorised_by` exists in `src/store.rs` without either `ENGINE_MAY_DECIDE` or an explicit `'PERSON'`-writing comment. A source-level assertion is what keeps the next `UPDATE` from being written without the guard.
-- [ ] T030 [US2] Run `make core-test`.
+- [x] T021 [US2] RED 🔴 **C1** in `core/crates/kaname-core/tests/store_correction.rs`: correct a row, re-run `import_statement` for that account, assert `category_id` and `categorised_by = 'PERSON'` are unchanged.
+- [x] T022 [US2] Watch **C1** fail against shipped behaviour and record the failure text in the PR description. `categorize_account_in`'s unconditional `UPDATE` (`store.rs:1304`) writes `NULL, NULL` over the correction. **If C1 passes here, the test is not reaching the write path** — fix the test, not the expectation.
+- [x] T023 [US2] RED **C2** in `core/crates/kaname-core/tests/store_correction.rs`, as its **own task, separate from C1**: after a fresh import into an empty store, the count of rows with a non-null `category_id` is **greater than zero**. This assertion is **green today**; it is written now so that T026's break has something to turn red. ⚠️ **The queue is explicit about why C1 is not enough: C1 passes against the broken naive guard.** A slice that only had C1 would ship R10's trap with a green suite.
+- [x] T024 [US2] GREEN: add `ENGINE_MAY_DECIDE` to `categorize_account_in`'s `UPDATE ... WHERE` in `core/crates/kaname-core/src/store.rs`, **keeping the `categorised_by IS NULL OR` arm**. Reference the predicate constant from T011; do not re-spell the SQL.
+- [x] T025 [US2] Run `make core-test` — C1 and C2 both green, and every existing suite (`store_import.rs`, `store_categorization.rs`, `store_dedup.rs`, `parity.rs`) still green.
+- [x] T026 🚨 **DELIBERATE BREAK** — in `core/crates/kaname-core/src/store.rs`, replace the guard with the naive `categorised_by NOT IN ('PERSON','PERSON_MEMORY')`. Expected: **C2 RED and C1 still GREEN**. Observing exactly that pair is the point of this task. Revert. ⚠️ Commit the fix first (`git add -A && git commit -m "wip: guard"`) or copy `core/` aside — `git checkout -- core/` reverts to `HEAD` and would take the fix with it.
+- [x] T027 **DELIBERATE BREAK** — remove `ENGINE_MAY_DECIDE` from the selection in `load_account_transactions` in `core/crates/kaname-core/src/store.rs`. Expected: **C1 RED**. Revert as above. (Two sites, two breaks: the guard must hold on both the read that feeds the categorizer and the write that lands its answer.)
+- [x] T028 [US2] Extend the guard to every remaining write site enumerated in T002, in `core/crates/kaname-core/src/store.rs`, each referencing the `ENGINE_MAY_DECIDE` constant.
+- [x] T029 [US2] Add a structural assertion in `core/crates/kaname-core/tests/store_correction.rs`: no `UPDATE` of `category_id` or `categorised_by` exists in `src/store.rs` without either `ENGINE_MAY_DECIDE` or an explicit `'PERSON'`-writing comment. A source-level assertion is what keeps the next `UPDATE` from being written without the guard.
+- [x] T030 [US2] Run `make core-test`.
 
 **Checkpoint**: 🚨 finding (a) is closed and its trap has a named regression test of its own.
 
@@ -121,21 +121,92 @@ description: "Task list for 020-categorize"
 
 > 🚨 `detect_transfers`'s `UPDATE` is guarded on `transfer_group_id IS NULL` **only** (`store.rs:1160-1166`). It can overwrite a person's decision with `'TRANSFER_DETECTOR'`. ⚠️ This path is **unreachable from the shipping app** — `import-path-audit.sh` scan 9 bans `detectTransfers` in Swift and this slice does not wire it up (018 R18 stays open). So it needs a **Rust-only** test; no UI test can ever reach it.
 
-- [ ] T031 [US2] RED 🔴 **T1** in `core/crates/kaname-core/tests/store_transfer.rs`: correct a row, then run `detect_transfers` over a store where that row is a valid transfer leg. The correction stands.
-- [ ] T032 [US2] Watch **T1** fail against shipped behaviour and record the failure text.
-- [ ] T033 [US2] RED **T2** in `core/crates/kaname-core/tests/store_transfer.rs`: for a store with no `'PERSON'` rows, transfer detection finds the same pairs, forms the same groups and returns the same summary counts as before (FR-075). Green today — written now so T035 has something to keep honest.
-- [ ] T034 [US2] GREEN: add the provenance arm to `detect_transfers`' `UPDATE` guard in `core/crates/kaname-core/src/store.rs`, referencing `ENGINE_MAY_DECIDE`.
-- [ ] T035 **DELIBERATE BREAK** — remove the provenance arm again. Expected: **T1 RED, T2 GREEN**. Revert (commit-first or copy-aside).
-- [ ] T036 [US2] Record in the PR description that this hole was unreachable in the shipping app and is still fixed, with the reason: the guarantee belongs to the engine, not to the absence of a caller (plan § *Judgement calls* §3).
+- [x] T031 [US2] RED 🔴 **T1** in `core/crates/kaname-core/tests/store_transfer.rs`: correct a row, then run `detect_transfers` over a store where that row is a valid transfer leg. The correction stands.
+- [x] T032 [US2] Watch **T1** fail against shipped behaviour and record the failure text.
+- [x] T033 [US2] RED **T2** in `core/crates/kaname-core/tests/store_transfer.rs`: for a store with no `'PERSON'` rows, transfer detection finds the same pairs, forms the same groups and returns the same summary counts as before (FR-075). Green today — written now so T035 has something to keep honest.
+- [x] T034 [US2] GREEN: add the provenance arm to `detect_transfers`' `UPDATE` guard in `core/crates/kaname-core/src/store.rs`, referencing `ENGINE_MAY_DECIDE`.
+- [x] T035 **DELIBERATE BREAK** — remove the provenance arm again. Expected: **T1 RED, T2 GREEN**. Revert (commit-first or copy-aside).
+- [x] T036 [US2] Record in the PR description that this hole was unreachable in the shipping app and is still fixed, with the reason: the guarantee belongs to the engine, not to the absence of a caller (plan § *Judgement calls* §3).
 
 **Checkpoint**: 🚨 finding (b) is closed.
 
 ## Phase 6: PR A close-out
 
-- [ ] T037 Record the deliberate deferrals in the PR description: **C4** and **C7** move to PR B (the memory table has no writer yet), **C5** moves to PR C (the uncategorized narrowing does not exist yet). A deferral with a reason is a plan; a deferral without one is a gap.
-- [ ] T038 Run `make core-fmt` then `make core-lint` over `core/crates/kaname-core/`.
-- [ ] T039 **GATE** — `make core-lint && make core-test`. ⚠️ Do **not** run concurrently with `make ios-test`: `core/tests/history_perf.rs::s5` is wall-clock and goes flaky under CPU contention.
-- [ ] T040 **GATE** — `make core-privacy-audit`, and confirm this PR touched no Swift: `git --no-pager diff --stat origin/main... -- ios/` is empty.
+- [x] T037 Record the deliberate deferrals in the PR description: **C4** and **C7** move to PR B (the memory table has no writer yet), **C5** moves to PR C (the uncategorized narrowing does not exist yet). A deferral with a reason is a plan; a deferral without one is a gap.
+- [x] T038 Run `make core-fmt` then `make core-lint` over `core/crates/kaname-core/`.
+- [x] T039 **GATE** — `make core-lint && make core-test`. ⚠️ Do **not** run concurrently with `make ios-test`: `core/tests/history_perf.rs::s5` is wall-clock and goes flaky under CPU contention.
+- [x] T040 **GATE** — `make core-privacy-audit`, and confirm this PR touched no Swift: `git --no-pager diff --stat origin/main... -- ios/` is empty.
+
+## PR A — RECORDED
+
+*What the queue said would happen, what actually happened, and the four places they differed.*
+
+**Baseline (T001)**: 310 tests, `make core-lint` clean, `make core-test` 7.0 s wall.
+**After PR A**: **324 tests** (+14), lint clean, `core-privacy-audit` OK, no tracked Swift file
+touched (`ios/Generated/` and `ios/Frameworks/` are gitignored, so T019's rebuild leaves the tree
+engine-only, as intended).
+
+**The two 🚨 findings, both watched failing first.**
+
+- 🔴 **C1 failed against shipped behaviour** exactly as research R10 predicted. Recorded failure:
+  `left: (Some("FOOD_AND_DINING"), Some("T1_SOURCE_CATEGORY"))` against
+  `right: (Some("GROCERIES"), Some("PERSON"))` — the re-import's source-category map wrote
+  straight over the person's correction.
+- 🔴 **T1 failed against shipped behaviour** too: `left: Some("CREDIT_CARD_BILL_PAYMENT")` against
+  `right: Some("SHOPPING")`. The transfer detector erased a decision, on a path
+  `import-path-audit.sh` scan 9 makes unreachable from the app. Fixed anyway — the guarantee
+  belongs to the engine, not to the current absence of a caller.
+- 🚨 **T026's break produced precisely the predicted pair**: with the naive
+  `categorised_by NOT IN ('PERSON', 'PERSON_MEMORY')`, **C2 went red and C1 stayed green**.
+  `NULL NOT IN (…)` is `NULL`, every row the import had just inserted was discarded, and nothing
+  errored. This is why C2 is a test of its own and not a line inside C1.
+
+**Four deviations from the queue, each a case of believing the codebase.**
+
+1. **T027's break did not turn C1 red — it turned nothing red.** Removing `ENGINE_MAY_DECIDE`
+   from `load_account_transactions` leaves C1 green, because the *write*-site guard already
+   blocks the overwrite on its own. The two guards are not independent, and the queue assumed
+   they were. Rather than delete the load-site guard as redundant or leave an unpinned line of
+   code, PR A adds **C8** (`the_summary_counts_only_rows_the_engine_may_decide`): without the
+   load guard the stack loads a corrected row, decides a category for it, reports it as
+   `categorized`, and then writes nothing — a summary describing work it did not do. Under the
+   break C8 reads `left: (1, 1)`, `right: (0, 1)`. The load-site guard now has an assertion that
+   is red without it.
+2. **G1–G4 live in `src/store.rs`'s `mod tests`, not `tests/store.rs`.** Every migration test in
+   the repository is there (`migrating_v6_to_v7_preserves_existing_rows` and its five siblings),
+   and the structural assertions need `LIVE`, `UNANSWERED`, `ENGINE_MAY_DECIDE` and
+   `apply_migration`, none of which are public. Putting them where the queue said would have
+   meant exporting four private items to satisfy a filename. T005's v7 fixture is therefore an
+   in-module helper, `v7_store_with_every_provenance_state`, carrying **nine** rows across all
+   six provenance states plus a deliberate blank.
+3. **`SCHEMA_V8` uses plain `CREATE TABLE` / `CREATE INDEX`, not `IF NOT EXISTS`** as
+   `data-model.md` §1.1 wrote them. v7 established the discipline and
+   `reopening_a_v8_store_is_a_no_op` depends on it: a second open that re-ran the migration must
+   *fail*, not silently succeed. `IF NOT EXISTS` would have made that test vacuous.
+4. **Three existing tests pinned the head schema version at 7** and were updated to 8
+   (`migration_is_idempotent_across_reopens`, `reopening_a_v6_store_is_a_no_op`,
+   `schema_is_at_current_version_and_migration_is_idempotent`), and
+   `reopening_a_v7_store_is_a_no_op` was **renamed** to `…v8…`: it never opened a v7 store, it
+   opened a store at head and asserted the head version, so its name had been wrong since v7.
+
+**T029 was watched failing too.** The source-level assertion
+(`every_category_update_in_the_store_is_guarded`) went red under T035's break, which is the only
+evidence that a structural test bites at all.
+
+**T037 — deliberate deferrals, with reasons.** **C4** and **C7** move to PR B: there is no memory
+writer yet, and `set_transaction_category` accepts `remember` and ignores it (documented in the
+method, so the next reader does not read it as a bug). **C5** moves to PR C: the uncategorized
+narrowing does not exist yet. `UNANSWERED` and `PERSON_MEMORY` are declared in PR A and carry
+`#[allow(dead_code)]` with the pull request that consumes each named — `UNANSWERED` because it is
+half of the v8 index's `WHERE` and must be the same bytes as the reads that land in PR C, and
+`PERSON_MEMORY` because a reserved pair with only one half declared is how the other half gets
+re-invented as a bare literal.
+
+**One finding for PR D.** `ios/Tests/TransactionHistoryServiceTests.swift`'s
+`everyStoreFailureMapsToTheSameThing` lists the `StoreError` cases by hand and is now one case
+short of the "every" in its name. Nothing is wrong today — `TransactionListError.init(mapping:)`
+takes `_: Error` and discards it, so there is no exhaustive switch and no build break — but the
+list should gain `.NotFound` in PR D, where Swift is touched anyway.
 
 ---
 

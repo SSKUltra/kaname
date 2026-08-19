@@ -38,7 +38,7 @@ use crate::transfer::TransferInput;
 /// The schema version this build of the core knows how to run. The migration runner
 /// applies every version up to and including this one; re-opening an up-to-date database
 /// is a no-op.
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 /// The built-in category a bank-to-bank self-transfer's legs are assigned.
 const SELF_TRANSFER: &str = "SELF_TRANSFER";
@@ -184,6 +184,49 @@ macro_rules! live_predicate {
 /// return the wrong rows, it silently loses its index, and the plan-shape gate goes red.
 const LIVE: &str = live_predicate!();
 
+/// The unanswered rule as a *literal*, for the same reason [`live_predicate`] is one: it is
+/// half of the v8 index's `WHERE` and every read of the worklist must be the same bytes.
+macro_rules! unanswered_predicate {
+    () => {
+        "category_id IS NULL AND categorised_by IS NULL"
+    };
+}
+
+/// The only definition of "a transaction nothing has answered yet" — the rows the worklist is
+/// about. A person's **deliberate blank** (`category_id` NULL, `categorised_by` `'PERSON'`) is
+/// a decision and is therefore *not* unanswered; without the provenance arm the worklist could
+/// never reach zero, because every row a person deliberately left blank would return to it.
+///
+/// Declared here rather than with its first reader because it is half of the v8 index's `WHERE`
+/// (built from the macro above) and the two must be the same bytes. The worklist queries that
+/// read it land in the next pull request.
+#[allow(dead_code)]
+const UNANSWERED: &str = unanswered_predicate!();
+
+/// The rows the engine is still allowed to decide about: everything except the two provenance
+/// values a person owns.
+///
+/// 🚨 **The `IS NULL OR` arm is load-bearing and must never be "simplified".**
+/// `NULL NOT IN ('PERSON', 'PERSON_MEMORY')` evaluates to `NULL`, not `TRUE`, and `NULL` is not
+/// `TRUE`. The shorter spelling therefore excludes **every row an import has just inserted** —
+/// [`Store::import_statement`]'s bulk insert writes `NULL, NULL` literally — so every import
+/// would land wholly uncategorized and *nothing would error*. See research R10, and the C2
+/// regression test, which exists because C1 stays green against the broken spelling.
+const ENGINE_MAY_DECIDE: &str =
+    "(categorised_by IS NULL OR categorised_by NOT IN ('PERSON', 'PERSON_MEMORY'))";
+
+/// The `categorised_by` provenance of a category a person chose by hand. Reserved: no
+/// [`Stage`] may ever serialize to it (see `stage_to_sql`).
+const PERSON: &str = "PERSON";
+/// The `categorised_by` provenance of a category applied from a merchant the person taught the
+/// app about. Reserved, as [`PERSON`] is.
+///
+/// Declared beside [`PERSON`] rather than with its first writer, which lands in the next pull
+/// request: [`ENGINE_MAY_DECIDE`] already excludes both, and a reserved pair with only one half
+/// declared is precisely how the other half gets re-invented as a bare string literal.
+#[allow(dead_code)]
+const PERSON_MEMORY: &str = "PERSON_MEMORY";
+
 /// Forward-only schema **v7**: one partial, descending index over the live rows of an account,
 /// so the combined history can be read in its own order without sorting.
 ///
@@ -194,6 +237,33 @@ const LIVE: &str = live_predicate!();
 const SCHEMA_V7: &str = concat!(
     "CREATE INDEX idx_txn_live_account_date ON transactions(account_id, date DESC) WHERE ",
     live_predicate!(),
+    ";"
+);
+
+/// Forward-only schema **v8**: the merchant memory a person's correction forms, and one
+/// partial index over the rows nothing has answered yet.
+///
+/// **Additive only** — no `ALTER TABLE`, no row read, no row written, nothing dropped. That is
+/// what makes FR-047/SC-014 ("every existing transaction keeps its category, amount, date,
+/// description, account and provenance exactly") true *by construction* rather than by care:
+/// there is no statement here that could make it false. Provenance is carried by two reserved
+/// values in the existing `categorised_by` column ([`PERSON`], [`PERSON_MEMORY`]), so the
+/// `transactions` table is not touched at all.
+///
+/// `merchant_portion` is the **primary key**, not a unique index: "at most one memory per
+/// merchant at any time" is then unrepresentable otherwise rather than merely enforced. There
+/// is no timestamp — newest-wins is achieved by replacing the row, so the engine still reads no
+/// clock and a fixture can still pin the result.
+const SCHEMA_V8: &str = concat!(
+    "CREATE TABLE merchant_memory (\n",
+    "    merchant_portion TEXT PRIMARY KEY,\n",
+    "    category_id      TEXT NOT NULL REFERENCES categories(id)\n",
+    ") STRICT;\n",
+    "CREATE INDEX idx_txn_unanswered_account_date ON transactions(account_id, date DESC) \
+     WHERE ",
+    live_predicate!(),
+    " AND ",
+    unanswered_predicate!(),
     ";"
 );
 
@@ -234,6 +304,10 @@ pub enum StoreError {
     /// Any other SQL/storage failure.
     #[error("storage error: {message}")]
     Sql { message: String },
+    /// The row a write named does not exist, is not live, or names a category that does not.
+    /// Carries no row data — only which kind of thing was not found.
+    #[error("no such {kind}")]
+    NotFound { kind: String },
 }
 
 impl From<rusqlite::Error> for StoreError {
@@ -532,6 +606,24 @@ pub struct NewCategory {
 pub struct CategorizeSummary {
     pub categorized: u32,
     pub uncategorized: u32,
+}
+
+/// The outcome of [`Store::set_transaction_category`]: what the correction would remember, and
+/// whether it did.
+///
+/// The two fields are deliberately independent. `merchant_portion` is populated whenever the
+/// derivation succeeded — even when nothing was remembered — so an interface can say plainly
+/// what it *would* have learned, rather than being silent about a merchant it could not
+/// generalize.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CorrectionOutcome {
+    /// The merchant portion derived from the row's narration, or `None` when the narration
+    /// carried nothing specific enough to remember.
+    pub merchant_portion: Option<String>,
+    /// Whether a memory was actually written. False when the caller did not ask, when the
+    /// derivation found nothing, and — always — when the correction was to *no category*: a
+    /// memory of blankness would refill the worklist forever.
+    pub memory_formed: bool,
 }
 
 /// The outcome of [`Store::detect_transfers`]: how many self-transfer pairs were linked, and
@@ -1038,6 +1130,52 @@ impl Store {
         Ok(id)
     }
 
+    /// Record the category **a person chose** for one transaction, or their deliberate choice
+    /// of no category at all.
+    ///
+    /// Writes `categorised_by = 'PERSON'` in both cases, and that provenance is the whole
+    /// point: it is what [`ENGINE_MAY_DECIDE`] excludes, so neither the next import nor
+    /// transfer detection can quietly take the decision back. A deliberate blank is protected
+    /// exactly as strongly as a category, because it is exactly as much of a decision.
+    ///
+    /// `remember` asks for the choice to be remembered for this merchant. **It is accepted and
+    /// deliberately ignored in this slice's first pull request** — the merchant memory and its
+    /// derivation land in the next one, and `CorrectionOutcome::memory_formed` is therefore
+    /// always `false` here. This is a staging decision, not a bug.
+    ///
+    /// Errors with [`StoreError::NotFound`] when the id names no live transaction, and when the
+    /// category names no row (the foreign key gives the second for free).
+    pub fn set_transaction_category(
+        &self,
+        transaction_id: String,
+        category: Option<CategoryRef>,
+        remember: bool,
+    ) -> Result<CorrectionOutcome, StoreError> {
+        let _ = remember;
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+
+        let category_id = category.as_ref().map(category_ref_to_id);
+        let updated = tx.execute(
+            &format!(
+                "UPDATE transactions SET category_id = ?2, categorised_by = '{PERSON}' \
+                 WHERE id = ?1 AND {LIVE}"
+            ),
+            params![transaction_id, category_id],
+        )?;
+        if updated == 0 {
+            return Err(StoreError::NotFound {
+                kind: "transaction".to_string(),
+            });
+        }
+        tx.commit()?;
+
+        Ok(CorrectionOutcome {
+            merchant_portion: None,
+            memory_formed: false,
+        })
+    }
+
     /// Persist a T2 merchant-map entry (the "memory") and return its row id. The referenced
     /// category must already exist (built-in or user) or the insert fails closed (FK).
     pub fn insert_merchant_rule(&self, rule: MerchantRule) -> Result<i64, StoreError> {
@@ -1156,12 +1294,12 @@ impl Store {
 
         let mut summary = TransferSummary::default();
         {
-            let mut update = tx.prepare(
+            let mut update = tx.prepare(&format!(
                 "UPDATE transactions \
                  SET is_transfer = 1, transfer_group_id = ?2, category_id = ?3, \
                      categorised_by = ?4 \
-                 WHERE id = ?1 AND transfer_group_id IS NULL",
-            )?;
+                 WHERE id = ?1 AND transfer_group_id IS NULL AND {ENGINE_MAY_DECIDE}"
+            ))?;
             for pair in &pairs {
                 let group_id = mint_id(&tx)?;
                 let category = if pair.is_credit_card_payment {
@@ -1300,9 +1438,10 @@ pub fn categorize_account_in(
 
     let mut summary = CategorizeSummary::default();
     {
-        let mut update = tx.prepare(
-            "UPDATE transactions SET category_id = ?2, categorised_by = ?3 WHERE id = ?1",
-        )?;
+        let mut update = tx.prepare(&format!(
+            "UPDATE transactions SET category_id = ?2, categorised_by = ?3 \
+             WHERE id = ?1 AND {ENGINE_MAY_DECIDE}"
+        ))?;
         for (txn_id, txn) in &pending {
             match crate::categorize::categorize(txn, &catalog, &merchants, &rules, &source_map) {
                 Some(decision) => {
@@ -1550,6 +1689,10 @@ fn apply_migration(tx: &rusqlite::Transaction<'_>, version: i64) -> Result<(), S
             tx.execute_batch(SCHEMA_V7).map_err(StoreError::migration)?;
             Ok(())
         }
+        8 => {
+            tx.execute_batch(SCHEMA_V8).map_err(StoreError::migration)?;
+            Ok(())
+        }
         other => Err(StoreError::Migration {
             message: format!("no migration defined for schema version {other}"),
         }),
@@ -1755,22 +1898,27 @@ fn map_transaction(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
 /// Load one account's non-deleted, non-transfer transactions as `(id, CategoryTxn)` pairs ready
 /// for the categorization stack. `bank_code`/`is_credit_card` come from the owning account; the
 /// rest from each row (the issuer's `source_category` hint feeds T1). Transfer legs are excluded
-/// so the stack never overwrites the category the transfer detector assigned them.
+/// so the stack never overwrites the category the transfer detector assigned them, and rows a
+/// person has decided about are excluded for the same reason — the stack cannot overwrite an
+/// answer it never sees.
 fn load_account_transactions(
     conn: &Connection,
     account_id: &str,
     bank_code: &str,
     is_credit_card: bool,
 ) -> Result<Vec<(String, CategoryTxn)>, StoreError> {
-    let mut stmt = conn.prepare(concat!(
-        "SELECT id, source_category, description_raw, amount, direction \
-         FROM transactions \
-         WHERE account_id = ?1 AND ",
-        // Built from the same literal as the v7 index and `PAGE_SQL`, because this load ran for
-        // a long time with only half the rule and reported superseded losers as part of the
-        // account (`.scratch/016-statement-import-vertical/issues/04`).
-        live_predicate!(),
-        " AND is_transfer = 0 ORDER BY rowid",
+    let mut stmt = conn.prepare(&format!(
+        concat!(
+            "SELECT id, source_category, description_raw, amount, direction \
+             FROM transactions \
+             WHERE account_id = ?1 AND ",
+            // Built from the same literal as the v7 index and `PAGE_SQL`, because this load ran
+            // for a long time with only half the rule and reported superseded losers as part of
+            // the account (`.scratch/016-statement-import-vertical/issues/04`).
+            live_predicate!(),
+            " AND is_transfer = 0 AND {} ORDER BY rowid",
+        ),
+        ENGINE_MAY_DECIDE
     ))?;
     let raw = stmt
         .query_map(params![account_id], |row| {
@@ -2775,6 +2923,293 @@ mod tests {
             predicate, LIVE,
             "a read that paraphrases the live rule silently loses its index"
         );
+    }
+
+    /// One transaction's identity and provenance: `(id, category_id, categorised_by, amount,
+    /// date, description_raw, account_id)`. Every field FR-047 promises survives a migration.
+    type ProvenanceRow = (
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        String,
+        String,
+        String,
+    );
+
+    /// A v7 store carrying one transaction in **every** provenance state. G1 is worth nothing
+    /// against a fixture with a single state in it, which is why this builds all six.
+    fn v7_store_with_every_provenance_state() -> Connection {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        let tx = conn.transaction().unwrap();
+        for v in 1..=7 {
+            apply_migration(&tx, v).expect("apply migration");
+        }
+        tx.pragma_update(None, "user_version", 7).unwrap();
+        tx.execute(
+            "INSERT INTO accounts \
+             (id, name, bank_code, is_credit_card, currency, last4, created_at, updated_at) \
+             VALUES ('a1', 'Savings', 'HDFC', 0, 'INR', '4321', 't', 't')",
+            [],
+        )
+        .unwrap();
+        tx.execute_batch(
+            "INSERT INTO transactions \
+               (id, account_id, date, description_raw, amount, direction, currency, \
+                is_deleted, category_id, categorised_by, created_at, updated_at) VALUES \
+               ('none',  'a1', '2026-07-01', 'unanswered', '1.00', 'Debit', 'INR', 0, \
+                NULL, NULL, 't', 't'), \
+               ('t1',    'a1', '2026-07-02', 'source map', '2.00', 'Debit', 'INR', 0, \
+                'GROCERIES', 'T1_SOURCE_CATEGORY', 't', 't'), \
+               ('t2',    'a1', '2026-07-03', 'merchant',   '3.00', 'Debit', 'INR', 0, \
+                'FOOD_AND_DINING', 'T2_MERCHANT_MAP', 't', 't'), \
+               ('t3',    'a1', '2026-07-04', 'rule',       '4.00', 'Debit', 'INR', 0, \
+                'FUEL', 'T3_RULE', 't', 't'), \
+               ('cc',    'a1', '2026-07-05', 'cc rule',    '5.00', 'Debit', 'INR', 0, \
+                'SHOPPING', 'CC_RULE', 't', 't'), \
+               ('xfer',  'a1', '2026-07-06', 'transfer',   '6.00', 'Debit', 'INR', 0, \
+                'SELF_TRANSFER', 'TRANSFER_DETECTOR', 't', 't'), \
+               ('person','a1', '2026-07-07', 'corrected',  '7.00', 'Debit', 'INR', 0, \
+                'TRANSPORT', 'PERSON', 't', 't'), \
+               ('memory','a1', '2026-07-08', 'remembered', '8.00', 'Debit', 'INR', 0, \
+                'ENTERTAINMENT', 'PERSON_MEMORY', 't', 't'), \
+               ('blank', 'a1', '2026-07-09', 'deliberate', '9.00', 'Debit', 'INR', 0, \
+                NULL, 'PERSON', 't', 't');",
+        )
+        .unwrap();
+        tx.commit().unwrap();
+        conn
+    }
+
+    /// Every `(id, category_id, categorised_by, amount, date, description_raw, account_id)`
+    /// tuple in the store, ordered by id — the shape G1 compares byte-for-byte.
+    fn provenance_snapshot(conn: &Connection) -> Vec<ProvenanceRow> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, category_id, categorised_by, amount, date, description_raw, \
+                 account_id FROM transactions ORDER BY id",
+            )
+            .unwrap();
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
+            })
+            .unwrap();
+        rows.collect::<rusqlite::Result<Vec<_>>>().unwrap()
+    }
+
+    /// **G2** — after v8 the version is 8, `merchant_memory` exists and is empty, and the
+    /// unanswered index exists.
+    #[test]
+    fn migrating_v7_to_v8_adds_the_memory_table_and_its_index() {
+        let mut conn = v7_store_with_every_provenance_state();
+
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 8).expect("apply v8");
+            tx.pragma_update(None, "user_version", 8).unwrap();
+            tx.commit().unwrap();
+        }
+
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 8);
+
+        let memories: i64 = conn
+            .query_row("SELECT count(*) FROM merchant_memory", [], |row| row.get(0))
+            .expect("merchant_memory exists");
+        assert_eq!(memories, 0, "a migration must not invent a memory");
+
+        let index_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master \
+                 WHERE type = 'index' AND name = 'idx_txn_unanswered_account_date'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("the v8 index exists");
+        assert!(
+            index_sql.contains("date DESC"),
+            "the index must be descending by date: {index_sql}"
+        );
+    }
+
+    /// **G1** — the migration reads no row and writes no row, so every transaction survives
+    /// byte-identically in all six provenance states (FR-047, SC-014).
+    #[test]
+    fn migrating_v7_to_v8_preserves_existing_rows() {
+        let mut conn = v7_store_with_every_provenance_state();
+        let before = provenance_snapshot(&conn);
+        assert_eq!(before.len(), 9, "the fixture must carry every state");
+
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 8).expect("apply v8");
+            tx.pragma_update(None, "user_version", 8).unwrap();
+            tx.commit().unwrap();
+        }
+
+        assert_eq!(
+            provenance_snapshot(&conn),
+            before,
+            "v8 is additive: no row may be read, rewritten or reclassified by it"
+        );
+    }
+
+    /// **G3** — a failing migration leaves `user_version` at 7 and no partial object behind
+    /// (FR-048, SC-015).
+    #[test]
+    fn a_failed_v8_migration_leaves_v7_intact() {
+        let mut conn = v7_store_with_every_provenance_state();
+
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 8).expect("apply v8");
+            tx.pragma_update(None, "user_version", 8).unwrap();
+            // The migration itself is additive and cannot realistically fail, so the failure is
+            // staged after it: what is under test is that `migrate`'s per-version transaction
+            // carries the version bump and every created object with it.
+            tx.execute("INSERT INTO transactions (id) VALUES ('no-such-shape')", [])
+                .expect_err("the staged failure must actually fail");
+            tx.rollback().unwrap();
+        }
+
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            version, 7,
+            "a rolled-back migration must not bump the version"
+        );
+        let table: Option<String> = conn
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'merchant_memory'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .unwrap();
+        assert!(
+            table.is_none(),
+            "a rolled-back migration must leave no partial object behind"
+        );
+    }
+
+    /// **G4** — a migrated v8 store has the same schema objects as a store created at v8.
+    #[test]
+    fn a_migrated_v8_store_matches_a_fresh_one() {
+        let schema_of = |conn: &Connection| -> Vec<(String, String)> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT type, name FROM sqlite_master \
+                     WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name",
+                )
+                .unwrap();
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .unwrap();
+            rows.collect::<rusqlite::Result<Vec<_>>>().unwrap()
+        };
+
+        let mut migrated = v7_store_with_every_provenance_state();
+        {
+            let tx = migrated.transaction().unwrap();
+            apply_migration(&tx, 8).expect("apply v8");
+            tx.commit().unwrap();
+        }
+
+        let mut fresh = Connection::open_in_memory().unwrap();
+        {
+            let tx = fresh.transaction().unwrap();
+            for v in 1..=8 {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.commit().unwrap();
+        }
+
+        assert_eq!(schema_of(&migrated), schema_of(&fresh));
+    }
+
+    /// The contract's one unnumbered structural requirement: the v8 index's `WHERE` is the
+    /// **byte-identical** concatenation of `LIVE` and `UNANSWERED`. It is the only thing that
+    /// stops the index and the queries that must use it drifting apart in silence.
+    #[test]
+    fn the_unanswered_index_predicate_is_live_and_unanswered_verbatim() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        {
+            let tx = conn.transaction().unwrap();
+            for v in 1..=SCHEMA_VERSION {
+                apply_migration(&tx, v).expect("apply migration");
+            }
+            tx.commit().unwrap();
+        }
+
+        let index_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master \
+                 WHERE type = 'index' AND name = 'idx_txn_unanswered_account_date'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("the v8 index exists");
+
+        let predicate = index_sql
+            .split_once("WHERE")
+            .expect("the index is partial")
+            .1
+            .trim()
+            .trim_end_matches(';')
+            .trim();
+        assert_eq!(
+            predicate,
+            format!("{LIVE} AND {UNANSWERED}"),
+            "the worklist's index and the worklist's query must be the same bytes"
+        );
+    }
+
+    /// The predicates mean what their names say — and the one that matters most is that
+    /// `ENGINE_MAY_DECIDE` **admits** a `NULL`-provenance row (research R10).
+    #[test]
+    fn the_predicates_admit_and_exclude_the_right_rows() {
+        let mut conn = v7_store_with_every_provenance_state();
+        {
+            let tx = conn.transaction().unwrap();
+            apply_migration(&tx, 8).expect("apply v8");
+            tx.commit().unwrap();
+        }
+
+        let ids = |predicate: &str| -> Vec<String> {
+            let mut stmt = conn
+                .prepare(&format!(
+                    "SELECT id FROM transactions WHERE {predicate} ORDER BY id"
+                ))
+                .unwrap();
+            let rows = stmt.query_map([], |row| row.get(0)).unwrap();
+            rows.collect::<rusqlite::Result<Vec<String>>>().unwrap()
+        };
+
+        // A person's deliberate blank is a decision, not an unanswered row.
+        assert_eq!(ids(UNANSWERED), vec!["none".to_string()]);
+
+        // The engine may still decide about everything except the two the person owns.
+        let decidable = ids(ENGINE_MAY_DECIDE);
+        assert!(
+            decidable.contains(&"none".to_string()),
+            "a NULL provenance row must be decidable — this is the whole of research R10"
+        );
+        assert!(!decidable.contains(&"person".to_string()));
+        assert!(!decidable.contains(&"blank".to_string()));
+        assert!(!decidable.contains(&"memory".to_string()));
+        assert_eq!(decidable.len(), 6);
     }
 
     #[test]
