@@ -9,7 +9,7 @@ import SwiftUI
 /// person hears can be asserted with nothing rendered (FR-074). Nothing here decides which
 /// rows exist, what order they come in, or whether one counts: those belong to the engine, and
 /// the moment Swift has an opinion about them, a count and a list can disagree.
-struct TransactionRow: Identifiable, Equatable, Sendable {
+struct TransactionRow: Identifiable, Equatable, Hashable, Sendable {
     let id: String
     let accountID: String
     let accountName: String
@@ -24,6 +24,10 @@ struct TransactionRow: Identifiable, Equatable, Sendable {
     let direction: Direction
     let currency: String
     let categoryName: String?
+    /// The same category, by id — what the picker marks the current choice with, because two
+    /// categories may be renamed to the same words and a mark that matched on words would
+    /// follow the rename (K3, FR-005).
+    let categoryID: String?
     let isTransfer: Bool
 
     init(_ row: HistoryRow, calendar: Calendar = .current) {
@@ -38,6 +42,7 @@ struct TransactionRow: Identifiable, Equatable, Sendable {
         direction = row.direction
         currency = row.currency
         categoryName = row.categoryName
+        categoryID = row.categoryId
         isTransfer = row.isTransfer
     }
 
@@ -95,6 +100,10 @@ struct TransactionRow: Identifiable, Equatable, Sendable {
         return parts.joined(separator: ", ")
     }
 
+    /// The date in full, with its year — a transaction opened on its own is out of reach of
+    /// the heading that would otherwise have carried the year for it.
+    var longDate: String { date.formatted(.dateTime.day().month(.wide).year()) }
+
     /// `YYYY-MM-DD` to a local-midnight `Date`, for formatting only. The engine's dates are
     /// always well formed; a malformed one would be a bug upstream, and rendering the epoch
     /// makes it visible rather than crashing a person's list.
@@ -132,7 +141,7 @@ struct DateGroup: Identifiable, Equatable, Sendable {
 
 /// Which population the list is showing. A single account is a **filter on the one list**, not
 /// a second screen with its own ordering, empty states or row treatment (FR-036).
-enum AccountFilter: Equatable, Hashable, Sendable {
+enum AccountFilter: Equatable, Hashable, Codable, Sendable {
     case all
     case account(id: String, name: String, last4: String?)
 

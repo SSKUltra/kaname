@@ -113,7 +113,7 @@ struct SeedAccountExpectation: Sendable, Equatable {
 
 extension SeedScenario {
     /// Every scenario a launch may name. An unrecognised name fails the launch (FR-006).
-    static let declared: [SeedScenario] = [.empty, .small, .deep, .barren]
+    static let declared: [SeedScenario] = [.empty, .small, .deep, .barren, .unfiled]
 
     static func named(_ name: String) -> SeedScenario? {
         declared.first { $0.name == name }
@@ -207,6 +207,58 @@ extension SeedScenario {
 
     static let barrenFirstName = "SYNTHETIC BANK SIX"
     static let barrenSecondName = "SYNTHETIC CARD SEVEN"
+
+    /// A card statement whose rows are mostly **unanswered**, with two the engine can place —
+    /// the worklist, small enough to be worked to zero by hand in a test (FR-066).
+    ///
+    /// ⚠️ The two categorized rows are not decoration. A scenario where *everything* is
+    /// unanswered cannot tell "the worklist shows what nobody has answered" apart from "the
+    /// worklist shows everything", which is the assertion PR F actually needs. A fresh store
+    /// seeds categories but no rules and no source-category map, so the only stage that can
+    /// fire is the engine's hard-coded card stage: a card **inflow** carrying cashback
+    /// language, and a bank **outflow** naming a payment intent beside a card token. Those are
+    /// the two shapes below, and declaring their outcome is what lets a test notice if the
+    /// engine ever stops placing them.
+    static let unfiled = SeedScenario(
+        name: "unfiled",
+        now: "2026-01-15T09:00:00Z",
+        statements: [
+            SeedStatement(
+                accountName: unfiledCardName,
+                bankCode: "SYNTH_CARD",
+                isCreditCard: true,
+                last4: "0009",
+                currency: "INR",
+                periodStart: "2025-05-01",
+                periodEnd: "2025-05-31",
+                reimportsPrevious: false,
+                rows: unfiledRows
+            )
+        ]
+    )
+
+    /// As long as a real card product's printed name, for the reason `smallAccountName` is.
+    static let unfiledCardName = "SYNTHETIC INTERNATIONAL REWARDS CARD"
+
+    private static let unfiledRows: [SeedRow] = [
+        SeedRow(
+            date: "2025-05-10", description: "SYNTHETIC UNFILED MERCHANT 01", amount: "310.00",
+            direction: .debit, currency: "INR", sourceCategory: nil, expectedCategory: nil),
+        SeedRow(
+            date: "2025-05-11", description: "SYNTHETIC UNFILED MERCHANT 02", amount: "1420.50",
+            direction: .debit, currency: "INR", sourceCategory: nil, expectedCategory: nil),
+        SeedRow(
+            date: "2025-05-12", description: "SYNTHETIC CASHBACK 009", amount: "75.00",
+            direction: .credit, currency: "INR", sourceCategory: nil,
+            expectedCategory: "Cashbacks & Refunds"),
+        SeedRow(
+            date: "2025-05-13", description: "SYNTHETIC UNFILED MERCHANT 04", amount: "88.25",
+            direction: .debit, currency: "INR", sourceCategory: nil, expectedCategory: nil),
+        SeedRow(
+            date: "2025-05-14", description: "SYNTHETIC CASHBACK 014", amount: "120.00",
+            direction: .credit, currency: "INR", sourceCategory: nil,
+            expectedCategory: "Cashbacks & Refunds"),
+    ]
 }
 
 // MARK: - `deep`

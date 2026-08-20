@@ -17,7 +17,7 @@ struct RootView: View {
                     // list is one list, and an account is a filter on it (FR-001, FR-043).
                     if !model.accounts.isEmpty {
                         ToolbarItem(placement: .topBarTrailing) {
-                            NavigationLink(value: AccountFilter.all) {
+                            NavigationLink(value: TransactionScope.everything) {
                                 Label(
                                     TransactionListStrings.frontDoorLink,
                                     systemImage: "list.bullet.rectangle"
@@ -26,8 +26,13 @@ struct RootView: View {
                         }
                     }
                 }
-                .navigationDestination(for: AccountFilter.self) { filter in
-                    TransactionListView(filter: filter, model: .live()) {
+                // One destination for the transaction list, and the value it takes carries
+                // **both** questions the list can be asked — which account, and whether to
+                // narrow to what nobody has answered yet. A second destination for a
+                // "just unfiled" list would give one screen two identities and two back-stack
+                // behaviours (contract §2).
+                .navigationDestination(for: TransactionScope.self) { scope in
+                    TransactionListView(filter: scope.filter, model: .live()) {
                         isPickingFile = true
                     }
                 }

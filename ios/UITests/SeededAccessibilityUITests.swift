@@ -192,6 +192,100 @@ final class SeededAccessibilityUITests: XCTestCase {
             "the first heading is not \(expected)")
     }
 
+    // MARK: - 020 — the surfaces a person changes a category on
+
+    /// A9 — the transaction surface and the picker, at the default size in Light.
+    func testTheTransactionSurfaceAndPickerPassTheAudit() throws {
+        SeededLaunch.pin(.light, in: self)
+        try auditCategorizeSurfaces(arguments: [], types: audited)
+    }
+
+    /// A10 — the same two surfaces at the largest accessibility size, where a picker of two
+    /// dozen categories and a surface of four facts each have to survive the text growing.
+    func testTheTransactionSurfaceAndPickerSurviveTheLargestTextSize() throws {
+        SeededLaunch.pin(.light, in: self)
+        try auditCategorizeSurfaces(arguments: Self.xxxl, types: auditedAtLargeSizes)
+    }
+
+    /// A11 — and in Dark Mode, which is its own problem rather than a repaint of the light one.
+    func testTheTransactionSurfaceAndPickerPassTheAuditInDarkMode() throws {
+        SeededLaunch.pin(.dark, in: self)
+        try auditCategorizeSurfaces(arguments: [], types: audited)
+    }
+
+    /// A12 — **geometry, not audit** (K7, R4, FR-062). The auditor's own hit-target check has
+    /// never fired on this repository's controls, and a category row that is too short to hit
+    /// is a control a person cannot use however well it is labelled. Measured on the row a
+    /// person taps most: the deliberate blank, which is the first thing the picker offers.
+    func testEveryPickerChoiceIsBigEnoughToHit() {
+        SeededLaunch.pin(.light, in: self)
+        let app = SeededLaunch.launch(scenario: .small)
+        SeededLaunch.openTransactionList(app)
+        Self.openPicker(app)
+
+        // ⚠️ Matched by prefix. The blank's spoken label carries its mark when it *is* the
+        // current choice — "No category, Current category" — and a seeded row is unfiled, so
+        // an exact match finds nothing and reads as a missing control.
+        let blank = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "No category")
+        ).firstMatch
+        XCTAssertTrue(blank.waitForExistence(timeout: 10), "the picker does not offer the blank")
+        XCTAssertGreaterThanOrEqual(blank.frame.height, 44, "a choice is too short to hit")
+        XCTAssertGreaterThanOrEqual(blank.frame.width, 44, "a choice is too narrow to hit")
+    }
+
+    /// Open a transaction, then the picker over it, and audit both — one launch, because the
+    /// picker is only reachable through the surface and auditing them apart would audit the
+    /// second one out of the state the first one puts it in.
+    private func auditCategorizeSurfaces(
+        arguments: [String], types: XCUIAccessibilityAuditType
+    ) throws {
+        let app = SeededLaunch.launch(scenario: .small, arguments: arguments)
+        SeededLaunch.openTransactionList(app)
+
+        guard let row = Self.firstRowLink(app) else {
+            return XCTFail("the audit would be running against an empty list")
+        }
+        row.tap()
+        XCTAssertTrue(
+            app.navigationBars["Transaction"].waitForExistence(timeout: 10),
+            "the transaction surface did not open")
+        try audit(app, types: types)
+
+        Self.openPicker(app)
+        try audit(app, types: types)
+    }
+
+    private static func openPicker(_ app: XCUIApplication) {
+        if !app.navigationBars["Transaction"].exists, let row = firstRowLink(app) {
+            row.tap()
+            _ = app.navigationBars["Transaction"].waitForExistence(timeout: 10)
+        }
+        // ⚠️ Scrolled to at accessibility sizes. FR-004 asks for the action to be reachable
+        // **without scrolling at the default text size**, which it is; at XXXL four facts and
+        // a category take the screen, and a test that refused to scroll would be asserting a
+        // requirement nobody made.
+        let change = app.buttons["Change category"].firstMatch
+        if !change.waitForExistence(timeout: 5) || !change.isHittable {
+            app.collectionViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(change.waitForExistence(timeout: 10), "the surface offers no way to change")
+        change.tap()
+        XCTAssertTrue(
+            app.navigationBars["Choose a category"].waitForExistence(timeout: 10),
+            "the picker did not open")
+    }
+
+    /// The first row, as the link it now is — the sentence hangs on the button inside the cell.
+    private static func firstRowLink(_ app: XCUIApplication) -> XCUIElement? {
+        for cell in app.cells.allElementsBoundByIndex {
+            if let link = cell.buttons.allElementsBoundByIndex.first, !link.label.isEmpty {
+                return link
+            }
+        }
+        return nil
+    }
+
     private func auditPopulatedList(arguments: [String], types: XCUIAccessibilityAuditType) throws {
         let app = SeededLaunch.launch(scenario: .small, arguments: arguments)
         SeededLaunch.openTransactionList(app)

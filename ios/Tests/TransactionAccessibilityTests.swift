@@ -221,6 +221,34 @@ struct TransactionAccessibilityTests {
         #expect(bar.contains("FilterChromeLayout"))
     }
 
+    /// **R1–R4** — the row became a link, and gave up nothing to do it.
+    ///
+    /// Written when the row gained a `NavigationLink`, because that change can break three
+    /// things at once and every one of them is invisible in a screenshot: a linked row
+    /// announces its labels as separate fragments unless the combined element survives (R2), a
+    /// `List` draws a disclosure chevron and an inset unless told not to (R3, FR-046), and the
+    /// tap target stops being the row if the link wraps only part of it (R4).
+    @Test("The row is a link that kept its sentence, its layout and its whole tap target")
+    func theRowIsALinkThatChangedNothingElse() throws {
+        let sources = Dictionary(uniqueKeysWithValues: try Self.transactionViewSources())
+        let row = try #require(sources["TransactionRowView.swift"])
+
+        // R1: the row itself is the link, and it carries the row as the navigation value —
+        // not an id the destination would have to look up again.
+        #expect(row.contains("NavigationLink(value: row)"))
+        // R3: the indicator is turned off with iOS 26's own API. A hidden-link trick — an
+        // `.opacity(0)` link behind the content — would pass a screenshot and leave a second,
+        // empty accessibility element on every row.
+        #expect(row.contains(".navigationLinkIndicatorVisibility(.hidden)"))
+        #expect(!row.contains(".opacity(0)"))
+        // R2: one element, one sentence, still.
+        #expect(row.contains(".accessibilityElement(children: .combine)"))
+        #expect(row.contains(".accessibilityLabel(row.accessibilityLabel)"))
+        // And the sentence itself is unchanged — a hint says what tapping does, and is spoken
+        // separately, so it cannot lengthen what a person hears when scanning a list.
+        #expect(row.contains(".accessibilityHint("))
+    }
+
     /// The view sources, read from the repository rather than the bundle — the test target
     /// runs in a simulator, so the path comes from `#filePath`, which is a compile-time
     /// constant pointing at this file.

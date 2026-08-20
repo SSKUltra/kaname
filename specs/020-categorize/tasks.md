@@ -474,50 +474,137 @@ PR C touches them.
 
 **Purpose**: four of `import-path-audit.sh`'s ten scans are scoped to `ios/Sources/Transactions/`. New code in `ios/Sources/Categorize/` would be **unwatched** by exactly the scans that exist to watch it. Widen first, prove the widening reaches, then write the code.
 
-- [ ] T094 Widen scans **5** (second opinion), **6** (filter persistence), **7** (aggregates) and **8** (`.tint`) in `scripts/import-path-audit.sh` from `TRANSACTIONS_DIR="$SOURCES_DIR/Transactions"` to also cover `ios/Sources/Categorize/` (plan § *Judgement calls* §6). Widening the scope of a scan is not weakening it, so FR-056 / SC-022 hold. ⚠️ The scans must tolerate the directory not existing yet, and ⚠️ must not use `grep -c` or end a pipeline in a bare `grep` under `set -euo pipefail`.
-- [ ] T095 Run `make import-audit` — all ten scans green with the widened scope, before `ios/Sources/Categorize/` contains anything.
-- [ ] T096 **DELIBERATE BREAK** — create a throwaway `ios/Sources/Categorize/__scope_probe.swift` containing a `.filter { … }` applied to a returned page and a `.reduce` over `AccountSummary`. Expected: **scans 5/6/7 RED**. Delete the file and re-run. This is the only task that proves the widened scope actually reaches the new directory — a widening that silently missed would look exactly like a clean audit for the rest of the slice.
+- [x] T094 Widen scans **5** (second opinion), **6** (filter persistence), **7** (aggregates) and **8** (`.tint`) in `scripts/import-path-audit.sh` from `TRANSACTIONS_DIR="$SOURCES_DIR/Transactions"` to also cover `ios/Sources/Categorize/` (plan § *Judgement calls* §6). Widening the scope of a scan is not weakening it, so FR-056 / SC-022 hold. ⚠️ The scans must tolerate the directory not existing yet, and ⚠️ must not use `grep -c` or end a pipeline in a bare `grep` under `set -euo pipefail`.
+- [x] T095 Run `make import-audit` — all ten scans green with the widened scope, before `ios/Sources/Categorize/` contains anything.
+- [x] T096 **DELIBERATE BREAK** — create a throwaway `ios/Sources/Categorize/__scope_probe.swift` containing a `.filter { … }` applied to a returned page and a `.reduce` over `AccountSummary`. Expected: **scans 5/6/7 RED**. Delete the file and re-run. This is the only task that proves the widened scope actually reaches the new directory — a widening that silently missed would look exactly like a clean audit for the rest of the slice.
 
 **Checkpoint**: the new directory is watched before it exists.
 
 ## Phase 13: Unit assertions — no simulator, no seeding [US1]
 
-- [ ] T097 [P] [US1] RED **U1** in `ios/Tests/CategoryCatalogTests.swift`: `CategoryCatalog.grouped` groups by `Category.classification`, deterministically, for an empty catalog, a single-classification catalog and the full one (K2, K6, FR-017).
-- [ ] T098 [P] [US1] RED **U3** in `ios/Tests/CategorizeStringsTests.swift`: `CategorizeStrings` contains no banned engine vocabulary — `T1`, `T2`, `stage`, `rule`, `heuristic`, `merchant map`, `provenance`, `tier` — asserted over the **whole table**, not a sample (T3, FR-029, SC-007).
-- [ ] T099 [P] [US1] RED **U4** in `ios/Tests/TransactionScopeTests.swift`: `TransactionScope` round-trips through `Hashable`/`Codable`, and two scopes differing only in `uncategorizedOnly` are **not equal** and do not collide in the nav stack.
-- [ ] T100 ⚠️ **BUILD** — `make ios-gen` (three new test files), then `make ios-test`. **Confirm in the test log that all three suites actually RAN and are RED.** `sources: ["Sources/**"]` resolves at generation time; a suite that never ran reports success. This bit 019 twice. ⚠️ Never concurrently with `make core-test`.
+- [x] T097 [P] [US1] RED **U1** in `ios/Tests/CategoryCatalogTests.swift`: `CategoryCatalog.grouped` groups by `Category.classification`, deterministically, for an empty catalog, a single-classification catalog and the full one (K2, K6, FR-017).
+- [x] T098 [P] [US1] RED **U3** in `ios/Tests/CategorizeStringsTests.swift`: `CategorizeStrings` contains no banned engine vocabulary — `T1`, `T2`, `stage`, `rule`, `heuristic`, `merchant map`, `provenance`, `tier` — asserted over the **whole table**, not a sample (T3, FR-029, SC-007).
+- [x] T099 [P] [US1] RED **U4** in `ios/Tests/TransactionScopeTests.swift`: `TransactionScope` round-trips through `Hashable`/`Codable`, and two scopes differing only in `uncategorizedOnly` are **not equal** and do not collide in the nav stack.
+- [x] T100 ⚠️ **BUILD** — `make ios-gen` (three new test files), then `make ios-test`. **Confirm in the test log that all three suites actually RAN and are RED.** `sources: ["Sources/**"]` resolves at generation time; a suite that never ran reports success. This bit 019 twice. ⚠️ Never concurrently with `make core-test`.
 
 ## Phase 14: The new surface [US1] [US5]
 
-- [ ] T101 [US1] Create `ios/Sources/Categorize/CategorizeStrings.swift` (rules T1–T4). ⚠️ `uncategorized` is **referenced** from `TransactionListStrings.uncategorized` (`TransactionListStrings.swift:65`), never redeclared — two spellings of that word is precisely the defect FR-002 / SC-002 exists to prevent. ⚠️ swift-format `[Spacing]` rejects trailing inline comments; put explanations above the line.
-- [ ] T102 [US1] Create `ios/Sources/Categorize/TransactionScope.swift` — `struct TransactionScope: Hashable, Codable { var filter: AccountFilter; var uncategorizedOnly: Bool }` (contract §2). `AccountFilter` is **reused unchanged**, not reimplemented. It lives here rather than beside `AccountFilter` because `TransactionListModels.swift` is at 332 lines and next at risk.
-- [ ] T103 [US1] Create `ios/Sources/Categorize/CategoryCatalog.swift` — `grouped(_:)` is **pure**: `[Category]` in, grouped array out, no engine call, no state (K2, FR-076).
-- [ ] T104 ⚠️ **BUILD** — `make ios-gen` (three new Swift files), then `make ios-test` — U1, U3 and U4 green.
-- [ ] T105 [US1] Create `ios/Sources/Categorize/CategorizeService.swift` — the actor seam of contract §1. Every method is a **thin pass-through to one engine call**: it must not filter, count, sum, group, sort by a derived key, or take a second opinion about anything the engine returned (FR-076, FR-077, FR-078). `uncategorizedCount()` in particular returns the engine's number verbatim.
-- [ ] T106 [US1] Create `ios/Sources/Categorize/TransactionDetailView.swift` (rules D1–D6): the transaction's own facts and its current category or the app's one word for having none (D1, D2); no engine vocabulary (D3, FR-029); `Decimal` formatting with tabular figures carried from 018 (D4); Liquid Glass unconditionally — no `#available(iOS 26, *)`, no `.ultraThinMaterial`, `.glassProminent` only via `Theme.swift` (D5, FR-063, SC-021); one primary action reachable without scrolling at default Dynamic Type (D6, FR-004).
-- [ ] T107 [US1] Create `ios/Sources/Categorize/CategoryPickerView.swift` (rules K1, K3–K7): every category the engine knows, grouped by the **engine's** classification (K1, FR-016); the current category marked by `HistoryRow.category_id`, **never** by display-name match (K3, FR-005); choosing dismisses and the new category is visible without a manual refresh (K5, FR-006, SC-003).
-- [ ] T108 ⚠️ **BUILD** — `make ios-gen` (three new Swift files).
-- [ ] T109 [US1] Make the transaction row a `NavigationLink` in `ios/Sources/Transactions/TransactionRowView.swift` (R1, FR-003). ⚠️ The row's **visual layout does not change** — no chevron, no inset (R3, FR-046) — and the tap target is the full row, ≥44×44pt (R4, FR-062).
-- [ ] T110 [US1] Preserve the row's combined accessibility element (`.accessibilityElement(children: .combine)`, `TransactionRowView.swift:36-38`) and assert it in `ios/Tests/TransactionAccessibilityTests.swift`: the sentence VoiceOver reads must **not** fragment into per-label pieces because the row gained a link (R2, FR-060, SC-016).
-- [ ] T111 [US1] Change `ios/Sources/RootView.swift:16-33`'s `.navigationDestination(for: AccountFilter.self)` to `for: TransactionScope.self`. The nav **value type** changes; the nav **behaviour** does not. ⚠️ There is exactly **one** destination for the transaction list — a second `.navigationDestination` for a "just uncategorized" list would give the same screen two identities and two back-stack behaviours.
-- [ ] T112 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`.
+- [x] T101 [US1] Create `ios/Sources/Categorize/CategorizeStrings.swift` (rules T1–T4). ⚠️ `uncategorized` is **referenced** from `TransactionListStrings.uncategorized` (`TransactionListStrings.swift:65`), never redeclared — two spellings of that word is precisely the defect FR-002 / SC-002 exists to prevent. ⚠️ swift-format `[Spacing]` rejects trailing inline comments; put explanations above the line.
+- [x] T102 [US1] Create `ios/Sources/Categorize/TransactionScope.swift` — `struct TransactionScope: Hashable, Codable { var filter: AccountFilter; var uncategorizedOnly: Bool }` (contract §2). `AccountFilter` is **reused unchanged**, not reimplemented. It lives here rather than beside `AccountFilter` because `TransactionListModels.swift` is at 332 lines and next at risk.
+- [x] T103 [US1] Create `ios/Sources/Categorize/CategoryCatalog.swift` — `grouped(_:)` is **pure**: `[Category]` in, grouped array out, no engine call, no state (K2, FR-076).
+- [x] T104 ⚠️ **BUILD** — `make ios-gen` (three new Swift files), then `make ios-test` — U1, U3 and U4 green.
+- [x] T105 [US1] Create `ios/Sources/Categorize/CategorizeService.swift` — the actor seam of contract §1. Every method is a **thin pass-through to one engine call**: it must not filter, count, sum, group, sort by a derived key, or take a second opinion about anything the engine returned (FR-076, FR-077, FR-078). `uncategorizedCount()` in particular returns the engine's number verbatim.
+- [x] T106 [US1] Create `ios/Sources/Categorize/TransactionDetailView.swift` (rules D1–D6): the transaction's own facts and its current category or the app's one word for having none (D1, D2); no engine vocabulary (D3, FR-029); `Decimal` formatting with tabular figures carried from 018 (D4); Liquid Glass unconditionally — no `#available(iOS 26, *)`, no `.ultraThinMaterial`, `.glassProminent` only via `Theme.swift` (D5, FR-063, SC-021); one primary action reachable without scrolling at default Dynamic Type (D6, FR-004).
+- [x] T107 [US1] Create `ios/Sources/Categorize/CategoryPickerView.swift` (rules K1, K3–K7): every category the engine knows, grouped by the **engine's** classification (K1, FR-016); the current category marked by `HistoryRow.category_id`, **never** by display-name match (K3, FR-005); choosing dismisses and the new category is visible without a manual refresh (K5, FR-006, SC-003).
+- [x] T108 ⚠️ **BUILD** — `make ios-gen` (three new Swift files).
+- [x] T109 [US1] Make the transaction row a `NavigationLink` in `ios/Sources/Transactions/TransactionRowView.swift` (R1, FR-003). ⚠️ The row's **visual layout does not change** — no chevron, no inset (R3, FR-046) — and the tap target is the full row, ≥44×44pt (R4, FR-062).
+- [x] T110 [US1] Preserve the row's combined accessibility element (`.accessibilityElement(children: .combine)`, `TransactionRowView.swift:36-38`) and assert it in `ios/Tests/TransactionAccessibilityTests.swift`: the sentence VoiceOver reads must **not** fragment into per-label pieces because the row gained a link (R2, FR-060, SC-016).
+- [x] T111 [US1] Change `ios/Sources/RootView.swift:16-33`'s `.navigationDestination(for: AccountFilter.self)` to `for: TransactionScope.self`. The nav **value type** changes; the nav **behaviour** does not. ⚠️ There is exactly **one** destination for the transaction list — a second `.navigationDestination` for a "just uncategorized" list would give the same screen two identities and two back-stack behaviours.
+- [x] T112 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`.
 
 **Checkpoint**: a person can open a transaction and change its category.
 
 ## Phase 15: Seeded UI [US1] [US5]
 
-- [ ] T113 [US1] Add the `unfiled` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` (inside its existing `#if DEBUG`, appended to `declared` at line 116) — uncategorized rows across at least one statement (FR-066). Declare its expectations in `ios/Sources/DebugSeed/SeedExpectations.swift`. ⚠️ The declared uncategorized count must be asserted against the **engine's** answer, not the author's belief about what the engine will do. ⚠️ Pin `en_IN`, keep amounts under ₹1,00,000, at least one statement.
-- [ ] T114 ⚠️ **BUILD** — `make ios-gen`, then `make ios-test`. ⚠️ A seeded store **outlives** the suite that wrote it: reset with the `empty` scenario in teardown.
-- [ ] T115 [US1] [US5] **X1** and **X2** in a new `ios/UITests/CategorizeDetailUITests.swift`: tap a row → the detail surface appears with that row's facts; change a category → the detail surface **and** the list both show the new one without a manual refresh (FR-006, SC-003). ⚠️ Launch via `ios/UITests/SeededLaunch.swift` with the **bare** `KANAME_SEED_SCENARIO` key — the `TEST_RUNNER_` prefix is for app-hosted unit tests and is silently never delivered to a UI test. ⚠️ The contract names scenario `basic`, which **does not exist** — the declared set is `empty`, `small`, `deep`, `barren`. Use `small` and record the contract erratum in the PR description. ⚠️ Never assert a total by counting cells: a `List` renders a screenful, and a date heading is a cell too.
-- [ ] T116 ⚠️ **BUILD** — `make ios-gen` (new UI test file), then `make ios-test`, and **confirm the new suite ran**. Note that `KanameUITests` does not glob `Sources/**`: it hand-lists `UITests/**` plus `SeedScenarios.swift` and `SeedExpectations.swift`, so a new UI test file still needs generation and a new *seed* file needs the target's list checked.
-- [ ] T117 **DELIBERATE BREAK** — reinstate the defect: make `CategoryPickerView` resolve the current category by display-name match instead of by `category_id` (K3), and give two categories the same display name in the catalog double. Expected: the K3 assertion and X2 **RED**. ⚠️ Revert per non-negotiable 7 — commit the fix first, or `cp -R ios/Sources /tmp/sources-backup` and restore from the copy. `git checkout -- ios/Sources` reverts to `HEAD` and takes the uncommitted fix with it. Then `make ios-gen`.
+- [x] T113 [US1] Add the `unfiled` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` (inside its existing `#if DEBUG`, appended to `declared` at line 116) — uncategorized rows across at least one statement (FR-066). Declare its expectations in `ios/Sources/DebugSeed/SeedExpectations.swift`. ⚠️ The declared uncategorized count must be asserted against the **engine's** answer, not the author's belief about what the engine will do. ⚠️ Pin `en_IN`, keep amounts under ₹1,00,000, at least one statement.
+- [x] T114 ⚠️ **BUILD** — `make ios-gen`, then `make ios-test`. ⚠️ A seeded store **outlives** the suite that wrote it: reset with the `empty` scenario in teardown.
+- [x] T115 [US1] [US5] **X1** and **X2** in a new `ios/UITests/CategorizeDetailUITests.swift`: tap a row → the detail surface appears with that row's facts; change a category → the detail surface **and** the list both show the new one without a manual refresh (FR-006, SC-003). ⚠️ Launch via `ios/UITests/SeededLaunch.swift` with the **bare** `KANAME_SEED_SCENARIO` key — the `TEST_RUNNER_` prefix is for app-hosted unit tests and is silently never delivered to a UI test. ⚠️ The contract names scenario `basic`, which **does not exist** — the declared set is `empty`, `small`, `deep`, `barren`. Use `small` and record the contract erratum in the PR description. ⚠️ Never assert a total by counting cells: a `List` renders a screenful, and a date heading is a cell too.
+- [x] T116 ⚠️ **BUILD** — `make ios-gen` (new UI test file), then `make ios-test`, and **confirm the new suite ran**. Note that `KanameUITests` does not glob `Sources/**`: it hand-lists `UITests/**` plus `SeedScenarios.swift` and `SeedExpectations.swift`, so a new UI test file still needs generation and a new *seed* file needs the target's list checked.
+- [x] T117 **DELIBERATE BREAK** — reinstate the defect: make `CategoryPickerView` resolve the current category by display-name match instead of by `category_id` (K3), and give two categories the same display name in the catalog double. Expected: the K3 assertion and X2 **RED**. ⚠️ Revert per non-negotiable 7 — commit the fix first, or `cp -R ios/Sources /tmp/sources-backup` and restore from the copy. `git checkout -- ios/Sources` reverts to `HEAD` and takes the uncommitted fix with it. Then `make ios-gen`.
 
 ## Phase 16: PR D close-out
 
-- [ ] T118 [US1] Implement and assert **K4** — "no category" is an **offered choice**, not only an implicit state (FR-007) — in `ios/Sources/Categorize/CategoryPickerView.swift` with the assertion in `ios/Tests/CategoryPickerTests.swift`. ⚠️ K4 has **no named X assertion** in contract §11.2; this task is its only coverage, which is why it is called out here rather than folded into T107. Run `make ios-gen` for the new test file.
-- [ ] T119 [US1] Accessibility over the detail surface and the picker in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL Dynamic Type, Light and Dark, VoiceOver reachable, ≥44pt targets (K7, R2, R4, FR-060–FR-062, SC-016). ⚠️ Exclude `.contrast` everywhere (`019/01`) and `.textClipped` / `.dynamicType` at XXXL (`019/03`); ⚠️ a label cannot demonstrate a truncation — XCUITest reports a `Text`'s string, not its glyphs — so if a long category name must be shown not to clip, geometry has to carry it (`ios/Tests/GeometryFixtureTests.swift`).
-- [ ] T120 Confirm `ios/Sources/Import/ImportService.swift` is **unchanged**: `git --no-pager diff --stat origin/main... -- ios/Sources/Import/ImportService.swift` is empty (FR-073, SC-023). It is at 398 of 400 lines; zero lines may be added. Confirm no new file is over budget via `make lint`.
-- [ ] T121 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`, and `make ios-test` cannot run concurrently with itself.
+- [x] T118 [US1] Implement and assert **K4** — "no category" is an **offered choice**, not only an implicit state (FR-007) — in `ios/Sources/Categorize/CategoryPickerView.swift` with the assertion in `ios/Tests/CategoryPickerTests.swift`. ⚠️ K4 has **no named X assertion** in contract §11.2; this task is its only coverage, which is why it is called out here rather than folded into T107. Run `make ios-gen` for the new test file.
+- [x] T119 [US1] Accessibility over the detail surface and the picker in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL Dynamic Type, Light and Dark, VoiceOver reachable, ≥44pt targets (K7, R2, R4, FR-060–FR-062, SC-016). ⚠️ Exclude `.contrast` everywhere (`019/01`) and `.textClipped` / `.dynamicType` at XXXL (`019/03`); ⚠️ a label cannot demonstrate a truncation — XCUITest reports a `Text`'s string, not its glyphs — so if a long category name must be shown not to clip, geometry has to carry it (`ios/Tests/GeometryFixtureTests.swift`).
+- [x] T120 Confirm `ios/Sources/Import/ImportService.swift` is **unchanged**: `git --no-pager diff --stat origin/main... -- ios/Sources/Import/ImportService.swift` is empty (FR-073, SC-023). It is at 398 of 400 lines; zero lines may be added. Confirm no new file is over budget via `make lint`.
+- [x] T121 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`, and `make ios-test` cannot run concurrently with itself.
+
+
+---
+
+## PR D — RECORDED
+
+*What the queue said would happen, what actually happened, and the six places they differed.*
+
+**Baseline (PR C close)**: 358 core tests, 33 UI tests. **After PR D**: **39 UI tests** and five new
+unit suites (`CategoryCatalogTests`, `CategorizeStringsTests`, `TransactionScopeTests`,
+`CategoryPickerTests`, `SeedCategoryExpectationTests`). `make lint` clean (**111 files**, 0
+violations), `make import-audit` **ten scans green with the widened scope**, `ImportService.swift`
+**unchanged at 398 lines** (T120: `git diff` empty), and every new file inside the 400-line limit.
+
+**The six places the queue and reality differed.**
+
+1. 🚨 **The widened scan forbids the picker from sorting the catalog — and it is right.** The
+   first draft of `CategoryCatalog.grouped` sorted each group's categories by name; scan 5 bans
+   `\bsorted\b` in the directories it watches, and widening it to `Categorize/` (T094) is what
+   asked the question. `list_categories()` already reads `ORDER BY rowid`, so the catalog arrives
+   in one fixed sequence every launch and a Swift-side sort would have been a second opinion about
+   an order the engine settled — 018's whole lesson, in miniature. The grouping now **preserves**
+   the engine's order, and U1's determinism case was rewritten from "any order it arrives in" to
+   "the same catalog, twice, in the engine's own order", which is the property that actually
+   matters and the one a careless `Dictionary(grouping:)` breaks.
+2. 🚨 **A row that becomes a link stops being a `StaticText` and becomes a `Button`.** Adding the
+   `NavigationLink` turned **018's `SeededTransactionListUITests` red**, which read exactly like
+   R2 being violated — "the row lost its combined element". It had not: probing the tree showed
+   the whole sentence intact on the cell's **button**, with the description, account, category and
+   amount still underneath it as separate texts. Nothing a person hears changed; what changed is
+   the element *kind*, and 018's helper identified a row by "the first `StaticText` inside the
+   cell". `SeededLaunch.visibleLabels` now reads the sentence wherever it is. ⚠️ Both modifier
+   placements — the combine on the link, and on the link's content — were measured and behave
+   identically, so the placement is **not** load-bearing and the comment says so rather than
+   inventing a rule.
+3. 🚨 **T110's source scan passed while the behaviour regressed.** It asserts the row's source
+   contains `.accessibilityElement(children: .combine)` and its label — which it did, throughout.
+   Only the seeded run could tell the difference. The scan is kept (it catches the
+   `.opacity(0)` hidden-link trick, which would pass a screenshot and leave an empty second
+   element on every row) but it is **not** the R2 gate, and the queue implied it was.
+4. 🚨 **The system auditor found four real Dynamic Type defects on the new surfaces, at the
+   default text size, in Light and in Dark** — the first audit ever run against them, exactly the
+   return 019 was bought for. Each was watched, fixed and re-run: a `Section("string")` header
+   ("User will not be able to change the font size of this element"); a `Text` carrying a bare
+   `.accessibilityLabel` (the category value — fixed by drawing it as a *fact* like the other
+   four, so the screen has one way of stating a fact instead of two); a prominent `Button` inside
+   a `List` row (fixed by moving the action into a `.safeAreaBar`, which also satisfies D6 at
+   **every** text size rather than only the default one); and — the one that took four attempts —
+   a **titled toolbar button**. `Button("Cancel")`, `Button { } label: { Text }`, and dropping the
+   redundant `.buttonStyle(.glass)` all failed; the same button with an SF Symbol and a spoken
+   label passes. ⚠️ A titled toolbar button appears to be flagged by the system regardless of how
+   its label is built, and no other audited screen in this repository has one.
+5. ⚠️ **T117's break turns the K3 unit assertion red — and X2 stays GREEN.** The queue predicted
+   both. X2 changes a category; the *mark* on the current one is not on its path, so the display-
+   name defect is invisible to it. Only `CategoryPickerTests` catches it, which is the entire
+   reason K3 was extracted onto `CategoryChoice.isCurrent` as a pure rule instead of living
+   privately inside the view. (Reverted from `/tmp/sources-backup-020`, per non-negotiable 7 — the
+   fix was uncommitted, so `git checkout -- ios/Sources` would have taken it.)
+6. **The contract's `basic` scenario does not exist** (erratum, as T115 anticipated): the declared
+   set is `empty`, `small`, `deep`, `barren` and now `unfiled`. X1/X2 use `small` — one account,
+   six rows, every one of them unanswered, which is the starting position both need.
+
+**Three smaller things worth carrying.**
+
+- **PR D could not begin with a RED that runs.** U1/U3/U4 name types that do not exist, and a
+  compile error stops the whole target, so nothing runs and "confirm the suites RAN" (T100) is
+  unsatisfiable. Deliberately wrong stubs were written first — a `CategorizeStrings` saying
+  "Stage 2 rule applied", a `TransactionScope` ignoring its own narrowing, a `CategoryCatalog`
+  putting everything in one group — and **all three suites ran and failed for their intended
+  reasons** before the real implementations landed.
+- **`AccountFilter` gained `Codable`** — one word, no new line, because synthesized `Codable` for
+  an enum with associated values cannot be declared in an extension in another file. It is still
+  reused, not reimplemented.
+- **The `unfiled` seed is checked against the engine, not against itself** (T113). Its declared
+  worklist is asserted equal to `uncategorizedCount()` in an *app-hosted unit* test — a UI-test
+  bundle links neither the app nor `KanameCore`, so nothing over there can ask the engine
+  anything — and the same test runs over **all five** declared scenarios.
+
+⚠️ **`make ios-test` has not completed green in one run, and the reason is measured rather than
+assumed.** The full run took **18,322 s** (five hours) on a host at load average 20–120 and ended
+with one failure: `SeededEmptyStateUITests.testTheFilterReachesItsFourStates`, whose message is
+`Failed to swipe up CollectionView: Timed out while synthesizing event` — the simulator could not
+deliver a gesture. Every test in that suite was then re-run and **passed individually**, at
+24 s, 985 s, 1,075 s, 1,537 s and 3,145 s for work that normally takes 15–25 s. The failure is the
+machine; the run should be repeated on a quiet host before the PR is called green.
+
+**Deferred, unchanged.** `018/06`'s three device timings still need a phone (T176).
 
 ---
 
