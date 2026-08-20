@@ -76,6 +76,33 @@ refuses to conclude an absence unless it first finds a symbol and a literal it k
 - ⚠️ **Adding a file needs `make ios-gen`.** `sources: ["Sources/**"]` is resolved at generation
   time, so a new test file is compiled by nothing — and a suite that never ran reports success.
 
+## CI — three jobs, and the one gate that keeps the shards honest
+
+CI is **`.github/workflows/ci.yml`**: `core` (Ubuntu, ~1 min), **`ios-fast`** (lint, both
+formatters, all three audits, and the 335 unit tests — target under 10 min) and **`ios-ui`**, the
+57 UI tests in **four parallel shards** balanced by measured duration.
+
+It was one 40-minute iOS job until the numbers were read off a real run: the UI bundle was **75%
+of the wall clock** (~1,790 s) and it ran *after* a five-minute build, behind which sat 335 unit
+tests costing **6.3 seconds** between them. A typo in a string table took forty minutes to report.
+
+🚨 **`.github/scripts/ui-test-shards.sh` owns the split, and `--verify` is not optional.** A
+hand-written shard list has exactly one failure mode and it is this repo's least favourite: a
+suite in no shard is never run, **and a suite that never ran reports success**. `--verify` runs in
+`ios-fast` and fails on a suite in no shard, a suite in two, or an entry naming a suite that no
+longer exists. All three were watched failing. **Adding a UI test suite means editing that
+script** — the error message says so by name.
+
+⚠️ **Two things about this workflow are deliberate and look like omissions.** There is no `clean`
+(the runner is ephemeral; it only guaranteed nothing could be reused), and **DerivedData is not
+cached** — a key loose enough to hit on a pull request that changes Swift is a key loose enough to
+serve a stale build, and a green run against code that is not under review is worse than five slow
+minutes. The cargo cache stays, because it keys on the lockfile and cannot do that.
+
+⚠️ **`fail-fast: false` on the matrix is load-bearing.** When a UI test goes red the first question
+is always "did anything else fail, or just this one?" — and this bundle has a known
+load-dependent flake (`.scratch/020-categorize/issues/04`).
+
 ## Two traps this repo will spring on you (018)
 
 **1. `ios/Sources/Import/ImportService.swift` sits on the SwiftLint file-length limit.** The

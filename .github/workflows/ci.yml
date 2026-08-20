@@ -9,6 +9,23 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# ⚠️ **Why this file has three jobs instead of two.** The iOS UI bundle was 75% of CI's wall
+# clock — 57 tests, ~1,790 s, measured on run 32388813072 — and it ran *after* a five-minute
+# build, behind which sat 335 unit tests that together cost **6.3 seconds**. So a typo in a
+# string table took forty minutes to report. The work is now split so that everything cheap
+# fails fast, and the one expensive thing runs in parallel with itself.
+#
+# The UI shards are deliberately **self-contained** rather than downloading a build from a
+# shared job: the built products are 130 MB, and a build job that must finish before any shard
+# starts serialises the very thing being parallelised. Four independent jobs each paying the
+# ~450 s build is *faster in wall time* than one build plus four downloads, and far simpler.
+# Runner minutes are free on a public repository, so the trade is wall time against nothing.
+#
+# 🚨 DerivedData is deliberately **not** cached. A cache key loose enough to hit on a normal pull
+# request (which changes Swift sources) is a key loose enough to serve a stale build, and a
+# green run against code that is not the code under review is worse than five slow minutes.
+# The cargo cache stays, because `Swatinem/rust-cache` keys on the lockfile and cannot do that.
+
 jobs:
   core:
     name: Rust core (kaname-core)
@@ -43,8 +60,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: make core-privacy-audit
 
-  ios:
-    name: iOS app (SwiftUI)
+  # Everything about the iOS app that is cheap: both linters, all three audits, and the 335
+  # unit tests. Target: under ten minutes, so a lint error or a broken audit is known long
+  # before the UI shards finish.
+  ios-fast:
+    name: iOS fast gate (lint, audits, unit tests)
     runs-on: macos-26
     defaults:
       run:
@@ -66,6 +86,12 @@ jobs:
         # was format-checked on a laptop and nowhere else — and that directory is where the
         # seeding slice's centre of gravity is (019 FR-043a).
         run: swift-format lint --recursive --strict Sources Tests UITests
+      # 🚨 The one gate that stands between a new UI suite and never being run at all. It is in
+      # the *fast* job on purpose: drift is reported in minutes, not at the end of the slowest
+      # job in the matrix.
+      - name: UI shard coverage (every suite is in exactly one shard)
+        working-directory: ${{ github.workspace }}
+        run: .github/scripts/ui-test-shards.sh --verify
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Add iOS Rust targets
@@ -87,10 +113,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: make import-audit
       # The artifact half of the DEBUG-boundary proof: it builds its own Release binary and
-      # scans it, so it costs ~16s and needs the workspace `tuist generate` just produced. A
+      # scans it, so it costs ~44s and needs the workspace `tuist generate` just produced. A
       # seeding path that reached a shipping build would be caught here, on a pull request,
       # rather than on somebody's laptop (019 FR-025, FR-029, SC-004).
-      - name: Release absence audit (~16s — it builds a Release binary)
+      - name: Release absence audit (it builds a Release binary)
         working-directory: ${{ github.workspace }}
         run: make release-audit
       - name: Prepare iOS simulator
@@ -101,10 +127,74 @@ jobs:
           echo "Using simulator UDID: $udid"
           xcrun simctl boot "$udid" || true
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
-      - name: Build & test
+      # 335 tests in ~6 seconds. ⚠️ `clean` is not used anywhere in this workflow any more: the
+      # runner is ephemeral, so there is never anything to clean, and it only guaranteed that
+      # nothing could ever be reused.
+      - name: Unit tests (KanameTests)
         run: |
           xcodebuild \
             -workspace Kaname.xcworkspace \
             -scheme Kaname \
             -destination "id=${{ steps.sim.outputs.udid }}" \
-            clean build test
+            -only-testing:KanameTests \
+            build test
+
+  # The expensive half, in four parallel shards balanced by measured suite duration.
+  # `.github/scripts/ui-test-shards.sh` owns the split; `ios-fast` proves it covers everything.
+  ios-ui:
+    name: iOS UI tests (shard ${{ matrix.shard }}/4)
+    runs-on: macos-26
+    strategy:
+      # One shard failing must not cancel the others: when a UI test goes red the first
+      # question is always "did anything else fail too, or just this one?", and a cancelled
+      # matrix cannot answer it. ⚠️ It matters more here than usual — this bundle has a known
+      # load-dependent flake (`.scratch/020-categorize/issues/04`).
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode (newest 26.x — the iOS 26 SDK is required for Liquid Glass)
+        run: |
+          xcode="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          xcodebuild -version
+      - name: Install tooling
+        run: brew install tuist
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Add iOS Rust targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Build engine XCFramework (must precede tuist generate)
+        working-directory: ${{ github.workspace }}
+        run: make core-xcframework
+      - name: Generate Xcode project
+        run: tuist generate --no-open
+      - name: Prepare iOS simulator
+        id: sim
+        working-directory: ${{ github.workspace }}
+        run: |
+          udid="$(bash .github/scripts/select-ios-simulator.sh)"
+          echo "Using simulator UDID: $udid"
+          xcrun simctl boot "$udid" || true
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: UI tests (this shard's suites)
+        working-directory: ${{ github.workspace }}
+        run: |
+          only_testing="$(.github/scripts/ui-test-shards.sh "${{ matrix.shard }}")"
+          echo "Shard ${{ matrix.shard }}: $only_testing"
+          cd ios
+          # shellcheck disable=SC2086 — deliberately word-split: one -only-testing: per suite.
+          xcodebuild \
+            -workspace Kaname.xcworkspace \
+            -scheme Kaname \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            $only_testing \
+            build test
