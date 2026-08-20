@@ -152,14 +152,28 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: open the second pull request for `020-categorize` (PRs E, F, G — T122–T183).**
-The branch is `020-categorize`, PRs A–D are already merged as
-[#42](https://github.com/SSKUltra/kaname/pull/42), and everything since is committed on the same
-branch exactly as 019 ran it. **Nothing in the queue is left**: T182's final gate is the last
-task, and after it the slice is done.
+**⬅️ NEXT: `020-categorize` is DONE and merged — [PR #43](https://github.com/SSKUltra/kaname/pull/43),
+merge commit `2394061`, both CI jobs green (Rust core 1m10s, iOS 39m49s).** All 183 tasks, all
+seven PRs, across two pull requests (#42 = A–D, #43 = E–G). **The next slice has not been
+specified yet** — `speckit.specify` is where it starts.
+
+A person can now open a transaction, change its category, and have that answer survive every
+re-import, every transfer-detection run and every other engine path; be asked in their own words
+whether Kaname should remember the merchant, decline that without touching the correction, and —
+if they accept — be told exactly how many transactions in which accounts would change **before**
+anything is written; and work a list of everything nobody has answered down to zero, being told
+in words when they are finished.
 
 **⚠️ What is open, and it is short:**
 
+- 🚨 **`.scratch/020-categorize/issues/04`** (`ready-for-agent`) — **`SeedContractUITests
+  .testAnUnrecognisedScenarioNameNeverReachesTheForeground` is flaky on CI**, and it cost #43
+  **37m42s + a 39m49s re-run**. The test deliberately crashes the app and absorbs XCUITest's
+  crash report with `issueMatcher = { $0.compactDescription.contains("crashed") }` — but the
+  **same event has two spellings**, and on a differently-loaded runner it arrives as
+  `Failed to get background assertion for target app with pid N`, which the matcher does not
+  absorb. One line to fix; the narrowness must be preserved, and the ticket says exactly why and
+  how to watch it fail. **Fix this before the next CI-gated PR.**
 - **`.scratch/020-categorize/issues/02`** (`ready-for-agent`) — **`EmptyKind.accountAnswered` is
   rendered by nothing.** One account finished while another still has work: asserted twice as a
   value and a sentence, reached by no automated run of any kind. **Not** FR-070's kind of state —
@@ -174,6 +188,12 @@ task, and after it the slice is done.
   are now written out precisely in `specs/020-categorize/quickstart.md`.
 - **`019/03`** and **`.scratch/020-categorize/issues/01`** — the same Dynamic Type design question
   at two text sizes, both still open, neither this slice's to settle.
+
+⚠️ **A CI failure here is a claim about the runner until it has been re-run.** #43's iOS job went
+red on a test that had never failed, on a change that touched neither it nor anything it uses,
+and passed on re-run of the identical commit. Read the *failure text* before the test name: an
+`XCTest` assertion is a finding, and `Failed to get background assertion` / `Timed out while
+synthesizing event` are claims about the machine.
 
 **020 PR G is DONE** (T160–T183). Nothing new was built; everything built is now *shown* to hold.
 `specs/020-categorize/quickstart.md` gained the **audit matrix** (which audit type × which
