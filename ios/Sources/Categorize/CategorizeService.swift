@@ -69,25 +69,34 @@ enum MemoryApplicationError: Error, Equatable, Sendable {
 /// back, and `import-path-audit.sh` scans 5–8 now watch this directory for exactly that.
 actor CategorizeService: CategorizeWriting {
     private let open: @Sendable () throws -> Store
+    private let changes: CategoryChangeSignal
     private var opened: Store?
 
-    init(store: Store) {
+    init(store: Store, changes: CategoryChangeSignal = .shared) {
         open = { store }
+        self.changes = changes
     }
 
     /// Opened on first use, **inside the actor** — the same shape as
     /// `TransactionHistoryService`, and for the same reason: opening the encrypted database is
     /// I/O, and these surfaces are reached from a view body (FR-057).
-    init(opening open: @escaping @Sendable () throws -> Store) {
+    init(opening open: @escaping @Sendable () throws -> Store, changes: CategoryChangeSignal = .shared) {
         self.open = open
+        self.changes = changes
     }
 
     func correct(
         _ id: String, to category: CategoryRef?, remember: Bool
     ) throws -> CorrectionOutcome {
         do {
-            return try store().setTransactionCategory(
+            let outcome = try store().setTransactionCategory(
                 transactionId: id, category: category, remember: remember)
+            // After the engine's own transaction has committed, and only then: a correction
+            // that threw changed nothing, and a count that moved for it would be wrong
+            // (E5). What is announced is that *something* changed — the new number is read
+            // back from the engine, never carried here.
+            changes.send()
+            return outcome
         } catch {
             // Mapped at the boundary: nothing the store says about a row travels further than
             // this line.
@@ -108,8 +117,10 @@ actor CategorizeService: CategorizeWriting {
     /// refuses all three — which is why this method has no parameter for "just these ones".
     func applyMemory(_ portion: String, expecting ids: [String]) throws -> UInt32 {
         do {
-            return try store().applyMemory(
+            let changed = try store().applyMemory(
                 merchantPortion: portion, expectedTransactionIds: ids)
+            changes.send()
+            return changed
         } catch {
             throw MemoryApplicationError(mapping: error)
         }

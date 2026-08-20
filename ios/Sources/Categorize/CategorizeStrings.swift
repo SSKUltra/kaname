@@ -160,6 +160,64 @@ enum CategorizeStrings {
     static let secondActionFailed =
         "Those transactions could not be changed. Nothing was changed."
 
+    // MARK: - The worklist
+
+    /// **E2**, **E3** — the door onto the transactions nobody has answered yet.
+    ///
+    /// The number is the **engine's**, counted in the same query that defines the set
+    /// (FR-043). This sentence only says it, which is why it takes a count rather than
+    /// anything it could count for itself.
+    static func worklistWaiting(_ count: Int) -> String {
+        count == 1 ? "1 transaction needs a category" : "\(count) transactions need a category"
+    }
+
+    /// **E3** — nothing is waiting. Said as the finish it is, and never as a "0": a person who
+    /// has filed everything is being told they are done, not shown an empty counter (FR-042b,
+    /// SC-011).
+    static let worklistFinished = "Everything has a category"
+
+    /// What the door does, spoken — so it is a sentence a screen reader can act on rather than
+    /// a number somebody has to guess the meaning of.
+    static let worklistHint = "Opens the transactions that have no category"
+
+    /// **The narrowed list, empty across every account** — FR-042b's reward.
+    ///
+    /// Deliberately not one of 018's six. "Nothing to show" would read as damage, and
+    /// "no transactions" would be a false claim about a person who has plenty of them: the
+    /// rows are all there, and every one of them has been answered.
+    static let allFiledTitle = "Nothing left to file"
+
+    static let allFiledMessage = "Every transaction Kaname has imported has a category."
+
+    /// The same for one account. It keeps the account's name, because "nothing left to file"
+    /// about one card is a different fact from the same sentence about everything.
+    static func accountFiledTitle(_ name: String) -> String { "Nothing left to file in \(name)" }
+
+    static func accountFiledMessage(_ name: String) -> String {
+        "Every transaction in \(name) has a category."
+    }
+
+    /// The worklist worked to zero, as the empty state 018's table now has two more rows for.
+    ///
+    /// Assembled here rather than in `TransactionListStrings.emptyState(for:)` because the
+    /// sentences are this slice's: that table is 018's six, and a state added to it is added
+    /// beside them rather than written into them (FR-042, T1).
+    ///
+    /// - Parameter accountName: `nil` for the whole store. When an account is named, clearing
+    ///   the account filter is the one act that can still find work — this account is
+    ///   finished, and another one may not be.
+    static func finishedState(accountName: String?) -> TransactionListStrings.EmptyState {
+        guard let accountName else {
+            return TransactionListStrings.EmptyState(
+                title: allFiledTitle, message: allFiledMessage, action: nil)
+        }
+        return TransactionListStrings.EmptyState(
+            title: accountFiledTitle(accountName),
+            message: accountFiledMessage(accountName),
+            action: .clearFilter
+        )
+    }
+
     /// Every classification, in the order the picker draws them, so the heading table and the
     /// grouping cannot disagree about which groups exist.
     static let everyGroupHeading: [String] =
@@ -183,6 +241,10 @@ enum CategorizeStrings {
             secondActionAccount(name: "an account", count: 4),
             secondActionChanged(count: 1),
             secondActionChanged(count: 4),
+            worklistWaiting(1),
+            worklistWaiting(4),
+            accountFiledTitle("an account"),
+            accountFiledMessage("an account"),
         ]
     }
 
@@ -200,6 +262,7 @@ enum CategorizeStrings {
             secondActionTitle, secondActionAccountsHeading,
             secondActionApply, secondActionDecline,
             secondActionStale, secondActionFailed,
+            worklistFinished, worklistHint, allFiledTitle, allFiledMessage,
         ] + everyGroupHeading + everyBuiltSentence
     }
 }

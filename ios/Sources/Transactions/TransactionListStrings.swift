@@ -103,6 +103,13 @@ enum TransactionListStrings {
 
     static func emptyState(for kind: EmptyKind) -> EmptyState {
         switch kind {
+        // The two the uncategorized narrowing added, worded **and assembled** in
+        // `CategorizeStrings`: this table is 018's six, and a slice that adds a state adds it
+        // beside them rather than inside them (FR-042, T1).
+        case .allAnswered:
+            CategorizeStrings.finishedState(accountName: nil)
+        case .accountAnswered(let name):
+            CategorizeStrings.finishedState(accountName: name)
         case .nothingImported:
             EmptyState(
                 title: "Nothing imported yet",

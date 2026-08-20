@@ -13,10 +13,27 @@ import Testing
 /// A `TransactionHistoryReading` that serves scripted pages and can be held open, so
 /// "two calls before the first returns" is a fact the test controls rather than a race
 /// it hopes for.
+///
+/// ⚠️ **Edited by 020, and the edit is the finding L6 asks about.** The seam gained an axis —
+/// `uncategorizedOnly` — so every conformance had to state it. Nothing an 018 suite *expects*
+/// moved: `uncategorizedOnly` defaults to `false` on `PageRequest`, so the assertions written
+/// against a request still read the same fields and still mean the same thing.
 struct PageRequest: Equatable, Sendable {
     let accountID: String?
     let cursor: HistoryCursor?
     let limit: UInt32
+    /// Which population was asked for. Recorded so a test can prove the narrowing reached the
+    /// engine rather than the page it came back with (L1).
+    let uncategorizedOnly: Bool
+
+    init(
+        accountID: String?, cursor: HistoryCursor?, limit: UInt32, uncategorizedOnly: Bool = false
+    ) {
+        self.accountID = accountID
+        self.cursor = cursor
+        self.limit = limit
+        self.uncategorizedOnly = uncategorizedOnly
+    }
 }
 
 actor HistoryDouble: TransactionHistoryReading {
@@ -43,8 +60,13 @@ actor HistoryDouble: TransactionHistoryReading {
         for waiter in held { waiter.resume() }
     }
 
-    func page(accountID: String?, cursor: HistoryCursor?, limit: UInt32) async throws -> HistoryPage {
-        requests.append(PageRequest(accountID: accountID, cursor: cursor, limit: limit))
+    func page(
+        accountID: String?, uncategorizedOnly: Bool, cursor: HistoryCursor?, limit: UInt32
+    ) async throws -> HistoryPage {
+        requests.append(
+            PageRequest(
+                accountID: accountID, cursor: cursor, limit: limit,
+                uncategorizedOnly: uncategorizedOnly))
         if isPaused {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 waiters.append(continuation)

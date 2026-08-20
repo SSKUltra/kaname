@@ -158,10 +158,10 @@ struct TransactionEmptyStateTests {
         )
     }
 
-    // MARK: - The six are six
+    // MARK: - Each state is its own
 
     @Test("Every row of the table is its own state, and no two collapse into one")
-    func theSixStatesAreDistinct() {
+    func everyStateIsDistinct() {
         let kinds: [EmptyKind] = [
             .nothingImported,
             .noTransactionsAnywhere,
@@ -169,6 +169,10 @@ struct TransactionEmptyStateTests {
             .accountStatementEmpty(name: "Everyday Savings"),
             .accountNothingToShow(name: "Everyday Savings"),
             .accountEmptyOthersHaveRows(name: "Everyday Savings", statementWasEmpty: true),
+            // The two 020 added are held to the same rule: additional states, said in their
+            // own words, never a re-use of one of the six (FR-042).
+            .allAnswered,
+            .accountAnswered(name: "Everyday Savings"),
         ]
 
         let sentences = kinds.map { kind -> String in

@@ -163,10 +163,12 @@ enum AccountFilter: Equatable, Hashable, Codable, Sendable {
     }
 }
 
-/// Why the list is empty — one case per row of `data-model.md` §6.
+/// Why the list is empty — one case per row of `data-model.md` §6, in 018's table and in the
+/// two rows 020's narrowing added to it.
 ///
-/// A pure function of `[AccountSummary]` and the filter, and of nothing else: no count beyond
-/// `liveTransactionCount` is consulted, so this cannot become a second population (FR-008).
+/// A pure function of `[AccountSummary]`, the filter and the narrowing, and of nothing else:
+/// no count beyond `liveTransactionCount` is consulted, so this cannot become a second
+/// population (FR-008).
 enum EmptyKind: Equatable, Sendable {
     /// Nothing has been imported at all.
     case nothingImported
@@ -184,8 +186,53 @@ enum EmptyKind: Equatable, Sendable {
     /// replacing them, which is the only reading under which FR-048's distinct state stays
     /// reachable (design note E3).
     case accountEmptyOthersHaveRows(name: String, statementWasEmpty: Bool)
+    /// Narrowed to what nobody has answered, across every account, and there is nothing left:
+    /// the rows are all there, and every one of them has a category. The one empty state that
+    /// is an achievement rather than a report of absence (FR-042b).
+    case allAnswered
+    /// The same for one account: it holds live rows, and none of them is waiting.
+    case accountAnswered(name: String)
 
-    static func decide(summaries: [AccountSummary], filter: AccountFilter) -> EmptyKind {
+    /// Which empty this is — a pure function of the summaries, the filter and whether the
+    /// narrowing is on, and of nothing else.
+    ///
+    /// `uncategorizedOnly` defaults to `false` for the reason the engine's own
+    /// `HistoryQuery.uncategorized_only` does: it is an **input**, and a caller that does not
+    /// know it exists must decide exactly what it decided before (FR-046, SC-024). 018's six
+    /// states are reached through `unnarrowed` below, which this slice does not touch at all.
+    static func decide(
+        summaries: [AccountSummary], filter: AccountFilter, uncategorizedOnly: Bool = false
+    ) -> EmptyKind {
+        if uncategorizedOnly, let finished = finished(summaries: summaries, filter: filter) {
+            return finished
+        }
+        return unnarrowed(summaries: summaries, filter: filter)
+    }
+
+    /// The two states only the narrowing can reach, or `nil` when the situation is one of
+    /// 018's six and the narrowing is not what emptied the screen.
+    ///
+    /// ⚠️ **No new `AccountSummary` field is consulted, and none is needed** (L5, FR-078).
+    /// "This account has live rows but the narrowed page came back empty" ⇒ every row in it is
+    /// answered — the inference is exact, because both the page and this decision are about
+    /// the same rows. A stored "all answered" flag would be a second source of truth that
+    /// could disagree with the page a person is looking at.
+    ///
+    /// Nothing imported at all beats "all done": a person with an empty store has not finished
+    /// anything, and telling them they have would be the app congratulating itself for their
+    /// having no money in it (`data-model.md` §6, row 4).
+    private static func finished(summaries: [AccountSummary], filter: AccountFilter) -> EmptyKind? {
+        guard let filtered = filter.accountID else {
+            return summaries.contains { $0.liveTransactionCount > 0 } ? .allAnswered : nil
+        }
+        guard let mine = summaries.first(where: { $0.id == filtered }),
+            mine.liveTransactionCount > 0
+        else { return nil }
+        return .accountAnswered(name: filter.accountName ?? "")
+    }
+
+    /// 018's decision, unchanged — the six states, from the same two inputs they always had.
+    private static func unnarrowed(summaries: [AccountSummary], filter: AccountFilter) -> EmptyKind {
         guard !summaries.isEmpty else { return .nothingImported }
 
         guard let filtered = filter.accountID else {

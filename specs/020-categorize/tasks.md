@@ -732,31 +732,93 @@ than engine test **M2** asserts — a future import, not the rows already import
 
 ## Phase 20: Empty states, pure [US4]
 
-- [ ] T141 [US4] RED **U2** in `ios/Tests/TransactionEmptyStateTests.swift`: `EmptyKind.decide` returns the right case for **every row** of `data-model.md` §6 — including the states a seed cannot construct. This is where those states get covered; a state that only a unit test can reach is still a state (FR-042a, FR-042b).
-- [ ] T142 [US4] GREEN: `EmptyKind.decide(summaries:filter:uncategorizedOnly:)` in `ios/Sources/Transactions/` gains `allAnswered` and `accountAnswered` and **stays a pure function** (L4).
-- [ ] T143 [US4] Assert **L5** structurally in `ios/Tests/TransactionEmptyStateTests.swift`: **no new `AccountSummary` field**. "Live rows exist but the narrowed page is empty" ⇒ all answered — the inference is exact, so a stored flag would be a second source of truth (FR-078).
-- [ ] T144 [US4] Implement **L1**, **L2** and **L3** in `ios/Sources/Transactions/TransactionListViewModel.swift`: carry `uncategorizedOnly` into `HistoryQuery`; it **never** filters a page it received (L1, FR-038, FR-076, SC-024); the narrowing composes with the account filter — both axes, one query (L2, FR-039); paging, cursors and infinite scroll are 018's, unchanged (L3, FR-040, FR-046).
-- [ ] T145 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`.
+- [x] T141 [US4] RED **U2** in `ios/Tests/TransactionEmptyStateTests.swift`: `EmptyKind.decide` returns the right case for **every row** of `data-model.md` §6 — including the states a seed cannot construct. This is where those states get covered; a state that only a unit test can reach is still a state (FR-042a, FR-042b).
+- [x] T142 [US4] GREEN: `EmptyKind.decide(summaries:filter:uncategorizedOnly:)` in `ios/Sources/Transactions/` gains `allAnswered` and `accountAnswered` and **stays a pure function** (L4).
+- [x] T143 [US4] Assert **L5** structurally in `ios/Tests/TransactionEmptyStateTests.swift`: **no new `AccountSummary` field**. "Live rows exist but the narrowed page is empty" ⇒ all answered — the inference is exact, so a stored flag would be a second source of truth (FR-078).
+- [x] T144 [US4] Implement **L1**, **L2** and **L3** in `ios/Sources/Transactions/TransactionListViewModel.swift`: carry `uncategorizedOnly` into `HistoryQuery`; it **never** filters a page it received (L1, FR-038, FR-076, SC-024); the narrowing composes with the account filter — both axes, one query (L2, FR-039); paging, cursors and infinite scroll are 018's, unchanged (L3, FR-040, FR-046).
+- [x] T145 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`.
 
 ## Phase 21: The single door [US4]
 
-- [ ] T146 [US4] Create `ios/Sources/Categorize/UncategorizedEntryPoint.swift` (rules E1–E5): a single door to the worklist, visible from the app's front door (E1, FR-041a); tapping pushes `TransactionScope(filter: .all, uncategorizedOnly: true)` (E4, FR-038).
-- [ ] T147 [US4] Assert **E2** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count is **store-wide** and comes from `uncategorizedCount()` — one engine call, no Swift arithmetic, no summing of `AccountSummary` (FR-041b, FR-043, SC-029). 018 deliberately moved the front door's count out of Swift into SQL; this is exactly where it would creep back.
-- [ ] T148 ⚠️ **BUILD** — `make ios-gen` (new Swift file and new test file).
-- [ ] T149 [US4] **X6** in a new `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the entry point shows a count, and after correcting every row it says the worklist is **finished, in a person's words**, rather than showing "0" (E3, FR-042b, SC-011).
-- [ ] T150 [US4] **X7** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the narrowed list shows only unanswered rows and composes with an account filter (L1, L2, FR-039).
-- [ ] T151 [US4] **X3** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: set a category to "no category" → the row **leaves the worklist**. ⚠️ Contract §11.2 lists X3 among the detail-surface assertions, but it cannot be observed without the worklist — it is executed here, in PR F, and the PR description says so. This is the platform reflection of engine assertions **C5** and **H2** (a deliberate blank is answered).
-- [ ] T152 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; **confirm the new UI suite ran** rather than reporting success without executing.
-- [ ] T153 [US4] Assert **E5** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count refreshes after a correction or a memory application, without a manual reload (SC-030).
+- [x] T146 [US4] Create `ios/Sources/Categorize/UncategorizedEntryPoint.swift` (rules E1–E5): a single door to the worklist, visible from the app's front door (E1, FR-041a); tapping pushes `TransactionScope(filter: .all, uncategorizedOnly: true)` (E4, FR-038).
+- [x] T147 [US4] Assert **E2** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count is **store-wide** and comes from `uncategorizedCount()` — one engine call, no Swift arithmetic, no summing of `AccountSummary` (FR-041b, FR-043, SC-029). 018 deliberately moved the front door's count out of Swift into SQL; this is exactly where it would creep back.
+- [x] T148 ⚠️ **BUILD** — `make ios-gen` (new Swift file and new test file).
+- [x] T149 [US4] **X6** in a new `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the entry point shows a count, and after correcting every row it says the worklist is **finished, in a person's words**, rather than showing "0" (E3, FR-042b, SC-011).
+- [x] T150 [US4] **X7** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the narrowed list shows only unanswered rows and composes with an account filter (L1, L2, FR-039).
+- [x] T151 [US4] **X3** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: set a category to "no category" → the row **leaves the worklist**. ⚠️ Contract §11.2 lists X3 among the detail-surface assertions, but it cannot be observed without the worklist — it is executed here, in PR F, and the PR description says so. This is the platform reflection of engine assertions **C5** and **H2** (a deliberate blank is answered).
+- [x] T152 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; **confirm the new UI suite ran** rather than reporting success without executing.
+- [x] T153 [US4] Assert **E5** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count refreshes after a correction or a memory application, without a manual reload (SC-030).
 
 ## Phase 22: The breaks that only work now
 
-- [ ] T154 🚨 **DELIBERATE BREAK** — filter the received page inside `ios/Sources/Transactions/TransactionListViewModel.swift` instead of passing `uncategorizedOnly` into the query. Expected: `make import-audit` **scans 5 and 6 RED**, and **H1**/**X7** behaviour drifts. Revert per non-negotiable 7. This break is only meaningful because T094 widened the scans — run it and see them fire.
-- [ ] T155 **DELIBERATE BREAK** — compute the entry point's count by summing `AccountSummary` in Swift in `ios/Sources/Categorize/UncategorizedEntryPoint.swift`. Expected: `make import-audit` **scan 7 RED** (and E2's assertion red). Revert, then `make ios-gen`.
-- [ ] T156 [US4] Assert **L6**: with the narrowing off, 018's list is byte-identical in behaviour and appearance — run `ios/Tests/TransactionList*.swift` and `ios/UITests/SeededTransactionListUITests.swift` **unedited** (FR-046, SC-023). If any of them needed an edit to pass, that is a finding, not a chore.
-- [ ] T157 **DELIBERATE BREAK** — reinstate the defect: make the worklist include `'PERSON'` deliberate blanks (drop the `categorised_by IS NULL` arm from the Swift-side scope, or point the query at `LIVE` alone). Expected: **X3 RED** and the platform reflection of **H2** RED. Revert per non-negotiable 7, then `make ios-gen`.
-- [ ] T158 [US4] Accessibility over the entry point and the narrowed list in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8). ⚠️ New coverage is not trusted until it has been **watched failing** — T157 is that watch for the worklist, T117 for the picker, T138 for the second action.
-- [ ] T159 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+- [x] T154 🚨 **DELIBERATE BREAK** — filter the received page inside `ios/Sources/Transactions/TransactionListViewModel.swift` instead of passing `uncategorizedOnly` into the query. Expected: `make import-audit` **scans 5 and 6 RED**, and **H1**/**X7** behaviour drifts. Revert per non-negotiable 7. This break is only meaningful because T094 widened the scans — run it and see them fire.
+- [x] T155 **DELIBERATE BREAK** — compute the entry point's count by summing `AccountSummary` in Swift in `ios/Sources/Categorize/UncategorizedEntryPoint.swift`. Expected: `make import-audit` **scan 7 RED** (and E2's assertion red). Revert, then `make ios-gen`.
+- [x] T156 [US4] Assert **L6**: with the narrowing off, 018's list is byte-identical in behaviour and appearance — run `ios/Tests/TransactionList*.swift` and `ios/UITests/SeededTransactionListUITests.swift` **unedited** (FR-046, SC-023). If any of them needed an edit to pass, that is a finding, not a chore.
+- [x] T157 **DELIBERATE BREAK** — reinstate the defect: make the worklist include `'PERSON'` deliberate blanks (drop the `categorised_by IS NULL` arm from the Swift-side scope, or point the query at `LIVE` alone). Expected: **X3 RED** and the platform reflection of **H2** RED. Revert per non-negotiable 7, then `make ios-gen`.
+- [x] T158 [US4] Accessibility over the entry point and the narrowed list in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8). ⚠️ New coverage is not trusted until it has been **watched failing** — T157 is that watch for the worklist, T117 for the picker, T138 for the second action.
+- [x] T159 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+
+---
+
+## PR F — RECORDED
+
+**T141–T159 are done.** A person can see, on the app's first screen, how many of their
+transactions have no category; open exactly those, across every account; narrow them further to
+one card; answer them one at a time and watch each leave; deliberately file one under nothing and
+watch that count as an answer too; and be told, when the last one goes, that they are finished —
+in words, never as a "0". `ios/Sources/Categorize/` gains `UncategorizedEntryPoint.swift` and
+`CategoryChangeSignal.swift`; `EmptyKind` grows the two rows `data-model.md` §6 predicted; three
+unit suites and two UI suites are new. Every gate green: `make lint` **0 violations (127 files)**,
+`make ios-test` **TEST SUCCEEDED — 409 passed, 0 failed, 2 skipped, 57 UI tests, 1,194 s at load
+4.1**, `make import-audit` ten scans OK. `ImportService.swift` **unchanged at 398 lines**. No
+Rust was touched: `git diff core/` is empty.
+
+The five things worth carrying:
+
+- 🚨 **The queue named the wrong scan for T154, and the reason is structural.** The break —
+  filtering the received page in Swift — turns **scan 5** red, exactly as written
+  (`a screen re-derives its own population`, naming `raw.rows.filter`). **Scan 6 cannot fire and
+  never could**: it is the *filter-persistence* scan and looks for `UserDefaults`/`@AppStorage`,
+  which a page filter does not use — and `import-path-audit.sh` exits on the first failure, so
+  scan 6 does not even run. The behavioural half is sharper than the queue promised: **three** of
+  `TransactionNarrowingTests`' assertions go red naming the field
+  (`PageRequest(… uncategorizedOnly: false)`), which says *what* drifted rather than that
+  something did. Both were watched; both reverted.
+- 🚨 **The system auditor found a real defect on the one new control, at the DEFAULT text
+  size — and then a second verdict that is a property of the fixture.** The door drawn as
+  `Label(sentence, systemImage: "tray.full")` was reported clipped, **naming its own
+  `StaticText`**, in Light and in Dark; drawn as a plain `Text`, the way the account rows beside
+  it are drawn, it passes. That is 020's third such verdict and its second real one. The
+  *second* verdict is not: `.textClipped` also fires on the **shipped, unnarrowed 018 list** the
+  moment it is seeded with `unfiled`, whose descriptions are eight characters longer than
+  `small`'s — proved by three probes, one per surface, and written up as
+  `.scratch/020-categorize/issues/01`. The exclusion is scoped to the **list** half of A18–A21
+  and to nothing else, so the door keeps the instrument that caught its own defect.
+- ⚠️ **L6 needed one edit, and `TransactionListDoubles.swift` is the finding T156 asks about.**
+  The seam gained an axis — `TransactionHistoryReading.page` now states `uncategorizedOnly` — so
+  every conformance had to state it, and a double is a conformance. **No expectation moved**:
+  `PageRequest`'s new field defaults to `false`, so every 018 assertion written against a request
+  reads the same fields and means the same thing. `TransactionHistoryServiceTests`' three call
+  sites gained `uncategorizedOnly: false` for the same reason. A three-argument spelling was
+  **rejected** — it is the "silently omit a fact the engine always populates" shape PR C refused
+  for `HistoryRow`, and here it would let a double quietly read the wrong population while a
+  test about the narrowing stayed green.
+- ⚠️ **The count needed a signal, because the screen that changes it is two pushes from the
+  screen that shows it.** `CategoryChangeSignal` mirrors `ImportCompletionSignal` and is
+  deliberately **not** it: an import says a statement was committed and the list re-reads its
+  whole population for one; a correction changes one row. It carries `Void` for the same reason
+  and with more force — the new number is re-**asked** of the engine, never adjusted, so FR-043
+  survives a memory that changed rows in three accounts. The subscription lives on `RootView`,
+  not on the door: a `.task` on a `List` row is a subscription that dies with a row.
+- ⚠️ **Four SwiftLint limits were hit at once, and all four were answered by moving something
+  out.** `TransactionListStrings.emptyState(for:)` went to 53 lines (limit 50) →
+  `CategorizeStrings.finishedState(accountName:)` now assembles the narrowing's own two states,
+  which is where T1 says their words belong anyway; `TransactionEmptyStateTests` went to 261
+  (limit 250) → split by subject into `TransactionWorklistEmptyStateTests`;
+  `SeededAccessibilityUITests` broke **both** the 250-line type limit and the 400-line file limit
+  → the audit vocabulary moved to `AccessibilityAudit.swift` (one copy of each exclusion's
+  rationale, which is the point) and PR F's audits to `SeededWorklistAccessibilityUITests`.
+  Nothing was reformatted to squeeze under.
 
 ---
 

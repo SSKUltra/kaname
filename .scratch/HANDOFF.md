@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/020-categorize/`, starting at T122 (PR E, the memory and the second action).**
+**The live one is `specs/020-categorize/`, starting at T160 (PR G, the audits and the honest deferrals).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -152,13 +152,49 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: `020-categorize` PR F — the worklist.** Start at **T141** in
-`specs/020-categorize/tasks.md`. ⚠️ Its engine half **already shipped in #42**:
-`uncategorized_count()` has had no Swift caller since PR C, so a "nothing calls this" search is
-not evidence of a mistake. Two things to expect: **T154 and T155 are the breaks the widened
-`import-audit` scans 5–7 exist for**, and this is the PR where a Swift second opinion is most
-tempting — the front door's count was deliberately moved out of Swift into SQL by 018 and this is
-exactly where it creeps back.
+**⬅️ NEXT: `020-categorize` PR G — proved, not asserted.** Start at **T160** in
+`specs/020-categorize/tasks.md`. Nothing new is built there; everything built is shown to hold,
+and what could not be shown is said plainly. ⚠️ **T163's break ledger now has three more entries
+with observed reds** (T154, T155, T157) — and one of them, T154, is a case where the queue named
+the wrong gate: scan 6 **cannot** fire for that break and did not. Record what was observed.
+
+**020 PR F is DONE** (T141–T159). A person can now see, on the app's first screen, how many of
+their transactions have no category; open exactly those across every account; narrow them
+further to one card; answer them one at a time and watch each leave; deliberately file one under
+nothing and watch that count as an answer too; and be told, when the last one goes, that they are
+finished — in words, never as a "0". `ios/Sources/Categorize/` gains `UncategorizedEntryPoint
+.swift` and `CategoryChangeSignal.swift`; `EmptyKind` grows the two rows `data-model.md` §6
+predicted. Every gate green: `make lint` **0 violations (127 files)**, `make ios-test` **TEST
+SUCCEEDED — 409 passed, 0 failed, 57 UI tests, 1,194 s at load 4.1**, `make import-audit` ten
+scans OK. `ImportService.swift` **unchanged at 398 lines**; `git diff core/` empty.
+`specs/020-categorize/tasks.md` § *PR F — RECORDED* has the full account; the five things worth
+carrying:
+
+- 🚨 **`.textClipped` fires on the *shipped* 018 row at the DEFAULT text size, and only the
+  fixture had ever hidden it** (`.scratch/020-categorize/issues/01`). Seeded with `unfiled`,
+  whose descriptions are eight characters longer than `small`'s, the **unnarrowed** list fails
+  the type with nothing of PR F on the screen — proved by three probes, one per surface. The
+  exclusion is scoped to the list half of A18–A21 and nothing else, because on the **door** the
+  same type caught a real defect: drawn as `Label(_:systemImage:)` it was reported clipped at the
+  default size, *naming its own element*; drawn as a plain `Text`, like the account rows beside
+  it, it passes. 019's `issues/03` asks the same design question one text size up and both are
+  still open.
+- 🚨 **The queue named the wrong gate for T154.** Filtering the page in Swift turns **scan 5**
+  red exactly as written; **scan 6 cannot fire** — it is the filter-*persistence* scan and looks
+  for `UserDefaults` — and the audit exits on the first failure, so it never even runs. The
+  behavioural half is sharper than promised: three `TransactionNarrowingTests` assertions go red
+  naming the field that drifted.
+- ⚠️ **L6 needed exactly one edit, and it is the finding T156 asks for.**
+  `TransactionListDoubles.swift` changed because the seam gained an axis and a double is a
+  conformance. **No expectation moved** — `PageRequest.uncategorizedOnly` defaults to `false`. A
+  three-argument spelling of `page` was rejected as PR C's "silently omit a fact" shape.
+- ⚠️ **The count needed a signal.** `CategoryChangeSignal` mirrors `ImportCompletionSignal` and
+  is deliberately not it, carries `Void`, and is subscribed from **`RootView`** rather than the
+  door — a `.task` on a `List` row is a subscription that dies with a row.
+- ⚠️ **Four SwiftLint limits at once, all answered by moving something out** — never by
+  reformatting. `CategorizeStrings.finishedState(accountName:)`,
+  `TransactionWorklistEmptyStateTests`, `AccessibilityAudit.swift` and
+  `SeededWorklistAccessibilityUITests` are all that split.
 
 **020 PR E is DONE** (`0468cee`, T122–T140). A person can now correct a transaction, be asked in
 their own words whether Kaname should remember the merchant, decline that without touching the

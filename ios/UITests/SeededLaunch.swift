@@ -212,12 +212,48 @@ enum SeededLaunch {
     }
 
     /// How every title `TransactionListStrings.emptyState(for:)` can produce begins — three of
-    /// the six name the account, so this matches a prefix rather than a whole sentence.
-    /// Duplicated here on purpose: this bundle cannot see the app's strings, and an assertion
-    /// made against the **rendered** sentence is what notices when copy and state come apart.
+    /// the six name the account, so this matches a prefix rather than a whole sentence, and
+    /// 020's two finished states are here for the same reason. Duplicated on purpose: this
+    /// bundle cannot see the app's strings, and an assertion made against the **rendered**
+    /// sentence is what notices when copy and state come apart.
     private static let emptyTitlePrefixes = [
-        "No transactions", "Nothing to show", "Nothing imported yet",
+        "No transactions", "Nothing to show", "Nothing imported yet", "Nothing left to file",
     ]
+
+    // MARK: - The worklist
+
+    /// What the door onto the worklist is currently saying, or `nil` when it says nothing.
+    ///
+    /// ⚠️ It is matched by **shape**, not by an exact sentence: the count is the engine's and a
+    /// test that hard-coded one would be asserting the seed's arithmetic rather than the
+    /// engine's. The finished wording is the one sentence it can say with no number in it.
+    static func worklistDoorLabel(_ app: XCUIApplication) -> String? {
+        let door = app.buttons.matching(
+            NSPredicate(
+                format: "label ENDSWITH %@ OR label ENDSWITH %@ OR label == %@",
+                " need a category", " needs a category", worklistFinished)
+        ).firstMatch
+        return door.waitForExistence(timeout: 10) ? door.label : nil
+    }
+
+    static let worklistFinished = "Everything has a category"
+    static let allFiledTitle = "Nothing left to file"
+
+    /// Open the worklist from the front door — the door a person taps, not a route assembled
+    /// by the test.
+    static func openWorklist(
+        _ app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let label = worklistDoorLabel(app) else {
+            return XCTFail("the front door offers no way into the worklist", file: file, line: line)
+        }
+        app.buttons[label].firstMatch.tap()
+        XCTAssertTrue(
+            app.navigationBars["Transactions"].waitForExistence(timeout: 10),
+            "the worklist did not open", file: file, line: line)
+    }
 
     // MARK: - Correcting a transaction, and what follows it
 
