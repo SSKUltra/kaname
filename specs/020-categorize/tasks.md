@@ -596,13 +596,20 @@ violations), `make import-audit` **ten scans green with the widened scope**, `Im
   bundle links neither the app nor `KanameCore`, so nothing over there can ask the engine
   anything — and the same test runs over **all five** declared scenarios.
 
-⚠️ **`make ios-test` has not completed green in one run, and the reason is measured rather than
-assumed.** The full run took **18,322 s** (five hours) on a host at load average 20–120 and ended
-with one failure: `SeededEmptyStateUITests.testTheFilterReachesItsFourStates`, whose message is
+⚠️ **The first full `make ios-test` did not complete green, and the reason was measured rather
+than assumed.** It took **18,322 s** (five hours) on a host at load average 20–120 and ended with
+one failure: `SeededEmptyStateUITests.testTheFilterReachesItsFourStates`, whose message is
 `Failed to swipe up CollectionView: Timed out while synthesizing event` — the simulator could not
-deliver a gesture. Every test in that suite was then re-run and **passed individually**, at
-24 s, 985 s, 1,075 s, 1,537 s and 3,145 s for work that normally takes 15–25 s. The failure is the
-machine; the run should be repeated on a quiet host before the PR is called green.
+deliver a gesture. Every test in that suite was re-run and **passed individually**, at 24 s,
+985 s, 1,075 s, 1,537 s and 3,145 s for work that normally takes 15–25 s.
+
+✅ **`make ios-test` completed green on a quiet host, after the record above was written.**
+**297 unit tests in 59 suites + 39 UI tests, 0 failures, exit 0 — in 782 s.** The same commit that
+had taken **18,322 s** and failed one gesture took **13 minutes**: 23× faster, nothing changed but
+the load average (18–120 → 3.7). The two runs together are the measurement, and they are kept
+side by side deliberately — a five-hour run ending in `Timed out while synthesizing event` is what
+this suite looks like on a busy machine, and the next person to see it should re-run before
+debugging anything.
 
 **Deferred, unchanged.** `018/06`'s three device timings still need a phone (T176).
 

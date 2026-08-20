@@ -160,9 +160,11 @@ dedup compares. Vary the amounts or the dates, or the blast radius is wrong befo
 tested. Work is on branch **`020-categorize`** (8 commits, clean tree, not yet pushed or opened as
 a PR).
 
-🚨 **One thing to do before anything else: re-run `make ios-test` on a quiet machine.** PR D closed
-without a single green full run — see the warning at the end of this section — and PR E's first
-build task (T125) is a full run anyway.
+✅ **PR D's gate is green.** `make ios-test`: **297 unit tests in 59 suites + 39 UI tests, 0
+failures, 782 s**. ⚠️ The same commit had previously taken **18,322 s** and failed one test with
+`Timed out while synthesizing event`, at load average 20–120; on a quiet host (load 3.7) it is 23×
+faster and clean. **A UI-test failure on this machine is a claim about the machine until the load
+average has been looked at** — check `uptime` before debugging one.
 
 **020 PR D is DONE** (`b6112a0`, T094–T121). A person can now open a transaction and change its
 category: `ios/Sources/Categorize/` (strings, scope, catalog, service, detail surface, picker),
@@ -200,12 +202,13 @@ things worth carrying:
   lives on `CategoryChoice.isCurrent` as a pure rule rather than privately inside the view — and
   it is the same shape as PR C's finding that only Q3 gates the v8 index.
 
-⚠️ **`make ios-test` has never completed green in one run for PR D, and the reason is measured.**
-The full run took **18,322 s** (five hours) on a host at load average 20–120 and failed one test
-with `Failed to swipe up CollectionView: Timed out while synthesizing event` — the simulator could
-not deliver a gesture. Every test in that suite was re-run and **passed individually**, at 24 s,
-985 s, 1,075 s, 1,537 s and 3,145 s for work that normally takes 15–25 s. Repeat the run on a
-quiet host before calling PR D green; do not go looking for a defect in the empty-state suite.
+⚠️ **What a loaded machine does to this gate, measured on one unchanged commit.** The first full
+run took **18,322 s** (five hours) at load average 20–120 and failed one test with `Failed to
+swipe up CollectionView: Timed out while synthesizing event` — the simulator could not deliver a
+gesture. Individual re-runs of that suite passed at 24 s, 985 s, 1,075 s, 1,537 s and 3,145 s for
+work that normally takes 15–25 s. The **same commit** then ran clean in **782 s** at load 3.7.
+Nothing was changed between them. Check `uptime` before chasing a UI-test failure here, and never
+chase a `synthesizing event` timeout at all.
 
 **020 PR C is DONE** (`e42bcf4`, T077–T093, **348 → 358 core tests**, every gate green:
 core-lint, core-test, lint, `ios-test` **TEST SUCCEEDED** (33 UI tests), `import-audit` ten scans
