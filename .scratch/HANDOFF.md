@@ -157,8 +157,18 @@ a relaunch**, without losing their filter or their place in the list.
 can eat before anything is asserted**: `repeated` puts one merchant in two statements of one
 account, `crossing` puts one across a ledger and a card — which is *exactly* the pair cross-source
 dedup compares. Vary the amounts or the dates, or the blast radius is wrong before it was ever
-tested. Work is on branch **`020-categorize`** (8 commits, clean tree, not yet pushed or opened as
-a PR).
+tested.
+
+**`020-categorize` PRs A–D are MERGED — [PR #42](https://github.com/SSKUltra/kaname/pull/42),
+merge commit `f6171b3`, both CI jobs green (Rust core 1m6s, iOS 30m31s).** A person can open a
+transaction and change its category on `main` today. Work continues **on the same branch**,
+`020-categorize`, which is fast-forwarded to the merge commit and clean — exactly how 019 ran
+(#40 then #41). PRs **E, F and G** (T122–T183) become the second pull request.
+
+⚠️ **The engine halves of E and F already shipped in #42, tested and uncalled**:
+`preview_memory_application` / `apply_memory` have no Swift caller until PR E, and
+`uncategorized_count()` has no entry point until PR F. That is deliberate, and it means a
+"nothing calls this" search is not evidence of a mistake.
 
 ✅ **PR D's gate is green.** `make ios-test`: **297 unit tests in 59 suites + 39 UI tests, 0
 failures, 782 s**. ⚠️ The same commit had previously taken **18,322 s** and failed one test with
