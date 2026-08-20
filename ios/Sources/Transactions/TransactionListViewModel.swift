@@ -38,6 +38,15 @@ final class TransactionListViewModel {
     private let history: any TransactionHistoryReading
     private let clock: @Sendable () -> Date
     private let pageSize: UInt32
+    /// Whether this screen is the worklist. Fixed for the life of the model, because it is
+    /// which list a person opened rather than something they change while reading it — the
+    /// account filter is the axis that moves.
+    ///
+    /// 🚨 It is **handed to the engine** and never used to filter a page that has come back
+    /// (L1, FR-038, FR-076, SC-024). A screen that filtered its own page would be a second
+    /// definition of "unanswered", and the entry point's count — which is SQL — would then be
+    /// a count of a different set from the one on screen.
+    private let uncategorizedOnly: Bool
 
     /// The resume point, held here and nowhere else. Opaque: no code reads a field of it.
     private var cursor: HistoryCursor?
@@ -97,11 +106,13 @@ final class TransactionListViewModel {
     init(
         history: any TransactionHistoryReading,
         clock: @escaping @Sendable () -> Date = { Date() },
-        pageSize: UInt32 = 50
+        pageSize: UInt32 = 50,
+        uncategorizedOnly: Bool = false
     ) {
         self.history = history
         self.clock = clock
         self.pageSize = pageSize
+        self.uncategorizedOnly = uncategorizedOnly
     }
 
     // MARK: - Reading
@@ -138,7 +149,8 @@ final class TransactionListViewModel {
         let token = generation
         do {
             let page = try await history.page(
-                accountID: filter.accountID, cursor: cursor, limit: pageSize)
+                accountID: filter.accountID, uncategorizedOnly: uncategorizedOnly,
+                cursor: cursor, limit: pageSize)
             // The population may have been replaced while this page was in flight — by a
             // filter, or by an import's refresh. This page describes the old one.
             guard token == generation else { return }
@@ -189,7 +201,8 @@ final class TransactionListViewModel {
             let latest = try await history.accountSummaries()
             repeat {
                 let page = try await history.page(
-                    accountID: filter.accountID, cursor: resume, limit: pageSize)
+                    accountID: filter.accountID, uncategorizedOnly: uncategorizedOnly,
+                    cursor: resume, limit: pageSize)
                 guard token == generation else { return }
                 fresh = Self.fold(page, into: fresh, now: now)
                 resume = page.cursor
@@ -204,7 +217,7 @@ final class TransactionListViewModel {
             cursor = resume
             isExhausted = resume == nil
             pagesHeld = read
-            state = fresh.isEmpty ? .empty(EmptyKind.decide(summaries: latest, filter: filter)) : .showing
+            state = fresh.isEmpty ? .empty(emptyKind(for: latest)) : .showing
             // Written back last, and written even when it has not changed: the write is what
             // tells the scroll position where to go after the rows underneath it moved.
             anchorRowID = anchor
@@ -231,17 +244,24 @@ final class TransactionListViewModel {
         let token = generation
         do {
             let latest = try await history.accountSummaries()
-            let page = try await history.page(accountID: filter.accountID, cursor: nil, limit: pageSize)
+            let page = try await history.page(
+                accountID: filter.accountID, uncategorizedOnly: uncategorizedOnly,
+                cursor: nil, limit: pageSize)
             guard token == generation else { return }
             summaries = latest
             apply(page)
-            state =
-                groups.isEmpty
-                ? .empty(EmptyKind.decide(summaries: summaries, filter: filter))
-                : .showing
+            state = groups.isEmpty ? .empty(emptyKind(for: summaries)) : .showing
         } catch {
             state = .unavailable
         }
+    }
+
+    /// Which empty this is, asked the same way from both read paths — with the narrowing
+    /// included, so a worklist that has been worked to zero says so instead of borrowing one
+    /// of 018's six sentences about absence (L4, FR-042a, FR-042b).
+    private func emptyKind(for summaries: [AccountSummary]) -> EmptyKind {
+        EmptyKind.decide(
+            summaries: summaries, filter: filter, uncategorizedOnly: uncategorizedOnly)
     }
 
     // MARK: - Grouping
@@ -329,8 +349,13 @@ extension TransactionListViewModel {
     /// store that cannot be opened at all then reaches `.unavailable` through exactly the
     /// same path a later read failure would, because an empty list would tell a person their
     /// transactions are gone.
-    static func live() -> TransactionListViewModel {
+    ///
+    /// - Parameter uncategorizedOnly: the scope the screen was pushed with. There is one
+    ///   transaction list and one view model behind it; the worklist is this flag, not a
+    ///   second screen (contract §2).
+    static func live(uncategorizedOnly: Bool = false) -> TransactionListViewModel {
         TransactionListViewModel(
-            history: TransactionHistoryService(opening: { try StoreProvider.shared() }))
+            history: TransactionHistoryService(opening: { try StoreProvider.shared() }),
+            uncategorizedOnly: uncategorizedOnly)
     }
 }

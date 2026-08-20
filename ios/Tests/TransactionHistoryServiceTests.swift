@@ -45,7 +45,8 @@ struct TransactionHistoryServiceTests {
     func firstPageMatchesTheFixtureExactly() async throws {
         try await withSeededStore { store in
             let service = TransactionHistoryService(store: store)
-            let page = try await service.page(accountID: nil, cursor: nil, limit: 4)
+            let page = try await service.page(
+                accountID: nil, uncategorizedOnly: false, cursor: nil, limit: 4)
 
             #expect(page.rows.count == 4)
             for (row, expected) in zip(page.rows, TransactionCorpus.expectedLiveRows.prefix(4)) {
@@ -112,7 +113,8 @@ struct TransactionHistoryServiceTests {
     func anUnknownAccountReadsEmpty() async throws {
         try await withSeededStore { store in
             let service = TransactionHistoryService(store: store)
-            let page = try await service.page(accountID: "no-such-account", cursor: nil, limit: 50)
+            let page = try await service.page(
+                accountID: "no-such-account", uncategorizedOnly: false, cursor: nil, limit: 50)
 
             #expect(page.rows.isEmpty)
             #expect(page.cursor == nil)
@@ -188,7 +190,8 @@ struct TransactionHistoryServiceTests {
         var cursor: HistoryCursor?
         var pages = 0
         repeat {
-            let page = try await service.page(accountID: accountID, cursor: cursor, limit: limit)
+            let page = try await service.page(
+                accountID: accountID, uncategorizedOnly: false, cursor: cursor, limit: limit)
             rows.append(contentsOf: page.rows)
             cursor = page.cursor
             pages += 1

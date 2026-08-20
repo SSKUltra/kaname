@@ -19,6 +19,19 @@ struct TransactionDetailView: View {
     @State private var categoryName: String?
     @State private var isPicking = false
     @State private var failed = false
+    /// What the app can offer to remember, once a correction has been recorded. Presented as
+    /// its own sheet rather than as a banner: an offer a person can miss is an offer that
+    /// teaches the app nothing, and one they cannot decline is not an offer.
+    @State private var offer: MemoryOffer?
+    /// The choice the offer is about, kept so accepting it can make the **same** correction
+    /// again, asked to be remembered. The engine's write is idempotent, so a person who says
+    /// yes gets one category and one memory, not two of either.
+    @State private var chosen: CategoryChoice?
+    /// Handed over by the offer and presented once its sheet has closed. Two sheets in
+    /// sequence, through `onDismiss`, because presenting the second while the first is still
+    /// going is how a sheet quietly fails to appear.
+    @State private var pendingSecondAction: SecondActionRequest?
+    @State private var secondAction: SecondActionRequest?
     private let service: CategorizeWriting
     private let onChange: (String, String?) -> Void
 
@@ -89,6 +102,28 @@ struct TransactionDetailView: View {
                 Task { await apply(chosen) }
             }
         }
+        // ⚠️ The hand-over happens in `onDismiss`, not at the moment the offer decides. A
+        // sheet presented while another is still dismissing is a sheet that sometimes never
+        // appears, and "sometimes" here means a person is silently never asked.
+        .sheet(item: $offer, onDismiss: presentSecondActionIfAny) { offer in
+            MemoryOfferView(
+                offer: offer, form: formMemory, service: service,
+                onImpact: { impact in
+                    guard case .remember(let portion, let categoryName) = offer else { return }
+                    pendingSecondAction = SecondActionRequest(
+                        portion: portion, categoryName: categoryName, impact: impact)
+                })
+        }
+        .sheet(item: $secondAction) { request in
+            SecondActionView(request: request, service: service) { _ in
+                // ⚠️ **A second action changes rows this screen is not showing**, and the list
+                // behind it is holding a copy of every one of them. Without this the person
+                // agrees to a change, goes back, and reads their old categories — the exact
+                // defect K5 exists to prevent, one action over. The list re-reads through the
+                // same seam a single correction uses; it never patches its own rows.
+                onChange(row.id, categoryName)
+            }
+        }
     }
 
     /// The screen's one action, and its one piece of glass — through `Theme`'s
@@ -124,17 +159,36 @@ struct TransactionDetailView: View {
     /// Record the decision, then show what the engine recorded — never what was asked for. A
     /// screen that shows the chosen category before the engine confirmed it is a screen that
     /// can lie about a person's own data.
+    ///
+    /// The correction is written **without** a memory (M2, FR-028): what the app would learn
+    /// from it is a second question, asked separately, and a person who never answers it still
+    /// gets the change they made. The engine populates `merchant_portion` either way, which is
+    /// what lets the offer state exactly what it would remember without having remembered it.
     private func apply(_ chosen: CategoryChoice) async {
         do {
-            _ = try await service.correct(row.id, to: chosen.reference, remember: false)
+            let outcome = try await service.correct(row.id, to: chosen.reference, remember: false)
             categoryID = chosen.id
             categoryName = chosen.name
             failed = false
             onChange(row.id, chosen.name)
+            self.chosen = chosen
+            offer = MemoryOffer.decide(outcome, chosen: chosen)
         } catch {
             failed = true
         }
         isPicking = false
+    }
+
+    /// Make the same correction again, this time asked to be remembered. Idempotent in the
+    /// engine — one `UPDATE` to the same category, one upsert of one memory.
+    private func formMemory() async -> CorrectionOutcome? {
+        guard let chosen else { return nil }
+        return try? await service.correct(row.id, to: chosen.reference, remember: true)
+    }
+
+    private func presentSecondActionIfAny() {
+        secondAction = pendingSecondAction
+        pendingSecondAction = nil
     }
 }
 

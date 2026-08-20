@@ -14,33 +14,6 @@ import XCTest
 /// door's explanation text extending past the bottom of the window. A list scrolls, so its rows
 /// are inside the window, and copying it by reflex is how a suppression stops meaning anything.
 final class SeededAccessibilityUITests: XCTestCase {
-    private static let xxxl = [
-        "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
-    ]
-    /// What is audited at the **default** text size: everything the instrument can be trusted
-    /// on. Only `.contrast` is excluded, and `issues/01` says why.
-    private let audited = XCUIAccessibilityAuditType.all.subtracting(.contrast)
-
-    /// What is audited at **accessibility** sizes.
-    ///
-    /// ⚠️ Two more types come off here, and both are recorded findings rather than
-    /// convenience (`.scratch/019-debug-test-seeding/issues/03`). At `AccessibilityXXXL` the
-    /// shipping row fires `.textClipped` and `.dynamicType` **by design**: `TransactionRowLayout`
-    /// caps the account line at one line so that the masked digits — the only part that tells
-    /// two cards of one product apart — survive the truncation
-    /// (`.scratch/018-transaction-list/issues/04`), and the amount is `fixedSize` because it may
-    /// never yield (FR-021). The auditor is right that the text clips; the app decided that it
-    /// should. Neither verdict carries an element, so neither can be scoped, and excluding them
-    /// **costs this suite the instrument FR-038 wanted for `018/02`** — which is why that defect
-    /// is caught by `testTheFilterChipStatesItsWholeScopeAtTheLargestTextSize` instead, a
-    /// sharper instrument that reads what was actually drawn. What still runs at XXXL is what
-    /// XXXL actually breaks: elements that vanish, controls too small to hit, and controls a
-    /// screen reader cannot name.
-    private let auditedAtLargeSizes = XCUIAccessibilityAuditType.all
-        .subtracting(.contrast)
-        .subtracting(.textClipped)
-        .subtracting(.dynamicType)
-
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
@@ -55,20 +28,20 @@ final class SeededAccessibilityUITests: XCTestCase {
     /// controls break first.
     func testThePopulatedListSurvivesTheLargestTextSize() throws {
         SeededLaunch.pin(.light, in: self)
-        try auditPopulatedList(arguments: Self.xxxl, types: auditedAtLargeSizes)
+        try auditPopulatedList(arguments: AccessibilityAudit.xxxl, types: AccessibilityAudit.typesAtLargeSizes)
     }
 
     /// A3 — Dark Mode is its own problem, not a repaint of the light one.
     func testThePopulatedListPassesTheAuditInDarkMode() throws {
         SeededLaunch.pin(.dark, in: self)
-        try auditPopulatedList(arguments: [], types: audited)
+        try auditPopulatedList(arguments: [], types: AccessibilityAudit.types)
     }
 
     /// A4 — both at once, because each one passing alone says nothing about the layout the
     /// other produces.
     func testThePopulatedListPassesTheAuditInDarkModeAtTheLargestTextSize() throws {
         SeededLaunch.pin(.dark, in: self)
-        try auditPopulatedList(arguments: Self.xxxl, types: auditedAtLargeSizes)
+        try auditPopulatedList(arguments: AccessibilityAudit.xxxl, types: AccessibilityAudit.typesAtLargeSizes)
     }
 
     /// A5 — the state `.scratch/018-transaction-list/issues/02` failed in: a filter applied, at
@@ -77,14 +50,14 @@ final class SeededAccessibilityUITests: XCTestCase {
     func testTheFilteredListPassesTheAuditAtTheLargestTextSize() throws {
         SeededLaunch.pin(.light, in: self)
         let scenario = SeedScenario.small
-        let app = SeededLaunch.launch(scenario: scenario, arguments: Self.xxxl)
+        let app = SeededLaunch.launch(scenario: scenario, arguments: AccessibilityAudit.xxxl)
         SeededLaunch.openTransactionList(app)
         guard let account = scenario.expectedAccounts.first else {
             return XCTFail("small declares no account")
         }
         SeededLaunch.filter(app, to: account)
 
-        try audit(app, types: auditedAtLargeSizes)
+        try AccessibilityAudit.run(app, types: AccessibilityAudit.typesAtLargeSizes)
     }
 
     /// **A5b — the sharper instrument**, and the one that actually catches
@@ -104,7 +77,7 @@ final class SeededAccessibilityUITests: XCTestCase {
     func testTheFilterChipStatesItsWholeScopeAtTheLargestTextSize() {
         SeededLaunch.pin(.light, in: self)
         let scenario = SeedScenario.small
-        let app = SeededLaunch.launch(scenario: scenario, arguments: Self.xxxl)
+        let app = SeededLaunch.launch(scenario: scenario, arguments: AccessibilityAudit.xxxl)
         SeededLaunch.openTransactionList(app)
         guard let account = scenario.expectedAccounts.first, let last4 = account.last4 else {
             return XCTFail("small declares no account, or one with no masked digits")
@@ -143,7 +116,7 @@ final class SeededAccessibilityUITests: XCTestCase {
     func testTheLastRowClearsTheFilterBarAtTheLargestTextSize() {
         SeededLaunch.pin(.light, in: self)
         let scenario = SeedScenario.small
-        let app = SeededLaunch.launch(scenario: scenario, arguments: Self.xxxl)
+        let app = SeededLaunch.launch(scenario: scenario, arguments: AccessibilityAudit.xxxl)
         SeededLaunch.openTransactionList(app)
         guard let account = scenario.expectedAccounts.first,
             let last = scenario.expectedLiveRows.last
@@ -197,20 +170,20 @@ final class SeededAccessibilityUITests: XCTestCase {
     /// A9 — the transaction surface and the picker, at the default size in Light.
     func testTheTransactionSurfaceAndPickerPassTheAudit() throws {
         SeededLaunch.pin(.light, in: self)
-        try auditCategorizeSurfaces(arguments: [], types: audited)
+        try auditCategorizeSurfaces(arguments: [], types: AccessibilityAudit.types)
     }
 
     /// A10 — the same two surfaces at the largest accessibility size, where a picker of two
     /// dozen categories and a surface of four facts each have to survive the text growing.
     func testTheTransactionSurfaceAndPickerSurviveTheLargestTextSize() throws {
         SeededLaunch.pin(.light, in: self)
-        try auditCategorizeSurfaces(arguments: Self.xxxl, types: auditedAtLargeSizes)
+        try auditCategorizeSurfaces(arguments: AccessibilityAudit.xxxl, types: AccessibilityAudit.typesAtLargeSizes)
     }
 
     /// A11 — and in Dark Mode, which is its own problem rather than a repaint of the light one.
     func testTheTransactionSurfaceAndPickerPassTheAuditInDarkMode() throws {
         SeededLaunch.pin(.dark, in: self)
-        try auditCategorizeSurfaces(arguments: [], types: audited)
+        try auditCategorizeSurfaces(arguments: [], types: AccessibilityAudit.types)
     }
 
     /// A12 — **geometry, not audit** (K7, R4, FR-062). The auditor's own hit-target check has
@@ -234,6 +207,101 @@ final class SeededAccessibilityUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(blank.frame.width, 44, "a choice is too narrow to hit")
     }
 
+    // MARK: - 020 PR E — the memory offer and the second action
+
+    /// A13 — the memory offer, at the default size in Light.
+    func testTheMemoryOfferPassesTheAudit() throws {
+        SeededLaunch.pin(.light, in: self)
+        try auditMemorySurfaces(arguments: [], types: AccessibilityAudit.types)
+    }
+
+    /// A14 — and at the largest accessibility size, where the offer's sentence quotes a
+    /// merchant back and the second action lists an account name per line.
+    func testTheMemoryOfferSurvivesTheLargestTextSize() throws {
+        SeededLaunch.pin(.light, in: self)
+        try auditMemorySurfaces(arguments: AccessibilityAudit.xxxl, types: AccessibilityAudit.typesAtLargeSizes)
+    }
+
+    /// A15 — Dark Mode, its own problem rather than a repaint.
+    func testTheMemoryOfferPassesTheAuditInDarkMode() throws {
+        SeededLaunch.pin(.dark, in: self)
+        try auditMemorySurfaces(arguments: [], types: AccessibilityAudit.types)
+    }
+
+    /// A16 — Dark Mode at the largest size, because each passing alone says nothing about the
+    /// layout the other produces.
+    func testTheMemoryOfferPassesTheAuditInDarkModeAtTheLargestTextSize() throws {
+        SeededLaunch.pin(.dark, in: self)
+        try auditMemorySurfaces(arguments: AccessibilityAudit.xxxl, types: AccessibilityAudit.typesAtLargeSizes)
+    }
+
+    /// A17 — **geometry, not audit** (S1, FR-062). Every answer either sheet offers is the whole
+    /// of what a person can do on it; a control too small to hit there is a person stuck inside
+    /// a sheet with an unanswered question.
+    ///
+    /// ⚠️ **This found a real defect, and the auditor did not.** Both sheets' answers rendered
+    /// **34.33 pt** tall at the *default* text size — a glass button sized to its label, and the
+    /// label had no minimum. `performAccessibilityAudit`'s own hit-target check stayed green
+    /// through it, which is the same finding A12 records one surface over: on this repository's
+    /// controls, hit targets are measured or they are not checked.
+    func testBothAnswersToTheSecondActionAreBigEnoughToHit() throws {
+        SeededLaunch.pin(.light, in: self)
+        let app = try openMemoryOffer(arguments: [])
+        measureAnswers(app, [SeededLaunch.memoryOfferAccept, SeededLaunch.memoryOfferDecline])
+
+        app.buttons[SeededLaunch.memoryOfferAccept].tap()
+        XCTAssertTrue(
+            app.staticTexts[SeededLaunch.secondActionTitle].waitForExistence(timeout: 15),
+            "accepting the offer never led to the second action")
+        measureAnswers(app, ["Change them", "Leave them as they are"])
+    }
+
+    private func measureAnswers(_ app: XCUIApplication, _ labels: [String]) {
+        for label in labels {
+            let button = app.buttons[label].firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 10), "there is no \"\(label)\"")
+            AccessibilityAudit.measureHitTarget(button, named: label)
+        }
+    }
+
+    /// Correct a transaction, audit the offer it produces, accept it, and audit the second
+    /// action — one launch, because neither surface is reachable except through the one before
+    /// it, and auditing them apart would audit each out of the state the previous one leaves.
+    ///
+    /// `crossing` rather than `repeated`: its radius spans two accounts, so the second action
+    /// renders the case that has more to lay out, which is the case an accessibility size
+    /// breaks first.
+    private func auditMemorySurfaces(
+        arguments: [String], types: XCUIAccessibilityAuditType
+    ) throws {
+        let app = try openMemoryOffer(arguments: arguments)
+        try AccessibilityAudit.run(app, types: types)
+
+        app.buttons[SeededLaunch.memoryOfferAccept].tap()
+        XCTAssertTrue(
+            app.staticTexts[SeededLaunch.secondActionTitle].waitForExistence(timeout: 15),
+            "the second action never appeared, so the audit would have run on the offer twice")
+        try AccessibilityAudit.run(app, types: types)
+    }
+
+    private func openMemoryOffer(arguments: [String]) throws -> XCUIApplication {
+        // `XCTUnwrap`, never `XCTSkip`: if `crossing`'s subject row is eaten by dedup this must
+        // go red, because a skipped audit is indistinguishable from an audited surface in the
+        // run's own report — and SC-016 is a claim about surfaces that were actually audited.
+        let subject = try XCTUnwrap(
+            SeedScenario.crossing.expectedMemorySubjectRow,
+            "the crossing scenario declares no live memory subject, so neither memory surface "
+                + "was audited")
+        let app = SeededLaunch.launch(scenario: .crossing, arguments: arguments)
+        SeededLaunch.openTransactionList(app)
+        SeededLaunch.openRow(app, labelled: subject.accessibilityLabel)
+        SeededLaunch.chooseCategory(app, named: "Groceries")
+        XCTAssertTrue(
+            app.staticTexts[SeededLaunch.memoryOfferTitle].waitForExistence(timeout: 10),
+            "no memory offer followed the correction")
+        return app
+    }
+
     /// Open a transaction, then the picker over it, and audit both — one launch, because the
     /// picker is only reachable through the surface and auditing them apart would audit the
     /// second one out of the state the first one puts it in.
@@ -250,10 +318,10 @@ final class SeededAccessibilityUITests: XCTestCase {
         XCTAssertTrue(
             app.navigationBars["Transaction"].waitForExistence(timeout: 10),
             "the transaction surface did not open")
-        try audit(app, types: types)
+        try AccessibilityAudit.run(app, types: types)
 
         Self.openPicker(app)
-        try audit(app, types: types)
+        try AccessibilityAudit.run(app, types: types)
     }
 
     private static func openPicker(_ app: XCUIApplication) {
@@ -291,16 +359,7 @@ final class SeededAccessibilityUITests: XCTestCase {
         SeededLaunch.openTransactionList(app)
         XCTAssertFalse(
             SeededLaunch.rowLabels(app).isEmpty, "the audit would be running against an empty list")
-        try audit(app, types: types)
+        try AccessibilityAudit.run(app, types: types)
     }
 
-    private func audit(_ app: XCUIApplication, types: XCUIAccessibilityAuditType) throws {
-        try app.performAccessibilityAudit(for: types) { issue in
-            print(
-                "AUDIT ISSUE type=\(issue.auditType) detail=\(issue.detailedDescription) "
-                    + "element=\(String(describing: issue.element))"
-            )
-            return false
-        }
-    }
 }

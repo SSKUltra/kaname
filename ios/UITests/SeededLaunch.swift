@@ -212,15 +212,160 @@ enum SeededLaunch {
     }
 
     /// How every title `TransactionListStrings.emptyState(for:)` can produce begins — three of
-    /// the six name the account, so this matches a prefix rather than a whole sentence.
-    /// Duplicated here on purpose: this bundle cannot see the app's strings, and an assertion
-    /// made against the **rendered** sentence is what notices when copy and state come apart.
+    /// the six name the account, so this matches a prefix rather than a whole sentence, and
+    /// 020's two finished states are here for the same reason. Duplicated on purpose: this
+    /// bundle cannot see the app's strings, and an assertion made against the **rendered**
+    /// sentence is what notices when copy and state come apart.
     private static let emptyTitlePrefixes = [
-        "No transactions", "Nothing to show", "Nothing imported yet",
+        "No transactions", "Nothing to show", "Nothing imported yet", "Nothing left to file",
     ]
 
-    /// Pin the appearance for the length of a test, and put it back.
+    // MARK: - The worklist
+
+    /// What the door onto the worklist is currently saying, or `nil` when it says nothing.
     ///
+    /// ⚠️ It is matched by **shape**, not by an exact sentence: the count is the engine's and a
+    /// test that hard-coded one would be asserting the seed's arithmetic rather than the
+    /// engine's. The finished wording is the one sentence it can say with no number in it.
+    static func worklistDoorLabel(_ app: XCUIApplication) -> String? {
+        let door = app.buttons.matching(
+            NSPredicate(
+                format: "label ENDSWITH %@ OR label ENDSWITH %@ OR label == %@",
+                " need a category", " needs a category", worklistFinished)
+        ).firstMatch
+        return door.waitForExistence(timeout: 10) ? door.label : nil
+    }
+
+    static let worklistFinished = "Everything has a category"
+    static let allFiledTitle = "Nothing left to file"
+
+    /// Open the worklist from the front door — the door a person taps, not a route assembled
+    /// by the test.
+    static func openWorklist(
+        _ app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let label = worklistDoorLabel(app) else {
+            return XCTFail("the front door offers no way into the worklist", file: file, line: line)
+        }
+        app.buttons[label].firstMatch.tap()
+        XCTAssertTrue(
+            app.navigationBars["Transactions"].waitForExistence(timeout: 10),
+            "the worklist did not open", file: file, line: line)
+    }
+
+    // MARK: - Correcting a transaction, and what follows it
+
+    /// One transaction row, by the sentence it announces — the only per-row text an automated
+    /// run can see.
+    static func row(_ app: XCUIApplication, labelled label: String) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    }
+
+    /// Open one transaction from the list, walking to it if it is below the fold.
+    static func openRow(
+        _ app: XCUIApplication,
+        labelled label: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let target = row(app, labelled: label)
+        var swipes = 0
+        while !target.exists && swipes < 20 {
+            app.collectionViews.firstMatch.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(
+            target.waitForExistence(timeout: 10), "the list never showed \(label)",
+            file: file, line: line)
+        target.tap()
+        XCTAssertTrue(
+            app.navigationBars["Transaction"].waitForExistence(timeout: 10),
+            "tapping a row did not open the transaction", file: file, line: line)
+    }
+
+    /// File the open transaction under `category`, through the picker a person uses.
+    ///
+    /// ⚠️ At an accessibility text size the action is below four facts, which is why this
+    /// scrolls before giving up — FR-004 asks for it to be reachable without scrolling **at the
+    /// default size**, and a helper that refused to scroll would assert a requirement nobody
+    /// made.
+    static func chooseCategory(
+        _ app: XCUIApplication,
+        named category: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let change = app.buttons["Change category"].firstMatch
+        if !change.waitForExistence(timeout: 10) || !change.isHittable {
+            app.collectionViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(
+            change.waitForExistence(timeout: 10), "the surface offers no way to change",
+            file: file, line: line)
+        change.tap()
+        XCTAssertTrue(
+            app.navigationBars["Choose a category"].waitForExistence(timeout: 10),
+            "the picker did not open", file: file, line: line)
+        // ⚠️ Not `app.buttons[category]`. The picker marks the **current** choice by appending
+        // a spoken word to its label, so the one row a person is most likely to be looking at
+        // is the one row an exact match cannot find — and on an unanswered transaction that is
+        // "No category", which is exactly what a test of the deliberate blank reaches for.
+        let choice = app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ OR label BEGINSWITH %@", category, "\(category), ")
+        ).firstMatch
+        XCTAssertTrue(
+            choice.waitForExistence(timeout: 10), "the picker does not offer \(category)",
+            file: file, line: line)
+        choice.tap()
+    }
+
+    /// The sentences the memory offer can lead with.
+    ///
+    /// ⚠️ Duplicated from `CategorizeStrings` on purpose, exactly as `emptyTitlePrefixes` is:
+    /// this bundle links neither the app nor the engine, and an assertion made against the
+    /// **rendered** sentence is what notices when the copy and the state come apart.
+    static let memoryOfferTitle = "Remember this for next time?"
+    static let nothingToRememberTitle = "Nothing to remember here"
+    static let memoryOfferDecline = "Not now"
+    static let memoryOfferAccept = "Remember it"
+    static let secondActionTitle = "Change the ones you already have?"
+
+    /// Whatever the memory offer is currently saying, or a non-existent element.
+    static func memoryOffer(_ app: XCUIApplication) -> XCUIElement {
+        app.staticTexts.matching(
+            NSPredicate(
+                format: "label == %@ OR label == %@", memoryOfferTitle, nothingToRememberTitle)
+        ).firstMatch
+    }
+
+    /// Decline whatever the offer is offering — the path that must leave a correction intact.
+    ///
+    /// ⚠️ **Every correction now leads here**, including ones a test makes for another reason
+    /// entirely. A test that changes a category and then reaches for the surface underneath is
+    /// reaching through a sheet, which fails as "the element is not hittable" and reads like a
+    /// layout defect.
+    static func dismissMemoryOffer(
+        _ app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            memoryOffer(app).waitForExistence(timeout: 10),
+            "no memory offer followed the correction", file: file, line: line)
+        for label in [memoryOfferDecline, "Done"] {
+            let button = app.buttons[label].firstMatch
+            if button.exists {
+                button.tap()
+                return
+            }
+        }
+        XCTFail("the memory offer cannot be declined", file: file, line: line)
+    }
+
+    /// Pin the appearance for the length of a test, and put it back.    ///
     /// ⚠️ `XCUIDevice.shared.appearance` is a **simulator-wide** setting that outlives the test
     /// that set it, so an audit that does not state which appearance it wants audits whichever
     /// one the last run happened to leave behind — this suite was written against a screen that

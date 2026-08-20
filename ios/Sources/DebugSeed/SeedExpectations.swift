@@ -103,6 +103,46 @@ extension SeedScenario {
         expectedAccounts.first { $0.name == name }
     }
 
+    /// What the second action would change, once the scenario's declared memory has been
+    /// formed on `memory.subjectDescription`.
+    ///
+    /// ⚠️ **Derived from the declaration, and settled by the engine.** The rows are the live
+    /// rows whose description the subject named, and the accounts are their accounts in the
+    /// order `preview_memory_application` states them. Whether that set is the *right* set is a
+    /// question about `merchant_portion`, which only the engine can answer — so
+    /// `SeedMemoryExpectationTests` measures every part of this against a real store, including
+    /// the part an author is most able to get wrong: that no **other** row in the scenario
+    /// derives to the same portion.
+    ///
+    /// The corrected row itself is absent by construction, and that is the engine's rule rather
+    /// than this one's: a correction is written with a person's provenance, and a memory never
+    /// touches a row a person decided by hand.
+    var expectedMemoryImpact: SeedMemoryImpact? {
+        guard let memory else { return nil }
+        let matching = placement.live.filter { memory.alsoMatching.contains($0.row.description) }
+        var accountNames: [String] = []
+        for row in matching where !accountNames.contains(row.account.name) {
+            accountNames.append(row.account.name)
+        }
+        return SeedMemoryImpact(
+            portion: memory.portion, rows: matching.map(\.expectation),
+            accountNames: accountNames.sorted())
+    }
+
+    /// The live row a memory test corrects, as the screen announces it.
+    var expectedMemorySubjectRow: SeedExpectation? {
+        guard let memory else { return nil }
+        return placement.live.first { $0.row.description == memory.subjectDescription }?
+            .expectation
+    }
+
+    /// Every description the scenario declares, superseded rows included — what the engine's
+    /// derivation is measured over when a test checks that a subject's `alsoMatching` is
+    /// complete rather than merely correct.
+    var everyDeclaredDescription: [String] {
+        statements.flatMap { $0.rows.map(\.description) }
+    }
+
     /// The live rows of one account, in the order the filtered list must render them — which is
     /// the same total order with one account in it, because a filter is the same query with
     /// `k = 1` and never a second sort.

@@ -50,4 +50,31 @@ struct CategorizeStringsTests {
     func theWordForNoCategoryIsShared() {
         #expect(CategorizeStrings.uncategorized == TransactionListStrings.uncategorized)
     }
+
+    /// **T170** — U3's reach, one layer further out: the seed declarations.
+    ///
+    /// ⚠️ A scenario's descriptions and account names are **drawn on the screen** during every
+    /// seeded run, and its expectation labels are the sentences the UI tests assert. A banned
+    /// word there cannot ship — `DebugSeed` is `#if DEBUG` and `make release-audit` proves its
+    /// absence — but it can do something subtler and worse: enshrine the engine's vocabulary in
+    /// what a UI test *expects a person to read*, so the day a surface leaks that word the
+    /// suite agrees with it.
+    @Test("No seed declaration puts the engine's vocabulary on a screen")
+    func noSeedDeclarationCarriesEngineVocabulary() {
+        for scenario in SeedScenario.declared {
+            var visible = scenario.statements.map(\.accountName)
+            visible += scenario.everyDeclaredDescription
+            visible += scenario.statements.flatMap { $0.rows.compactMap(\.expectedCategory) }
+            visible += scenario.expectedLiveRows.map(\.accessibilityLabel)
+
+            for text in visible {
+                for word in Self.banned {
+                    #expect(
+                        !text.lowercased().contains(word.lowercased()),
+                        "\(scenario.name) declares \"\(text)\", which leaked \"\(word)\""
+                    )
+                }
+            }
+        }
+    }
 }

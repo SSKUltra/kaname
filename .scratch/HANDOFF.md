@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/020-categorize/`, starting at T122 (PR E, the memory and the second action).**
+**`specs/020-categorize/` is COMPLETE — all 183 tasks. The next slice has not been specified yet.**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -152,13 +152,158 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: `020-categorize` PR E — the memory and the second action.** Start at **T122** in
-`specs/020-categorize/tasks.md`. ⚠️ Its first two tasks are seed scenarios that **de-duplication
-can eat before anything is asserted**: `repeated` puts one merchant in two statements of one
-account, `crossing` puts one across a ledger and a card — which is *exactly* the pair cross-source
-dedup compares. Vary the amounts or the dates, or the blast radius is wrong before it was ever
-tested. Work is on branch **`020-categorize`** (8 commits, clean tree, not yet pushed or opened as
-a PR).
+**⬅️ NEXT: open the second pull request for `020-categorize` (PRs E, F, G — T122–T183).**
+The branch is `020-categorize`, PRs A–D are already merged as
+[#42](https://github.com/SSKUltra/kaname/pull/42), and everything since is committed on the same
+branch exactly as 019 ran it. **Nothing in the queue is left**: T182's final gate is the last
+task, and after it the slice is done.
+
+**⚠️ What is open, and it is short:**
+
+- **`.scratch/020-categorize/issues/02`** (`ready-for-agent`) — **`EmptyKind.accountAnswered` is
+  rendered by nothing.** One account finished while another still has work: asserted twice as a
+  value and a sentence, reached by no automated run of any kind. **Not** FR-070's kind of state —
+  it is perfectly seedable (`crossing` has two accounts), so it is a strict hole in SC-018. Found
+  by T183's mechanical walk of all 78 FRs and 36 SCs, which is the only thing that could have
+  found it: the traceability tables are complete for *assertions* and silent about requirements
+  no assertion is named after. Reported and not closed, per T183's own instruction.
+- **`018/06`** (`ready-for-human`) — still **the only thing between 018 and SC-012**, and 020 did
+  not sign it either. Three device timings, ~20 minutes with a physical phone.
+- **`018/05`** (`needs-info`) — the render hang. 020 pushes a detail view over a deeply-scrolled
+  list, which is *closer* to the untested combination than 018 was; the four reopen conditions
+  are now written out precisely in `specs/020-categorize/quickstart.md`.
+- **`019/03`** and **`.scratch/020-categorize/issues/01`** — the same Dynamic Type design question
+  at two text sizes, both still open, neither this slice's to settle.
+
+**020 PR G is DONE** (T160–T183). Nothing new was built; everything built is now *shown* to hold.
+`specs/020-categorize/quickstart.md` gained the **audit matrix** (which audit type × which
+surface, with every un-audited cell named and reasoned), the **break ledger** (all fifteen
+deliberate breaks with their **observed** failure text), **who signed what** (machine vs person,
+with nothing in between), and five explicit deferrals. `docs/adr/0006-a-persons-decision-is-a-
+different-kind-of-fact.md` is new and records both 🚨 findings, their regression tests and the
+whole v8 + FFI surface in one place; `CONTEXT.md` gains **Memory**, **Merchant portion**,
+**Deliberate blank** and **Unanswered**; `AGENTS.md` gains the build sequence in the imperative.
+Gates: core-lint clean, **core-test 358/0**, **lint 0 violations (127 files)**, import-audit ten
+scans OK, release-audit OK, **a11y-sweep TEST SUCCEEDED (57 UI, 0 failures, 0 skipped, 1,270 s,
+Increase Contrast on)**. `specs/020-categorize/tasks.md` § *PR G — RECORDED* has the full
+account; the six things worth carrying:
+
+- 🚨 **A skip is a green run.** `SeededAccessibilityUITests.openMemoryOffer` threw `XCTSkip`, and
+  **five** tests reach it, four of them the audits over the memory offer and the second action.
+  On that branch SC-016's "zero findings" would have been vacuously true for two of the four new
+  surfaces — and the `nil` branch is the **documented** failure mode of `crossing` (it must dodge
+  dedup). Now `XCTUnwrap`. ⚠️ **It was latent, not firing.** PR F's "2 skipped" is two *unit*
+  tests that pre-date 020 and are both correct (`databaseFileIsProtected` is device-only;
+  `readsTheReferenceSet` is opt-in), each a declarative `.enabled(if:)`. **A skip count is not
+  self-explanatory** — only `xcrun xcresulttool get test-results tests` settles which test it is,
+  and the obvious inference here was wrong. `.scratch/020-categorize/issues/03`.
+- 🚨 **Five of the fifteen breaks did not do what the queue predicted, and every difference would
+  have read as success.** T027 turned *nothing* red (the two guards are not independent); T051
+  missed P2 entirely — **what protects SC-008 is the reference-token discard, not the segment
+  count**; T075 turned **three** tests red, not one; T117 and T154 each hit exactly one of the two
+  things named. **Record the observed red, never the intended one.**
+- ⚠️ **A first-failure-exits audit can only be observed one scan at a time.** `import-path-audit
+  .sh` exits on the first failure, so T096's "scans 5/6/7 red" is unobservable as written — scan 5
+  fires and the rest never run. Scan 7 needed its own probe. Any queue predicting a *set* of scans
+  is predicting something the tool cannot show.
+- ⚠️ **`cargo` is not on a non-interactive shell's `PATH`.** `.zshrc` sources `~/.cargo/env` and
+  `make` from a script or an agent shell does not read it, so `make core-xcframework` dies with
+  `cargo: command not found` inside `build-xcframework.sh` — a `PATH` problem that reads as a
+  toolchain problem. Prefix `. "$HOME/.cargo/env" &&`. Now rule 3 of AGENTS.md's build sequence.
+- ⚠️ **T157's break is in Rust, so watching it costs two full engine rebuilds** —
+  `core-xcframework` → `ios-gen` on the way in *and* out, ~15 minutes for one line. It is worth
+  it: X3 went red twice over, end to end through the app.
+- ⚠️ **`make a11y-sweep` is a 21-minute gate** (it runs the whole UI bundle under Increase
+  Contrast) and it is **not** part of `make ios-test`. FR-065 is satisfied across two targets and
+  that is permanent, not a gap waiting on a fix (T180).
+
+**020 PR F is DONE** (T141–T159). A person can now see, on the app's first screen, how many of
+their transactions have no category; open exactly those across every account; narrow them
+further to one card; answer them one at a time and watch each leave; deliberately file one under
+nothing and watch that count as an answer too; and be told, when the last one goes, that they are
+finished — in words, never as a "0". `ios/Sources/Categorize/` gains `UncategorizedEntryPoint
+.swift` and `CategoryChangeSignal.swift`; `EmptyKind` grows the two rows `data-model.md` §6
+predicted. Every gate green: `make lint` **0 violations (127 files)**, `make ios-test` **TEST
+SUCCEEDED — 409 passed, 0 failed, 57 UI tests, 1,194 s at load 4.1**, `make import-audit` ten
+scans OK. `ImportService.swift` **unchanged at 398 lines**; `git diff core/` empty.
+⚠️ **That run's "2 skipped" is two pre-existing *unit* tests** — `databaseFileIsProtected`
+(device-only) and `readsTheReferenceSet` (opt-in) — **not** the `XCTSkip` PR G found.
+`specs/020-categorize/tasks.md` § *PR F — RECORDED* has the full account; the five things worth
+carrying:
+
+- 🚨 **`.textClipped` fires on the *shipped* 018 row at the DEFAULT text size, and only the
+  fixture had ever hidden it** (`.scratch/020-categorize/issues/01`). Seeded with `unfiled`,
+  whose descriptions are eight characters longer than `small`'s, the **unnarrowed** list fails
+  the type with nothing of PR F on the screen — proved by three probes, one per surface. The
+  exclusion is scoped to the list half of A18–A21 and nothing else, because on the **door** the
+  same type caught a real defect: drawn as `Label(_:systemImage:)` it was reported clipped at the
+  default size, *naming its own element*; drawn as a plain `Text`, like the account rows beside
+  it, it passes. 019's `issues/03` asks the same design question one text size up and both are
+  still open.
+- 🚨 **The queue named the wrong gate for T154.** Filtering the page in Swift turns **scan 5**
+  red exactly as written; **scan 6 cannot fire** — it is the filter-*persistence* scan and looks
+  for `UserDefaults` — and the audit exits on the first failure, so it never even runs. The
+  behavioural half is sharper than promised: three `TransactionNarrowingTests` assertions go red
+  naming the field that drifted.
+- ⚠️ **L6 needed exactly one edit, and it is the finding T156 asks for.**
+  `TransactionListDoubles.swift` changed because the seam gained an axis and a double is a
+  conformance. **No expectation moved** — `PageRequest.uncategorizedOnly` defaults to `false`. A
+  three-argument spelling of `page` was rejected as PR C's "silently omit a fact" shape.
+- ⚠️ **The count needed a signal.** `CategoryChangeSignal` mirrors `ImportCompletionSignal` and
+  is deliberately not it, carries `Void`, and is subscribed from **`RootView`** rather than the
+  door — a `.task` on a `List` row is a subscription that dies with a row.
+- ⚠️ **Four SwiftLint limits at once, all answered by moving something out** — never by
+  reformatting. `CategorizeStrings.finishedState(accountName:)`,
+  `TransactionWorklistEmptyStateTests`, `AccessibilityAudit.swift` and
+  `SeededWorklistAccessibilityUITests` are all that split.
+
+**020 PR E is DONE** (`0468cee`, T122–T140). A person can now correct a transaction, be asked in
+their own words whether Kaname should remember the merchant, decline that without touching the
+correction, and — if they accept — be told exactly how many transactions in which accounts would
+change **before** anything is written. `ios/Sources/Categorize/` gains `MemoryOfferView.swift` and
+`SecondActionView.swift`; `ios/Sources/DebugSeed/SeedMemoryScenarios.swift` adds the `repeated`
+and `crossing` scenarios; three unit suites and two UI suites are new. Every gate green:
+`make lint` **0 violations (119 files)**, `make ios-test` **TEST SUCCEEDED (49 UI tests, 1,024 s
+at load 2.8)**, `make import-audit` ten scans OK, `make release-audit` OK.
+`ImportService.swift` **unchanged at 398 lines**. `specs/020-categorize/tasks.md` § *PR E —
+RECORDED* has the full account; the five things worth carrying:
+
+- 🚨 **A geometry assertion found a real hit-target defect that the accessibility auditor did
+  not.** Both new sheets' answers rendered **34.33 pt** tall **at the default text size** — under
+  FR-062's 44 pt — while all four `performAccessibilityAudit` runs stayed green. The cause:
+  `.buttonStyle` draws its background around what the **label** asks for, so a `.frame(minHeight:)`
+  outside a styled button sizes the space around a control that stayed small. `SheetAnswer` puts
+  the minimum on the label. **Second time this repo has recorded it** — A12 was the first. On
+  these controls, hit targets are measured or they are not checked.
+- 🚨 **Every correction now leads to a sheet, and that broke a test that changed by nothing.** X2
+  reached for the detail surface underneath the new offer and failed as "not hittable", which
+  reads exactly like a layout defect. `SeededLaunch.dismissMemoryOffer` is the shared way through
+  it. ⚠️ Anything that changes a category from now on must expect the offer.
+- 🚨 **The second action changed rows the list behind it was still holding, and nothing said so.**
+  Watched: agree, go back, read three stale categories. Fixed through `refreshAfterCorrection` —
+  the seam a single correction already uses — rather than by patching rows. **The queue did not
+  ask for this**: K5 is written about one row, and this is the first thing in the app that changes
+  rows the current screen is not showing.
+- ⚠️ **The picker cannot be found by the name of the thing you are choosing.** The current choice's
+  spoken label carries its mark (`No category, Current category`), so `app.buttons["No category"]`
+  finds nothing on an *unanswered* transaction — which is every transaction a memory test starts
+  from, and it reads as a missing control. `SeededLaunch.chooseCategory` matches the prefix.
+- ⚠️ **A declared blast radius has to be adjudicated for completeness, not just correctness.**
+  `SeedMemoryExpectationTests` asks the engine in both directions — every named description
+  derives to the portion, and **no other row in the scenario does**. Dropping one entry from
+  `repeated`'s `alsoMatching` was watched turning both arms red. An `alsoMatching` that is merely
+  correct understates the one number the second action exists to state.
+
+**`020-categorize` PRs A–D are MERGED — [PR #42](https://github.com/SSKUltra/kaname/pull/42),
+merge commit `f6171b3`, both CI jobs green (Rust core 1m6s, iOS 30m31s).** A person can open a
+transaction and change its category on `main` today. Work continues **on the same branch**,
+`020-categorize`, which is fast-forwarded to the merge commit and clean — exactly how 019 ran
+(#40 then #41). PRs **E, F and G** (T122–T183) become the second pull request.
+
+⚠️ **The engine halves of E and F already shipped in #42, tested and uncalled**:
+`preview_memory_application` / `apply_memory` have no Swift caller until PR E, and
+`uncategorized_count()` has no entry point until PR F. That is deliberate, and it means a
+"nothing calls this" search is not evidence of a mistake.
 
 ✅ **PR D's gate is green.** `make ios-test`: **297 unit tests in 59 suites + 39 UI tests, 0
 failures, 782 s**. ⚠️ The same commit had previously taken **18,322 s** and failed one test with

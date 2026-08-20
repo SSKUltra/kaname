@@ -11,11 +11,49 @@ protocol CategorizeWriting: Sendable {
     func correct(_ id: String, to category: CategoryRef?, remember: Bool) async throws
         -> CorrectionOutcome
 
+    /// What applying a merchant's memory to the transactions already imported **would** change.
+    /// Read-only: nothing is written, and the ids it returns are the ones `applyMemory` is
+    /// handed back.
+    func previewMemory(_ portion: String) async throws -> MemoryImpact
+
+    /// Apply a memory to exactly the rows a person was shown. `ids` is the preview's own list,
+    /// unmodified — the engine compares it for set equality and refuses anything else.
+    func applyMemory(_ portion: String, expecting ids: [String]) async throws -> UInt32
+
     /// Every category the engine knows, in the engine's own order.
     func categories() async throws -> [KanameCore.Category]
 
     /// How many transactions, store-wide, nobody has answered yet — **the engine's number**.
     func uncategorizedCount() async throws -> UInt32
+}
+
+/// What went wrong when a memory could not be applied, in the only two kinds a person can act
+/// on differently.
+///
+/// ⚠️ `TransactionListError` is deliberately **not** reused here, and this is the first place
+/// in the app where collapsing every failure into one would be wrong. Its `init(mapping:)`
+/// takes `_: Error` and discards it, which is right for a read that either produced rows or
+/// did not — but `StaleSet` is not a failure of the app, it is a statement about the person's
+/// own data: the rows changed under the offer they were looking at. Told that things changed,
+/// a person looks again; told "something went wrong", they try the same thing twice.
+enum MemoryApplicationError: Error, Equatable, Sendable {
+    /// The rows the person was shown are no longer the rows the memory would change, and
+    /// **nothing was written** (S5, FR-035f, SC-027).
+    case setChanged
+    /// Anything else the store said. The original is dropped, not wrapped — the same rule
+    /// `TransactionListError` follows.
+    case unavailable
+
+    /// 🚨 `StaleSet` keeps its own identity; everything else collapses. A `default` arm that
+    /// swallowed it would turn "your data changed" into "try again", and a silent retry with a
+    /// fresh set is exactly what FR-035b puts in the engine to prevent.
+    init(mapping error: Error) {
+        if case StoreError.StaleSet = error {
+            self = .setChanged
+        } else {
+            self = .unavailable
+        }
+    }
 }
 
 /// The engine's only caller for a correction — and deliberately nothing more than that.
@@ -31,29 +69,60 @@ protocol CategorizeWriting: Sendable {
 /// back, and `import-path-audit.sh` scans 5–8 now watch this directory for exactly that.
 actor CategorizeService: CategorizeWriting {
     private let open: @Sendable () throws -> Store
+    private let changes: CategoryChangeSignal
     private var opened: Store?
 
-    init(store: Store) {
+    init(store: Store, changes: CategoryChangeSignal = .shared) {
         open = { store }
+        self.changes = changes
     }
 
     /// Opened on first use, **inside the actor** — the same shape as
     /// `TransactionHistoryService`, and for the same reason: opening the encrypted database is
     /// I/O, and these surfaces are reached from a view body (FR-057).
-    init(opening open: @escaping @Sendable () throws -> Store) {
+    init(opening open: @escaping @Sendable () throws -> Store, changes: CategoryChangeSignal = .shared) {
         self.open = open
+        self.changes = changes
     }
 
     func correct(
         _ id: String, to category: CategoryRef?, remember: Bool
     ) throws -> CorrectionOutcome {
         do {
-            return try store().setTransactionCategory(
+            let outcome = try store().setTransactionCategory(
                 transactionId: id, category: category, remember: remember)
+            // After the engine's own transaction has committed, and only then: a correction
+            // that threw changed nothing, and a count that moved for it would be wrong
+            // (E5). What is announced is that *something* changed — the new number is read
+            // back from the engine, never carried here.
+            changes.send()
+            return outcome
         } catch {
             // Mapped at the boundary: nothing the store says about a row travels further than
             // this line.
             throw TransactionListError(mapping: error)
+        }
+    }
+
+    func previewMemory(_ portion: String) throws -> MemoryImpact {
+        do {
+            return try store().previewMemoryApplication(merchantPortion: portion)
+        } catch {
+            throw MemoryApplicationError(mapping: error)
+        }
+    }
+
+    /// 🚨 `ids` reaches the engine exactly as the preview handed it over. Trimming it, adding
+    /// to it or recomputing it here is the shape this bug takes in the wild, and the engine
+    /// refuses all three — which is why this method has no parameter for "just these ones".
+    func applyMemory(_ portion: String, expecting ids: [String]) throws -> UInt32 {
+        do {
+            let changed = try store().applyMemory(
+                merchantPortion: portion, expectedTransactionIds: ids)
+            changes.send()
+            return changed
+        } catch {
+            throw MemoryApplicationError(mapping: error)
         }
     }
 

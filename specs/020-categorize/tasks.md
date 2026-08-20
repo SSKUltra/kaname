@@ -623,33 +623,106 @@ debugging anything.
 
 > ⚠️ **Both scenarios can be eaten by de-duplication before anyone tests anything.** `repeated` puts one merchant in two statements of one account — vary the amounts or the dates or dedup supersedes the copies and the memory has one row to match. `crossing` puts a ledger and a card across two accounts — 🚨 that is **exactly** the pair cross-source dedup compares (two credit cards never de-duplicate; the source-kind guard compares a ledger against a card and nothing else), so its rows must differ in amount or date or the blast radius will be wrong before it was ever asserted.
 
-- [ ] T122 [US3] Add the `repeated` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant appearing across **two statements of one account** (FR-066), with amounts or dates varied per the warning above.
-- [ ] T123 [US3] Add the `crossing` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant across **two accounts**, a ledger and a card, with amounts or dates varied.
-- [ ] T124 [US3] Declare both scenarios' expectations in `ios/Sources/DebugSeed/SeedExpectations.swift`, **derived from the engine's answer**, not authored by hand.
-- [ ] T125 ⚠️ **BUILD** — `make ios-gen`, then `make ios-test`; confirm `SeedContractUITests` still passes with the expanded declared set.
+- [x] T122 [US3] Add the `repeated` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant appearing across **two statements of one account** (FR-066), with amounts or dates varied per the warning above.
+- [x] T123 [US3] Add the `crossing` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant across **two accounts**, a ledger and a card, with amounts or dates varied.
+- [x] T124 [US3] Declare both scenarios' expectations in `ios/Sources/DebugSeed/SeedExpectations.swift`, **derived from the engine's answer**, not authored by hand.
+- [x] T125 ⚠️ **BUILD** — `make ios-gen`, then `make ios-test`; confirm `SeedContractUITests` still passes with the expanded declared set.
 
 ## Phase 18: The memory offer [US3]
 
-- [ ] T126 [US3] Create `ios/Sources/Categorize/MemoryOfferView.swift` (rules M1–M5): after a correction the app states, in the person's words and showing the **derived merchant portion**, what it will remember (M1, FR-026, FR-026a); the offer can be **declined** and declining leaves the correction fully intact and protected (M2, FR-028); the portion shown is `merchant_portion(narration)` **from the engine** — the Swift side derives nothing (M4, FR-021, FR-076); no engine vocabulary (M5, FR-029).
-- [ ] T127 ⚠️ **BUILD** — `make ios-gen`.
-- [ ] T128 [US3] **X4** in a new `ios/UITests/CategorizeMemoryUITests.swift` over `repeated`: the memory offer names the merchant portion and can be declined, and the correction survives the decline. Then `make ios-gen` and confirm the suite ran.
-- [ ] T129 [US3] Assert **M3** in `ios/Tests/MemoryOfferTests.swift`: when derivation returns nothing, or the correction was to *no category*, the app says plainly there is nothing to remember and offers no memory — it must **not** show an empty or degenerate portion (FR-027d, plan § *Spec amendments* §3). Run `make ios-gen` for the new test file.
+- [x] T126 [US3] Create `ios/Sources/Categorize/MemoryOfferView.swift` (rules M1–M5): after a correction the app states, in the person's words and showing the **derived merchant portion**, what it will remember (M1, FR-026, FR-026a); the offer can be **declined** and declining leaves the correction fully intact and protected (M2, FR-028); the portion shown is `merchant_portion(narration)` **from the engine** — the Swift side derives nothing (M4, FR-021, FR-076); no engine vocabulary (M5, FR-029).
+- [x] T127 ⚠️ **BUILD** — `make ios-gen`.
+- [x] T128 [US3] **X4** in a new `ios/UITests/CategorizeMemoryUITests.swift` over `repeated`: the memory offer names the merchant portion and can be declined, and the correction survives the decline. Then `make ios-gen` and confirm the suite ran.
+- [x] T129 [US3] Assert **M3** in `ios/Tests/MemoryOfferTests.swift`: when derivation returns nothing, or the correction was to *no category*, the app says plainly there is nothing to remember and offers no memory — it must **not** show an empty or degenerate portion (FR-027d, plan § *Spec amendments* §3). Run `make ios-gen` for the new test file.
 
 ## Phase 19: The second action [US3]
 
 > 🚨 Q1-D's second action applies **exactly one memory** — the one just formed. Everything below exists to keep it from becoming a bulk editor.
 
-- [ ] T130 [US3] Create `ios/Sources/Categorize/SecondActionView.swift` (rules S1–S7): states the blast radius **before** the person agrees — how many transactions and which accounts, from `MemoryImpact` (S1, FR-035a, FR-035c, SC-026); offers **no choice of which transactions** — no checkboxes, no multi-select, no "select all" (S2, FR-035b, SC-028); the counts and accounts shown are `MemoryImpact`'s, unmodified — the view does not count, filter or re-derive (S3, FR-043, FR-078); on confirm calls `applyMemory(portion, expecting: impact.transactionIds)` with the ids from the preview it showed, unmodified (S4, FR-035f); declining leaves the memory formed and the correction intact (S7, FR-028).
-- [ ] T131 ⚠️ **BUILD** — `make ios-gen`.
-- [ ] T132 [US3] **X5** in a new `ios/UITests/CategorizeSecondActionUITests.swift` over `crossing`: the screen states a count **and** account names before confirmation, and there is **no** multi-select control on it. Then `make ios-gen` and confirm the suite ran.
-- [ ] T133 [US3] Assert **S5** in `ios/Tests/CategorizeServiceTests.swift` with a doubled service: a `StaleSet` error is surfaced as a person-legible "things changed, take another look", **nothing is written**, and it is **not** retried silently with a fresh set (FR-035f, SC-027).
-- [ ] T134 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; confirm both new suites ran.
-- [ ] T135 [US3] Record in the PR description that **S2 is a UI rule and is not the enforcement**. The enforcement is engine-side set equality (`contracts/engine-categorize.md` §2.4, test **M7**, task T066). A UI without a checkbox proves nothing about a future UI (SC-028).
-- [ ] T136 [US3] Assert **S6** in `ios/Tests/CategorizeServiceTests.swift`: given a preview that contains no `'PERSON'` row, rows the person corrected by hand are neither counted nor changed — the view merely displays the engine's truth (FR-035d, SC-031, engine test M4).
-- [ ] T137 [US3] Record plan § *Judgement calls* §2 where a reader of `MemoryOfferView.swift` will find it: a memory beats a rule, and the offer's wording must not promise more than engine test **M2** asserts.
-- [ ] T138 **DELIBERATE BREAK** — make `SecondActionView` pass a **trimmed** id list to `applyMemory`. Expected: the engine returns `StaleSet`, the S5 path fires and **nothing is written**. Revert per non-negotiable 7, then `make ios-gen`. This break proves S4 end-to-end and, more importantly, proves the engine — not the view — is where the guarantee lives.
-- [ ] T139 [US3] Accessibility over `MemoryOfferView` and `SecondActionView` in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8, FR-060–FR-062, SC-016). `.contrast` excluded (`019/01`); `.textClipped` / `.dynamicType` excluded at XXXL (`019/03`).
-- [ ] T140 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+- [x] T130 [US3] Create `ios/Sources/Categorize/SecondActionView.swift` (rules S1–S7): states the blast radius **before** the person agrees — how many transactions and which accounts, from `MemoryImpact` (S1, FR-035a, FR-035c, SC-026); offers **no choice of which transactions** — no checkboxes, no multi-select, no "select all" (S2, FR-035b, SC-028); the counts and accounts shown are `MemoryImpact`'s, unmodified — the view does not count, filter or re-derive (S3, FR-043, FR-078); on confirm calls `applyMemory(portion, expecting: impact.transactionIds)` with the ids from the preview it showed, unmodified (S4, FR-035f); declining leaves the memory formed and the correction intact (S7, FR-028).
+- [x] T131 ⚠️ **BUILD** — `make ios-gen`.
+- [x] T132 [US3] **X5** in a new `ios/UITests/CategorizeSecondActionUITests.swift` over `crossing`: the screen states a count **and** account names before confirmation, and there is **no** multi-select control on it. Then `make ios-gen` and confirm the suite ran.
+- [x] T133 [US3] Assert **S5** in `ios/Tests/CategorizeServiceTests.swift` with a doubled service: a `StaleSet` error is surfaced as a person-legible "things changed, take another look", **nothing is written**, and it is **not** retried silently with a fresh set (FR-035f, SC-027).
+- [x] T134 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; confirm both new suites ran.
+- [x] T135 [US3] Record in the PR description that **S2 is a UI rule and is not the enforcement**. The enforcement is engine-side set equality (`contracts/engine-categorize.md` §2.4, test **M7**, task T066). A UI without a checkbox proves nothing about a future UI (SC-028).
+- [x] T136 [US3] Assert **S6** in `ios/Tests/CategorizeServiceTests.swift`: given a preview that contains no `'PERSON'` row, rows the person corrected by hand are neither counted nor changed — the view merely displays the engine's truth (FR-035d, SC-031, engine test M4).
+- [x] T137 [US3] Record plan § *Judgement calls* §2 where a reader of `MemoryOfferView.swift` will find it: a memory beats a rule, and the offer's wording must not promise more than engine test **M2** asserts.
+- [x] T138 **DELIBERATE BREAK** — make `SecondActionView` pass a **trimmed** id list to `applyMemory`. Expected: the engine returns `StaleSet`, the S5 path fires and **nothing is written**. Revert per non-negotiable 7, then `make ios-gen`. This break proves S4 end-to-end and, more importantly, proves the engine — not the view — is where the guarantee lives.
+- [x] T139 [US3] Accessibility over `MemoryOfferView` and `SecondActionView` in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8, FR-060–FR-062, SC-016). `.contrast` excluded (`019/01`); `.textClipped` / `.dynamicType` excluded at XXXL (`019/03`).
+- [x] T140 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+
+---
+
+## PR E — RECORDED
+
+**T122–T140 are done.** A person can now correct a transaction, be asked in their own words
+whether Kaname should remember the merchant, decline that without touching the correction, and —
+if they accept — be told exactly how many transactions in exactly which accounts would change
+**before** anything is written. `ios/Sources/Categorize/` gains `MemoryOfferView.swift` and
+`SecondActionView.swift`; `ios/Sources/DebugSeed/` gains `SeedMemoryScenarios.swift` with the
+`repeated` and `crossing` scenarios; three unit suites and two UI suites are new.
+`ImportService.swift` is **unchanged at 398 lines**.
+
+**T135 — S2 is a UI rule, and it is not the enforcement.** The screen has no checkbox, no
+multi-select and no "select all", and `CategorizeSecondActionUITests` looks for all four
+(switches, check boxes, and the four wordings a selection control would use). None of that
+proves anything about a *future* UI. The enforcement is engine-side set equality
+(`contracts/engine-categorize.md` §2.4, test **M7**, task T066): `apply_memory` recomputes the
+affected set inside its own writing transaction and refuses **any** difference, a trimmed list
+included. T138 is the proof, and it is the reason S2's absence is safe to rely on (SC-028).
+
+**T138 — the break, and what it showed.** `SecondActionView` was made to pass
+`Array(request.impact.transactionIds.dropLast())`. Observed exactly as predicted, and end to
+end: `testAgreeingChangesTheRowsItNamed` went red with the screen reading **"These transactions
+changed while this was open, so nothing here was changed. Take another look."**, the corrected
+row still reading `Category: Groceries`, and **nothing written** anywhere. The refusal came from
+the engine, not from the view — which is the point of running it through the app rather than
+through a double. Reverted.
+
+**The six things worth carrying:**
+
+- 🚨 **A geometry assertion found a real hit-target defect that the accessibility auditor did
+  not.** Both sheets' answers rendered **34.33 pt** tall **at the default text size** — under
+  FR-062's 44 pt — and `performAccessibilityAudit` was green through all four of A13–A16. The
+  cause is that `.buttonStyle` draws its background around what the **label** asks for, so a
+  `.frame(minHeight:)` applied outside a styled button sizes the space around a control that
+  stayed small; the minimum has to be on the label, which is what `SheetAnswer` exists for. This
+  is the second time this repository has recorded that its hit targets are measured or they are
+  not checked (A12 is the first).
+- 🚨 **Every correction now leads to a sheet, and that broke a test that changed by nothing.**
+  X2 reached for the detail surface underneath the new offer and failed as "not hittable", which
+  reads exactly like a layout defect. `SeededLaunch.dismissMemoryOffer` is the shared way
+  through it, and declining is also the assertion X2 wanted — the change must survive it.
+  Anything that corrects a category from now on must expect the offer.
+- 🚨 **The second action changed rows the list behind it was still holding, and nothing said
+  so.** Watched: agreeing, going back, and reading three old categories on a list that had just
+  been changed underneath. Fixed through the seam a single correction already uses
+  (`refreshAfterCorrection`) rather than by patching rows — a screen that edits its own copy is
+  a screen that can disagree with the engine. **The queue does not ask for this**; K5 is written
+  about one row, and the second action is the first thing in the app that changes rows the
+  current screen is not showing.
+- ⚠️ **The picker cannot be found by the name of the thing you are choosing.** The current
+  choice's spoken label carries its mark — `No category, Current category` — so
+  `app.buttons["No category"]` finds nothing on an *unanswered* transaction, which is every
+  transaction a memory test starts from. It reads as a missing control. `chooseCategory` matches
+  the prefix, and A12 already carried the same note for the same reason.
+- ⚠️ **`alsoMatching` had to be adjudicated for completeness, not just correctness.** A declared
+  set that is merely *correct* understates the blast radius, which is the one number the second
+  action exists to state. `SeedMemoryExpectationTests` asks the engine in both directions —
+  every named description derives to the portion, and **no other row in the scenario does** —
+  and dropping one entry from `repeated` was watched turning **both** the completeness arm and
+  the impact-count arm red.
+- ⚠️ **Neither sheet has a navigation bar, deliberately.** Both headlines are questions, and an
+  inline navigation title is one line that truncates. They are `Text` in the content, where they
+  wrap at every size — which is also why A14/A16 pass at `AccessibilityXXXL`.
+
+**One judgement recorded in code (T137).** `MemoryOfferView.swift`'s doc comment carries plan
+§ *Judgement calls* §2 where somebody editing the wording will read it: a memory outranks every
+stage including the credit-card narration rules, the offer may **not** explain that (FR-029 bans
+the vocabulary, and whether to say it at all is unanswered), and the offer may not promise more
+than engine test **M2** asserts — a future import, not the rows already imported.
+
+**Deferred, unchanged.** `018/06`'s three device timings still need a phone (T176).
 
 ---
 
@@ -659,31 +732,93 @@ debugging anything.
 
 ## Phase 20: Empty states, pure [US4]
 
-- [ ] T141 [US4] RED **U2** in `ios/Tests/TransactionEmptyStateTests.swift`: `EmptyKind.decide` returns the right case for **every row** of `data-model.md` §6 — including the states a seed cannot construct. This is where those states get covered; a state that only a unit test can reach is still a state (FR-042a, FR-042b).
-- [ ] T142 [US4] GREEN: `EmptyKind.decide(summaries:filter:uncategorizedOnly:)` in `ios/Sources/Transactions/` gains `allAnswered` and `accountAnswered` and **stays a pure function** (L4).
-- [ ] T143 [US4] Assert **L5** structurally in `ios/Tests/TransactionEmptyStateTests.swift`: **no new `AccountSummary` field**. "Live rows exist but the narrowed page is empty" ⇒ all answered — the inference is exact, so a stored flag would be a second source of truth (FR-078).
-- [ ] T144 [US4] Implement **L1**, **L2** and **L3** in `ios/Sources/Transactions/TransactionListViewModel.swift`: carry `uncategorizedOnly` into `HistoryQuery`; it **never** filters a page it received (L1, FR-038, FR-076, SC-024); the narrowing composes with the account filter — both axes, one query (L2, FR-039); paging, cursors and infinite scroll are 018's, unchanged (L3, FR-040, FR-046).
-- [ ] T145 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`.
+- [x] T141 [US4] RED **U2** in `ios/Tests/TransactionEmptyStateTests.swift`: `EmptyKind.decide` returns the right case for **every row** of `data-model.md` §6 — including the states a seed cannot construct. This is where those states get covered; a state that only a unit test can reach is still a state (FR-042a, FR-042b).
+- [x] T142 [US4] GREEN: `EmptyKind.decide(summaries:filter:uncategorizedOnly:)` in `ios/Sources/Transactions/` gains `allAnswered` and `accountAnswered` and **stays a pure function** (L4).
+- [x] T143 [US4] Assert **L5** structurally in `ios/Tests/TransactionEmptyStateTests.swift`: **no new `AccountSummary` field**. "Live rows exist but the narrowed page is empty" ⇒ all answered — the inference is exact, so a stored flag would be a second source of truth (FR-078).
+- [x] T144 [US4] Implement **L1**, **L2** and **L3** in `ios/Sources/Transactions/TransactionListViewModel.swift`: carry `uncategorizedOnly` into `HistoryQuery`; it **never** filters a page it received (L1, FR-038, FR-076, SC-024); the narrowing composes with the account filter — both axes, one query (L2, FR-039); paging, cursors and infinite scroll are 018's, unchanged (L3, FR-040, FR-046).
+- [x] T145 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`.
 
 ## Phase 21: The single door [US4]
 
-- [ ] T146 [US4] Create `ios/Sources/Categorize/UncategorizedEntryPoint.swift` (rules E1–E5): a single door to the worklist, visible from the app's front door (E1, FR-041a); tapping pushes `TransactionScope(filter: .all, uncategorizedOnly: true)` (E4, FR-038).
-- [ ] T147 [US4] Assert **E2** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count is **store-wide** and comes from `uncategorizedCount()` — one engine call, no Swift arithmetic, no summing of `AccountSummary` (FR-041b, FR-043, SC-029). 018 deliberately moved the front door's count out of Swift into SQL; this is exactly where it would creep back.
-- [ ] T148 ⚠️ **BUILD** — `make ios-gen` (new Swift file and new test file).
-- [ ] T149 [US4] **X6** in a new `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the entry point shows a count, and after correcting every row it says the worklist is **finished, in a person's words**, rather than showing "0" (E3, FR-042b, SC-011).
-- [ ] T150 [US4] **X7** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the narrowed list shows only unanswered rows and composes with an account filter (L1, L2, FR-039).
-- [ ] T151 [US4] **X3** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: set a category to "no category" → the row **leaves the worklist**. ⚠️ Contract §11.2 lists X3 among the detail-surface assertions, but it cannot be observed without the worklist — it is executed here, in PR F, and the PR description says so. This is the platform reflection of engine assertions **C5** and **H2** (a deliberate blank is answered).
-- [ ] T152 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; **confirm the new UI suite ran** rather than reporting success without executing.
-- [ ] T153 [US4] Assert **E5** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count refreshes after a correction or a memory application, without a manual reload (SC-030).
+- [x] T146 [US4] Create `ios/Sources/Categorize/UncategorizedEntryPoint.swift` (rules E1–E5): a single door to the worklist, visible from the app's front door (E1, FR-041a); tapping pushes `TransactionScope(filter: .all, uncategorizedOnly: true)` (E4, FR-038).
+- [x] T147 [US4] Assert **E2** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count is **store-wide** and comes from `uncategorizedCount()` — one engine call, no Swift arithmetic, no summing of `AccountSummary` (FR-041b, FR-043, SC-029). 018 deliberately moved the front door's count out of Swift into SQL; this is exactly where it would creep back.
+- [x] T148 ⚠️ **BUILD** — `make ios-gen` (new Swift file and new test file).
+- [x] T149 [US4] **X6** in a new `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the entry point shows a count, and after correcting every row it says the worklist is **finished, in a person's words**, rather than showing "0" (E3, FR-042b, SC-011).
+- [x] T150 [US4] **X7** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: the narrowed list shows only unanswered rows and composes with an account filter (L1, L2, FR-039).
+- [x] T151 [US4] **X3** in `ios/UITests/CategorizeWorklistUITests.swift` over `unfiled`: set a category to "no category" → the row **leaves the worklist**. ⚠️ Contract §11.2 lists X3 among the detail-surface assertions, but it cannot be observed without the worklist — it is executed here, in PR F, and the PR description says so. This is the platform reflection of engine assertions **C5** and **H2** (a deliberate blank is answered).
+- [x] T152 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; **confirm the new UI suite ran** rather than reporting success without executing.
+- [x] T153 [US4] Assert **E5** in `ios/Tests/UncategorizedEntryPointTests.swift`: the count refreshes after a correction or a memory application, without a manual reload (SC-030).
 
 ## Phase 22: The breaks that only work now
 
-- [ ] T154 🚨 **DELIBERATE BREAK** — filter the received page inside `ios/Sources/Transactions/TransactionListViewModel.swift` instead of passing `uncategorizedOnly` into the query. Expected: `make import-audit` **scans 5 and 6 RED**, and **H1**/**X7** behaviour drifts. Revert per non-negotiable 7. This break is only meaningful because T094 widened the scans — run it and see them fire.
-- [ ] T155 **DELIBERATE BREAK** — compute the entry point's count by summing `AccountSummary` in Swift in `ios/Sources/Categorize/UncategorizedEntryPoint.swift`. Expected: `make import-audit` **scan 7 RED** (and E2's assertion red). Revert, then `make ios-gen`.
-- [ ] T156 [US4] Assert **L6**: with the narrowing off, 018's list is byte-identical in behaviour and appearance — run `ios/Tests/TransactionList*.swift` and `ios/UITests/SeededTransactionListUITests.swift` **unedited** (FR-046, SC-023). If any of them needed an edit to pass, that is a finding, not a chore.
-- [ ] T157 **DELIBERATE BREAK** — reinstate the defect: make the worklist include `'PERSON'` deliberate blanks (drop the `categorised_by IS NULL` arm from the Swift-side scope, or point the query at `LIVE` alone). Expected: **X3 RED** and the platform reflection of **H2** RED. Revert per non-negotiable 7, then `make ios-gen`.
-- [ ] T158 [US4] Accessibility over the entry point and the narrowed list in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8). ⚠️ New coverage is not trusted until it has been **watched failing** — T157 is that watch for the worklist, T117 for the picker, T138 for the second action.
-- [ ] T159 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+- [x] T154 🚨 **DELIBERATE BREAK** — filter the received page inside `ios/Sources/Transactions/TransactionListViewModel.swift` instead of passing `uncategorizedOnly` into the query. Expected: `make import-audit` **scans 5 and 6 RED**, and **H1**/**X7** behaviour drifts. Revert per non-negotiable 7. This break is only meaningful because T094 widened the scans — run it and see them fire.
+- [x] T155 **DELIBERATE BREAK** — compute the entry point's count by summing `AccountSummary` in Swift in `ios/Sources/Categorize/UncategorizedEntryPoint.swift`. Expected: `make import-audit` **scan 7 RED** (and E2's assertion red). Revert, then `make ios-gen`.
+- [x] T156 [US4] Assert **L6**: with the narrowing off, 018's list is byte-identical in behaviour and appearance — run `ios/Tests/TransactionList*.swift` and `ios/UITests/SeededTransactionListUITests.swift` **unedited** (FR-046, SC-023). If any of them needed an edit to pass, that is a finding, not a chore.
+- [x] T157 **DELIBERATE BREAK** — reinstate the defect: make the worklist include `'PERSON'` deliberate blanks (drop the `categorised_by IS NULL` arm from the Swift-side scope, or point the query at `LIVE` alone). Expected: **X3 RED** and the platform reflection of **H2** RED. Revert per non-negotiable 7, then `make ios-gen`.
+- [x] T158 [US4] Accessibility over the entry point and the narrowed list in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8). ⚠️ New coverage is not trusted until it has been **watched failing** — T157 is that watch for the worklist, T117 for the picker, T138 for the second action.
+- [x] T159 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+
+---
+
+## PR F — RECORDED
+
+**T141–T159 are done.** A person can see, on the app's first screen, how many of their
+transactions have no category; open exactly those, across every account; narrow them further to
+one card; answer them one at a time and watch each leave; deliberately file one under nothing and
+watch that count as an answer too; and be told, when the last one goes, that they are finished —
+in words, never as a "0". `ios/Sources/Categorize/` gains `UncategorizedEntryPoint.swift` and
+`CategoryChangeSignal.swift`; `EmptyKind` grows the two rows `data-model.md` §6 predicted; three
+unit suites and two UI suites are new. Every gate green: `make lint` **0 violations (127 files)**,
+`make ios-test` **TEST SUCCEEDED — 409 passed, 0 failed, 2 skipped, 57 UI tests, 1,194 s at load
+4.1**, `make import-audit` ten scans OK. `ImportService.swift` **unchanged at 398 lines**. No
+Rust was touched: `git diff core/` is empty.
+
+The five things worth carrying:
+
+- 🚨 **The queue named the wrong scan for T154, and the reason is structural.** The break —
+  filtering the received page in Swift — turns **scan 5** red, exactly as written
+  (`a screen re-derives its own population`, naming `raw.rows.filter`). **Scan 6 cannot fire and
+  never could**: it is the *filter-persistence* scan and looks for `UserDefaults`/`@AppStorage`,
+  which a page filter does not use — and `import-path-audit.sh` exits on the first failure, so
+  scan 6 does not even run. The behavioural half is sharper than the queue promised: **three** of
+  `TransactionNarrowingTests`' assertions go red naming the field
+  (`PageRequest(… uncategorizedOnly: false)`), which says *what* drifted rather than that
+  something did. Both were watched; both reverted.
+- 🚨 **The system auditor found a real defect on the one new control, at the DEFAULT text
+  size — and then a second verdict that is a property of the fixture.** The door drawn as
+  `Label(sentence, systemImage: "tray.full")` was reported clipped, **naming its own
+  `StaticText`**, in Light and in Dark; drawn as a plain `Text`, the way the account rows beside
+  it are drawn, it passes. That is 020's third such verdict and its second real one. The
+  *second* verdict is not: `.textClipped` also fires on the **shipped, unnarrowed 018 list** the
+  moment it is seeded with `unfiled`, whose descriptions are eight characters longer than
+  `small`'s — proved by three probes, one per surface, and written up as
+  `.scratch/020-categorize/issues/01`. The exclusion is scoped to the **list** half of A18–A21
+  and to nothing else, so the door keeps the instrument that caught its own defect.
+- ⚠️ **L6 needed one edit, and `TransactionListDoubles.swift` is the finding T156 asks about.**
+  The seam gained an axis — `TransactionHistoryReading.page` now states `uncategorizedOnly` — so
+  every conformance had to state it, and a double is a conformance. **No expectation moved**:
+  `PageRequest`'s new field defaults to `false`, so every 018 assertion written against a request
+  reads the same fields and means the same thing. `TransactionHistoryServiceTests`' three call
+  sites gained `uncategorizedOnly: false` for the same reason. A three-argument spelling was
+  **rejected** — it is the "silently omit a fact the engine always populates" shape PR C refused
+  for `HistoryRow`, and here it would let a double quietly read the wrong population while a
+  test about the narrowing stayed green.
+- ⚠️ **The count needed a signal, because the screen that changes it is two pushes from the
+  screen that shows it.** `CategoryChangeSignal` mirrors `ImportCompletionSignal` and is
+  deliberately **not** it: an import says a statement was committed and the list re-reads its
+  whole population for one; a correction changes one row. It carries `Void` for the same reason
+  and with more force — the new number is re-**asked** of the engine, never adjusted, so FR-043
+  survives a memory that changed rows in three accounts. The subscription lives on `RootView`,
+  not on the door: a `.task` on a `List` row is a subscription that dies with a row.
+- ⚠️ **Four SwiftLint limits were hit at once, and all four were answered by moving something
+  out.** `TransactionListStrings.emptyState(for:)` went to 53 lines (limit 50) →
+  `CategorizeStrings.finishedState(accountName:)` now assembles the narrowing's own two states,
+  which is where T1 says their words belong anyway; `TransactionEmptyStateTests` went to 261
+  (limit 250) → split by subject into `TransactionWorklistEmptyStateTests`;
+  `SeededAccessibilityUITests` broke **both** the 250-line type limit and the 400-line file limit
+  → the audit vocabulary moved to `AccessibilityAudit.swift` (one copy of each exclusion's
+  rationale, which is the point) and PR F's audits to `SeededWorklistAccessibilityUITests`.
+  Nothing was reformatted to squeeze under.
 
 ---
 
@@ -693,41 +828,102 @@ debugging anything.
 
 ## Phase 23: The audits [US6]
 
-- [ ] T160 [US6] Build the audit matrix in `specs/020-categorize/quickstart.md`: every audit type that runs × every new surface, with the cells that are **not** audited named and reasoned. SC-016's "zero findings" is scoped to the audit types that actually run, and this table is where that scope is written down instead of implied.
-- [ ] T161 [US6] Run `make a11y-sweep` over the new surfaces (`Makefile:145`, `xcrun simctl ui "iPhone 16" increase_contrast enabled`). ⚠️ **Increase Contrast cannot be set from XCUITest** — this sweep is the *only* mechanism, and it is **not** part of `make ios-test`. FR-065 is therefore satisfied across **two** targets (plan § *Spec amendments* §5). Record which surfaces were swept and the verdict.
-- [ ] T162 [US6] Record which unit-level states are **executed and asserted but not audited**: a host-rendered SwiftUI view publishes no accessibility label, so an audit over it is vacuous. ⚠️ `RunLoop.main.run(until:)` inside an async `@MainActor` test deadlocks — use `Task.sleep`; ⚠️ a detached `UIWindow` has no display link — attach to the host app's scene (`ios/Tests/EmptyStateRenderingTests.swift` is the precedent).
-- [ ] T163 [US6] Write the **break ledger** into `specs/020-categorize/quickstart.md` § *how to watch each gate fail*: every deliberate break in this queue (T026, T027, T035, T051, T056, T063, T074, T075, T091, T096, T117, T138, T154, T155, T157), the expected red, and the **observed** red with its failure text. A break whose observed red is missing is a break that was not run.
-- [ ] T164 [US6] Run `make release-audit` (`scripts/release-absence-audit.sh`) — `DebugSeed`, `SeedScenarios.swift`, `SeedExpectations.swift` and the three new scenarios are absent from a Release build.
-- [ ] T165 [US6] Run `make import-audit` — all ten scans, four of them (5, 6, 7, 8) now covering `ios/Sources/Categorize/` as well as `ios/Sources/Transactions/`.
-- [ ] T166 [US6] File budgets: run `make lint` and confirm `ios/Sources/Import/ImportService.swift` is still **398** lines and no file in `ios/Sources/Categorize/` is over its budget (FR-073, SC-023).
-- [ ] T167 [US6] Parity: `core/crates/kaname-core/tests/parity.rs` is unchanged and green, and **no fixture under `fixtures/` was edited to make anything pass**. `git --no-pager diff --stat origin/main... -- fixtures/` should show only `fixtures/categorization/merchant_portion.json` (added by T041).
-- [ ] T168 [US6] No disabled tests: assert this slice added no `XCTSkip`, no `#if` that removes an assertion, and no `#[ignore]` Rust test. A test that cannot pass is a finding, not a nuisance.
-- [ ] T169 [US6] Synthetic-data audit: no real VPA, no real UPI handle, no real account number, no real merchant identifier anywhere in `fixtures/` or `ios/Sources/DebugSeed/` (Principle I).
-- [ ] T170 [US6] Wording audit: every new string in `ios/Sources/Categorize/CategorizeStrings.swift` **and** every scenario/expectation label in `ios/Sources/DebugSeed/` against the banned engine-vocabulary list (FR-029, SC-007, extending U3's reach beyond the strings table).
-- [ ] T171 [US6] No floats in money: assert no `Double` or `Float` appears in any money path added by this slice, in `core/crates/kaname-core/src/merchant.rs`, `store.rs` and all of `ios/Sources/Categorize/` (Principle II).
-- [ ] T172 [US6] Zero network: confirm this slice added no `URLSession`, no network entitlement and no host in `Info.plist` (Principle I).
-- [ ] T173 [US6] Record the manual gate in `specs/020-categorize/quickstart.md`: which success criteria are signed by a **machine** and which by a **person**, one line each, with nothing in between.
+- [x] T160 [US6] Build the audit matrix in `specs/020-categorize/quickstart.md`: every audit type that runs × every new surface, with the cells that are **not** audited named and reasoned. SC-016's "zero findings" is scoped to the audit types that actually run, and this table is where that scope is written down instead of implied.
+- [x] T161 [US6] Run `make a11y-sweep` over the new surfaces (`Makefile:145`, `xcrun simctl ui "iPhone 16" increase_contrast enabled`). ⚠️ **Increase Contrast cannot be set from XCUITest** — this sweep is the *only* mechanism, and it is **not** part of `make ios-test`. FR-065 is therefore satisfied across **two** targets (plan § *Spec amendments* §5). Record which surfaces were swept and the verdict.
+- [x] T162 [US6] Record which unit-level states are **executed and asserted but not audited**: a host-rendered SwiftUI view publishes no accessibility label, so an audit over it is vacuous. ⚠️ `RunLoop.main.run(until:)` inside an async `@MainActor` test deadlocks — use `Task.sleep`; ⚠️ a detached `UIWindow` has no display link — attach to the host app's scene (`ios/Tests/EmptyStateRenderingTests.swift` is the precedent).
+- [x] T163 [US6] Write the **break ledger** into `specs/020-categorize/quickstart.md` § *how to watch each gate fail*: every deliberate break in this queue (T026, T027, T035, T051, T056, T063, T074, T075, T091, T096, T117, T138, T154, T155, T157), the expected red, and the **observed** red with its failure text. A break whose observed red is missing is a break that was not run.
+- [x] T164 [US6] Run `make release-audit` (`scripts/release-absence-audit.sh`) — `DebugSeed`, `SeedScenarios.swift`, `SeedExpectations.swift` and the three new scenarios are absent from a Release build.
+- [x] T165 [US6] Run `make import-audit` — all ten scans, four of them (5, 6, 7, 8) now covering `ios/Sources/Categorize/` as well as `ios/Sources/Transactions/`.
+- [x] T166 [US6] File budgets: run `make lint` and confirm `ios/Sources/Import/ImportService.swift` is still **398** lines and no file in `ios/Sources/Categorize/` is over its budget (FR-073, SC-023).
+- [x] T167 [US6] Parity: `core/crates/kaname-core/tests/parity.rs` is unchanged and green, and **no fixture under `fixtures/` was edited to make anything pass**. `git --no-pager diff --stat origin/main... -- fixtures/` should show only `fixtures/categorization/merchant_portion.json` (added by T041).
+- [x] T168 [US6] No disabled tests: assert this slice added no `XCTSkip`, no `#if` that removes an assertion, and no `#[ignore]` Rust test. A test that cannot pass is a finding, not a nuisance.
+- [x] T169 [US6] Synthetic-data audit: no real VPA, no real UPI handle, no real account number, no real merchant identifier anywhere in `fixtures/` or `ios/Sources/DebugSeed/` (Principle I).
+- [x] T170 [US6] Wording audit: every new string in `ios/Sources/Categorize/CategorizeStrings.swift` **and** every scenario/expectation label in `ios/Sources/DebugSeed/` against the banned engine-vocabulary list (FR-029, SC-007, extending U3's reach beyond the strings table).
+- [x] T171 [US6] No floats in money: assert no `Double` or `Float` appears in any money path added by this slice, in `core/crates/kaname-core/src/merchant.rs`, `store.rs` and all of `ios/Sources/Categorize/` (Principle II).
+- [x] T172 [US6] Zero network: confirm this slice added no `URLSession`, no network entitlement and no host in `Info.plist` (Principle I).
+- [x] T173 [US6] Record the manual gate in `specs/020-categorize/quickstart.md`: which success criteria are signed by a **machine** and which by a **person**, one line each, with nothing in between.
 
 ## Phase 24: What is written down [US7]
 
-- [ ] T174 [US7] Update `specs/020-categorize/quickstart.md` and `docs/` with the build-sequence lesson in the imperative: `#[uniffi::export]` changed ⇒ `make core-xcframework` **then** `make ios-gen`; a new file added ⇒ `make ios-gen`, because `sources: ["Sources/**"]` resolves at generation time and a suite that never ran reports success.
-- [ ] T175 [US7] Record both 🚨 findings and their regression tests in `docs/`, so the next person meets them **before** the code: (a) `NULL NOT IN (…)` is `NULL` — the naive guard drops every freshly imported row and nothing errors; **C2** (T023) is its regression test and **C1 passing proves nothing**; (b) `detect_transfers` guarded on `transfer_group_id IS NULL` alone could erase a person's decision — **T1** (T031) is its regression test, and it is Rust-only because the path is unreachable from Swift.
+- [x] T174 [US7] Update `specs/020-categorize/quickstart.md` and `docs/` with the build-sequence lesson in the imperative: `#[uniffi::export]` changed ⇒ `make core-xcframework` **then** `make ios-gen`; a new file added ⇒ `make ios-gen`, because `sources: ["Sources/**"]` resolves at generation time and a suite that never ran reports success.
+- [x] T175 [US7] Record both 🚨 findings and their regression tests in `docs/`, so the next person meets them **before** the code: (a) `NULL NOT IN (…)` is `NULL` — the naive guard drops every freshly imported row and nothing errors; **C2** (T023) is its regression test and **C1 passing proves nothing**; (b) `detect_transfers` guarded on `transfer_group_id IS NULL` alone could erase a person's decision — **T1** (T031) is its regression test, and it is Rust-only because the path is unreachable from Swift.
 
 ## Phase 25: What cannot be done on this machine
 
 > These are tasks, not footnotes. Each one is closed by **writing down what is not known**, in the manner of `019`'s T085. None of them is closed by an assertion, and none may be quietly dropped because it cannot be made green.
 
-- [ ] T176 **DEFERRED — cannot be measured here.** The three device timings (`018/06`) need a physical phone; a simulator measures the host. Record in `specs/020-categorize/quickstart.md` § *what cannot be verified on this machine* that 018's SC-012 **stays unsigned** and that this slice did not sign it.
-- [ ] T177 **DEFERRED — cannot be reproduced here.** `018/05`'s render-hang reopen conditions (a detail push over a deep list). State the conditions precisely so someone with the hardware can try them; do **not** claim they were met because nothing hung on this machine.
-- [ ] T178 **UNMEASURABLE beyond Q1–Q3.** The real SQLCipher query plans. Q1–Q3 (T088–T090) assert against the real store and settle *those three* queries; research R13's wider plan survey was taken on system SQLite 3.45.3. Record exactly what Q1–Q3 settle and what remains unmeasured, rather than letting three green tests imply a survey.
-- [ ] T179 🚨 **UNPROVABLE HERE BY DESIGN.** Whether the derivation rule is adequate for **real Indian narrations** cannot be determined in this repository, because no real VPA and no real UPI-handle shape exists in it — and correctly so (Principle I). What *is* known is research R15's three priced limitations, asserted in **P5** (T046). Record in `specs/020-categorize/quickstart.md` that the rule is proven against synthetic shapes only, that this is a deliberate limit and not an oversight, and what evidence would settle it (a person's own store, examined by that person, never exported).
-- [ ] T180 **DEFERRED — an XCUITest limit, not a machine limit.** Increase Contrast cannot be set from within `make ios-test`. It is covered **only** by `make a11y-sweep` (T161), and FR-065 is satisfied across two targets (plan § *Spec amendments* §5). Record it as a permanent split, not a temporary gap.
+- [x] T176 **DEFERRED — cannot be measured here.** The three device timings (`018/06`) need a physical phone; a simulator measures the host. Record in `specs/020-categorize/quickstart.md` § *what cannot be verified on this machine* that 018's SC-012 **stays unsigned** and that this slice did not sign it.
+- [x] T177 **DEFERRED — cannot be reproduced here.** `018/05`'s render-hang reopen conditions (a detail push over a deep list). State the conditions precisely so someone with the hardware can try them; do **not** claim they were met because nothing hung on this machine.
+- [x] T178 **UNMEASURABLE beyond Q1–Q3.** The real SQLCipher query plans. Q1–Q3 (T088–T090) assert against the real store and settle *those three* queries; research R13's wider plan survey was taken on system SQLite 3.45.3. Record exactly what Q1–Q3 settle and what remains unmeasured, rather than letting three green tests imply a survey.
+- [x] T179 🚨 **UNPROVABLE HERE BY DESIGN.** Whether the derivation rule is adequate for **real Indian narrations** cannot be determined in this repository, because no real VPA and no real UPI-handle shape exists in it — and correctly so (Principle I). What *is* known is research R15's three priced limitations, asserted in **P5** (T046). Record in `specs/020-categorize/quickstart.md` that the rule is proven against synthetic shapes only, that this is a deliberate limit and not an oversight, and what evidence would settle it (a person's own store, examined by that person, never exported).
+- [x] T180 **DEFERRED — an XCUITest limit, not a machine limit.** Increase Contrast cannot be set from within `make ios-test`. It is covered **only** by `make a11y-sweep` (T161), and FR-065 is satisfied across two targets (plan § *Spec amendments* §5). Record it as a permanent split, not a temporary gap.
 
 ## Phase 26: Hand-back
 
-- [ ] T181 [US7] Record every schema and FFI surface change this slice made, in one place in `docs/`: `user_version` 7→8, `merchant_memory`, `idx_txn_unanswered_account_date`, and the six exported functions (`set_transaction_category`, `merchant_portion`, `preview_memory_application`, `apply_memory_application`, `uncategorized_count`, plus the `HistoryQuery.uncategorized_only` field).
-- [ ] T182 **FINAL GATE** — in this order, never concurrently: `make core-lint && make core-test`; then `make lint && make ios-test`; then `make import-audit && make release-audit && make a11y-sweep`. ⚠️ `core/tests/history_perf.rs::s5` is wall-clock; ⚠️ `make ios-test` cannot run concurrently with itself.
-- [ ] T183 [US6] [US7] Hand-back: walk `specs/020-categorize/spec.md` and confirm every FR-001–FR-078 and SC-001–SC-036 is either **satisfied with a task id** or **explicitly deferred with its reason** (T176–T180). Anything that is neither is a gap and is reported as one, not closed.
+- [x] T181 [US7] Record every schema and FFI surface change this slice made, in one place in `docs/`: `user_version` 7→8, `merchant_memory`, `idx_txn_unanswered_account_date`, and the six exported functions (`set_transaction_category`, `merchant_portion`, `preview_memory_application`, `apply_memory_application`, `uncategorized_count`, plus the `HistoryQuery.uncategorized_only` field).
+- [x] T182 **FINAL GATE** — in this order, never concurrently: `make core-lint && make core-test`; then `make lint && make ios-test`; then `make import-audit && make release-audit && make a11y-sweep`. ⚠️ `core/tests/history_perf.rs::s5` is wall-clock; ⚠️ `make ios-test` cannot run concurrently with itself.
+- [x] T183 [US6] [US7] Hand-back: walk `specs/020-categorize/spec.md` and confirm every FR-001–FR-078 and SC-001–SC-036 is either **satisfied with a task id** or **explicitly deferred with its reason** (T176–T180). Anything that is neither is a gap and is reported as one, not closed.
+
+---
+
+## PR G — RECORDED
+
+**T160–T183 are done.** Nothing new was built; everything built is now shown to hold, and what
+could not be shown is said plainly. The evidence lives in
+`specs/020-categorize/quickstart.md` — the audit matrix (T160), the break ledger (T163), who
+signed what (T173), and § *what cannot be verified on this machine* (T176–T180) — plus
+`docs/adr/0006-a-persons-decision-is-a-different-kind-of-fact.md` (T175, T181) and
+`AGENTS.md` § *the build sequence, in the imperative* (T174).
+
+**Gates**: `make core-lint` clean · `make core-test` **358 passed, 0 failed, 19 binaries** ·
+`make lint` **0 violations, 127 files** · `make import-audit` **ten scans OK** ·
+`make release-audit` **OK (6,079 symbols, 6 terms)** · `make a11y-sweep` **TEST SUCCEEDED, 57 UI
+tests, 0 failures, 0 skipped, 1,270 s, Increase Contrast enabled**. `ImportService.swift`
+**unchanged at 398 lines**; `fixtures/` diff against the merge base is **empty** (the one fixture
+this slice added, `merchant_portion.json`, shipped in #42 and is already on `main`).
+
+**The six things worth carrying:**
+
+- 🚨 **An audit that could have skipped, silently.** `SeededAccessibilityUITests.openMemoryOffer`
+  threw `XCTSkip` when `crossing`'s subject row was absent, and it is reached by **five** tests,
+  four of them the audits over the memory offer and the second action. On that branch SC-016's
+  "zero findings" would have been vacuously true for two of the four new surfaces — and the `nil`
+  branch is **the documented failure mode of that exact scenario** (quickstart gotcha 6:
+  `crossing` must dodge dedup). Now `XCTUnwrap`.
+  ⚠️ **It was latent, not firing, and the first write-up of it said otherwise.** PR F's
+  "2 skipped" is two *unit* tests that both pre-date 020 and are both correct —
+  `KeyStoreTests/databaseFileIsProtected()` (device-only) and
+  `ReferenceSetVerification/readsTheReferenceSet()` (opt-in) — each a declarative `.enabled(if:)`
+  rather than a buried `XCTSkip`. **A skip count is not self-explanatory**: only
+  `xcrun xcresulttool get test-results tests` and the names settle it, and the inference that
+  looked obvious was wrong. `.scratch/020-categorize/issues/03`.
+- 🚨 **Five of the fifteen breaks did not do what the queue predicted, and every difference
+  would have read as success.** T027 turned *nothing* red (the two guards are not independent);
+  T051 missed P2 and hit P1/P5 (what protects SC-008 is the reference-token discard, **not** the
+  segment count); T075 turned **three** tests red, not one (the recompute-and-compare also stops
+  an absent memory's empty `category_id` reaching the `UPDATE`); T117 and T154 each turned red
+  exactly one of the two things named. **Record the observed red, never the intended one.**
+- ⚠️ **A first-failure-exits audit can only be observed one scan at a time.** T096 predicts
+  "scans 5/6/7 red" and `import-path-audit.sh` exits on the first failure, so scan 5 fires and
+  6 and 7 never run. Scan 7 was isolated in a second probe. This is the same structural fact PR F
+  recorded for T154, and it means **any queue predicting a set of scans is predicting something
+  the tool cannot show.**
+- ⚠️ **Six requirements were satisfied but cited by no task id** (FR-058, FR-070, SC-018, SC-025,
+  SC-034, SC-035), and finding them needed a mechanical walk of all 78 FRs and 36 SCs rather
+  than a reading of the traceability tables — which are complete for *assertions* and silent
+  about requirements no assertion is named after.
+- 🚩 **One real gap, reported and not closed**: `EmptyKind.accountAnswered` is asserted twice as
+  a value and rendered by nothing. It is **not** FR-070's kind of state — it is perfectly
+  seedable (`crossing` has two accounts) — so it is a strict hole in SC-018.
+  `.scratch/020-categorize/issues/02`, `ready-for-agent`.
+- ⚠️ **`cargo` is not on a non-interactive shell's `PATH`**, so `make core-xcframework` fails
+  with `cargo: command not found` from inside `build-xcframework.sh` — a `PATH` problem that
+  reads as a toolchain problem. Prefix `. "$HOME/.cargo/env" &&`. Now rule 3 of AGENTS.md's
+  build sequence.
+
+⚠️ **T157's break is in Rust and costs two full engine rebuilds to watch** —
+`make core-xcframework` → `make ios-gen` on the way in *and* on the way out. Budget ~15 minutes
+for one line.
 
 ---
 

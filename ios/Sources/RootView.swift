@@ -6,6 +6,10 @@ import UniformTypeIdentifiers
 /// the summary of what landed. US7 replaces this with the full first-run empty state.
 struct RootView: View {
     @State private var model = ImportViewModel()
+    /// The door onto what has no category yet. Owned here rather than by the row that draws
+    /// it: the front door outlives every push made from it, so a subscription started here is
+    /// still listening when a correction two screens away commits (E5).
+    @State private var worklist = UncategorizedEntryPointModel.live()
     @State private var isPickingFile = false
 
     var body: some View {
@@ -32,7 +36,10 @@ struct RootView: View {
                 // "just unfiled" list would give one screen two identities and two back-stack
                 // behaviours (contract §2).
                 .navigationDestination(for: TransactionScope.self) { scope in
-                    TransactionListView(filter: scope.filter, model: .live()) {
+                    TransactionListView(
+                        filter: scope.filter,
+                        model: .live(uncategorizedOnly: scope.uncategorizedOnly)
+                    ) {
                         isPickingFile = true
                     }
                 }
@@ -44,6 +51,11 @@ struct RootView: View {
                 // The same signal the transaction list listens to, so the count on this screen
                 // and the rows on that one are never read from two different moments (I5).
                 .task { await model.refreshWhenImportsComplete() }
+                // The worklist's own number, and its own signal: a correction made two pushes
+                // away has to be legible here when the person comes back, without a reload
+                // (E5). It is re-read from the engine, never adjusted (FR-043).
+                .task { await worklist.refresh() }
+                .task { await worklist.refreshWhenCategoriesChange() }
         }
         .fileImporter(
             isPresented: $isPickingFile,
@@ -95,7 +107,11 @@ struct RootView: View {
             // tap that opens the picker — so the bottom bar adds nothing here.
             ImportEmptyStateView { isPickingFile = true }
         } else {
-            ImportedAccountsView(accounts: model.accounts)
+            // The door onto the worklist sits above the accounts, on the one screen every
+            // route starts from (E1, FR-041a). It is absent on a fresh install for the same
+            // structural reason the route to the list is: an empty store has no work in it,
+            // and offering a door onto nothing is not an offer (FR-042b).
+            ImportedAccountsView(accounts: model.accounts, worklist: worklist)
         }
     }
 

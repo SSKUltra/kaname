@@ -7,7 +7,14 @@ import KanameCore
 /// below is the only place in the app that holds a `Store` for reading history.
 protocol TransactionHistoryReading: Sendable {
     /// One page. `cursor == nil` starts at the newest end of the sequence.
-    func page(accountID: String?, cursor: HistoryCursor?, limit: UInt32) async throws -> HistoryPage
+    ///
+    /// `uncategorizedOnly` is stated at every call rather than defaulted, and there is no
+    /// three-argument spelling of this method: which population is being read is part of the
+    /// question, and a read that could omit it is a read that can quietly ask for the wrong
+    /// one. It **composes** with `accountID` — both axes, one query (L1, L2, FR-039).
+    func page(
+        accountID: String?, uncategorizedOnly: Bool, cursor: HistoryCursor?, limit: UInt32
+    ) async throws -> HistoryPage
 
     /// Every account, in the front door's order, with their live counts.
     func accountSummaries() async throws -> [AccountSummary]
@@ -36,10 +43,14 @@ actor TransactionHistoryService: TransactionHistoryReading {
         self.open = open
     }
 
-    func page(accountID: String?, cursor: HistoryCursor?, limit: UInt32) throws -> HistoryPage {
+    func page(
+        accountID: String?, uncategorizedOnly: Bool, cursor: HistoryCursor?, limit: UInt32
+    ) throws -> HistoryPage {
         do {
             return try store().historyPage(
-                query: HistoryQuery(accountId: accountID, cursor: cursor, limit: limit))
+                query: HistoryQuery(
+                    accountId: accountID, cursor: cursor, limit: limit,
+                    uncategorizedOnly: uncategorizedOnly))
         } catch {
             // Mapped at the boundary: nothing the store says about a row travels any further
             // than this line (FR-063).

@@ -9,18 +9,33 @@ import SwiftUI
 /// to differ.
 struct ImportedAccountsView: View {
     let accounts: [ImportedAccount]
+    /// The door onto the transactions with no category, or `nil` where there is none to show.
+    ///
+    /// Held as its model rather than as a view so this stays a plain, non-generic type: its
+    /// `announcement(for:)` is called by name from elsewhere, and a generic header slot would
+    /// have made that call ambiguous. The door's own reads belong to the screen that owns this
+    /// list, which outlives every push made from it.
+    var worklist: UncategorizedEntryPointModel?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        List(accounts) { account in
-            NavigationLink(
-                value: TransactionScope(
-                    filter: .account(id: account.id, name: account.name, last4: account.last4))
-            ) {
-                row(account)
+        List {
+            if let worklist {
+                Section { UncategorizedEntryPoint(model: worklist) }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(Self.announcement(for: account))
+            Section {
+                ForEach(accounts) { account in
+                    NavigationLink(
+                        value: TransactionScope(
+                            filter: .account(
+                                id: account.id, name: account.name, last4: account.last4))
+                    ) {
+                        row(account)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Self.announcement(for: account))
+                }
+            }
         }
     }
 
@@ -79,16 +94,18 @@ struct ImportedAccountsView: View {
 
 #Preview {
     NavigationStack {
-        ImportedAccountsView(accounts: [
-            ImportedAccount(
-                // Deliberately not a real bank: the app renders whatever name the engine gave the
-                // account, and never knows which issuers exist.
-                id: "1",
-                name: "Example Bank Credit Card",
-                last4: "1002",
-                isCreditCard: true,
-                transactionCount: 42
-            )
-        ])
+        ImportedAccountsView(
+            accounts: [
+                ImportedAccount(
+                    // Deliberately not a real bank: the app renders whatever name the engine gave
+                    // the account, and never knows which issuers exist.
+                    id: "1",
+                    name: "Example Bank Credit Card",
+                    last4: "1002",
+                    isCreditCard: true,
+                    transactionCount: 42
+                )
+            ]
+        )
     }
 }
