@@ -77,9 +77,35 @@ free on-device port; **T4 is Pro** (server-side).
 A per-issuer mapping from a statement's own category field to a Kaname Category.
 
 **Merchant map** (T2):
-The "memory": a per-user mapping from a normalized narration to a Category, learned from
-the user's own past categorizations. Keyed on the same normalized narration as dedup.
-_Avoid_: history
+A per-user mapping from a normalized narration to a Category, learned from the user's own past
+categorizations. Keyed on the same normalized narration as dedup. Exported by
+`list_merchant_rules()`. Distinct from the **Memory** below, which outranks it.
+_Avoid_: history, memory
+
+**Memory**:
+What a person taught Kaname about one merchant: `merchant_portion → Category`, formed when they
+correct a transaction and accept the offer to remember it. Stored in `merchant_memory` (schema
+v8) and consulted **beside** the stack and **before** it, so it outranks even the CC rules — a
+person's instruction is not a stage to be outranked. Distinct from the Merchant map (T2), which
+is an engine fact matched by `contains`.
+_Avoid_: tier, T2, rule, learned rule
+
+**Merchant portion**:
+The part of a narration that names *who was paid*, derived by `merchant_portion` — at most two
+segments, with reference tokens discarded, so the four shapes of one merchant's narration
+collapse to one key. Derived in Rust only; the platform may never reimplement it.
+_Avoid_: merchant name, normalized narration (that is dedup's, and is a different rule)
+
+**Deliberate blank**:
+A person choosing *no category* — `category_id` NULL with `categorised_by` `'PERSON'`. It is an
+**answer**, so such a row is not unanswered and never returns to the worklist. Distinct from an
+uncategorized row, which is NULL/NULL.
+_Avoid_: uncategorized, unfiled, skipped
+
+**Unanswered**:
+`category_id IS NULL AND categorised_by IS NULL` — what the worklist is about, and one half of
+the v8 index's `WHERE`. Excludes a Deliberate blank, by that second arm.
+_Avoid_: uncategorized (in engine code — the word is the *screen's*, and the predicate is this)
 
 **Rule** (T3):
 A user or system rule that assigns a Category by matching the narration or amount — KEYWORD

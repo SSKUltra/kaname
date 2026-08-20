@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/020-categorize/`, starting at T160 (PR G, the audits and the honest deferrals).**
+**`specs/020-categorize/` is COMPLETE — all 183 tasks. The next slice has not been specified yet.**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -152,11 +152,70 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: `020-categorize` PR G — proved, not asserted.** Start at **T160** in
-`specs/020-categorize/tasks.md`. Nothing new is built there; everything built is shown to hold,
-and what could not be shown is said plainly. ⚠️ **T163's break ledger now has three more entries
-with observed reds** (T154, T155, T157) — and one of them, T154, is a case where the queue named
-the wrong gate: scan 6 **cannot** fire for that break and did not. Record what was observed.
+**⬅️ NEXT: open the second pull request for `020-categorize` (PRs E, F, G — T122–T183).**
+The branch is `020-categorize`, PRs A–D are already merged as
+[#42](https://github.com/SSKUltra/kaname/pull/42), and everything since is committed on the same
+branch exactly as 019 ran it. **Nothing in the queue is left**: T182's final gate is the last
+task, and after it the slice is done.
+
+**⚠️ What is open, and it is short:**
+
+- **`.scratch/020-categorize/issues/02`** (`ready-for-agent`) — **`EmptyKind.accountAnswered` is
+  rendered by nothing.** One account finished while another still has work: asserted twice as a
+  value and a sentence, reached by no automated run of any kind. **Not** FR-070's kind of state —
+  it is perfectly seedable (`crossing` has two accounts), so it is a strict hole in SC-018. Found
+  by T183's mechanical walk of all 78 FRs and 36 SCs, which is the only thing that could have
+  found it: the traceability tables are complete for *assertions* and silent about requirements
+  no assertion is named after. Reported and not closed, per T183's own instruction.
+- **`018/06`** (`ready-for-human`) — still **the only thing between 018 and SC-012**, and 020 did
+  not sign it either. Three device timings, ~20 minutes with a physical phone.
+- **`018/05`** (`needs-info`) — the render hang. 020 pushes a detail view over a deeply-scrolled
+  list, which is *closer* to the untested combination than 018 was; the four reopen conditions
+  are now written out precisely in `specs/020-categorize/quickstart.md`.
+- **`019/03`** and **`.scratch/020-categorize/issues/01`** — the same Dynamic Type design question
+  at two text sizes, both still open, neither this slice's to settle.
+
+**020 PR G is DONE** (T160–T183). Nothing new was built; everything built is now *shown* to hold.
+`specs/020-categorize/quickstart.md` gained the **audit matrix** (which audit type × which
+surface, with every un-audited cell named and reasoned), the **break ledger** (all fifteen
+deliberate breaks with their **observed** failure text), **who signed what** (machine vs person,
+with nothing in between), and five explicit deferrals. `docs/adr/0006-a-persons-decision-is-a-
+different-kind-of-fact.md` is new and records both 🚨 findings, their regression tests and the
+whole v8 + FFI surface in one place; `CONTEXT.md` gains **Memory**, **Merchant portion**,
+**Deliberate blank** and **Unanswered**; `AGENTS.md` gains the build sequence in the imperative.
+Gates: core-lint clean, **core-test 358/0**, **lint 0 violations (127 files)**, import-audit ten
+scans OK, release-audit OK, **a11y-sweep TEST SUCCEEDED (57 UI, 0 failures, 0 skipped, 1,270 s,
+Increase Contrast on)**. `specs/020-categorize/tasks.md` § *PR G — RECORDED* has the full
+account; the six things worth carrying:
+
+- 🚨 **A skip is a green run.** `SeededAccessibilityUITests.openMemoryOffer` threw `XCTSkip`, and
+  **five** tests reach it, four of them the audits over the memory offer and the second action.
+  On that branch SC-016's "zero findings" would have been vacuously true for two of the four new
+  surfaces — and the `nil` branch is the **documented** failure mode of `crossing` (it must dodge
+  dedup). Now `XCTUnwrap`. ⚠️ **It was latent, not firing.** PR F's "2 skipped" is two *unit*
+  tests that pre-date 020 and are both correct (`databaseFileIsProtected` is device-only;
+  `readsTheReferenceSet` is opt-in), each a declarative `.enabled(if:)`. **A skip count is not
+  self-explanatory** — only `xcrun xcresulttool get test-results tests` settles which test it is,
+  and the obvious inference here was wrong. `.scratch/020-categorize/issues/03`.
+- 🚨 **Five of the fifteen breaks did not do what the queue predicted, and every difference would
+  have read as success.** T027 turned *nothing* red (the two guards are not independent); T051
+  missed P2 entirely — **what protects SC-008 is the reference-token discard, not the segment
+  count**; T075 turned **three** tests red, not one; T117 and T154 each hit exactly one of the two
+  things named. **Record the observed red, never the intended one.**
+- ⚠️ **A first-failure-exits audit can only be observed one scan at a time.** `import-path-audit
+  .sh` exits on the first failure, so T096's "scans 5/6/7 red" is unobservable as written — scan 5
+  fires and the rest never run. Scan 7 needed its own probe. Any queue predicting a *set* of scans
+  is predicting something the tool cannot show.
+- ⚠️ **`cargo` is not on a non-interactive shell's `PATH`.** `.zshrc` sources `~/.cargo/env` and
+  `make` from a script or an agent shell does not read it, so `make core-xcframework` dies with
+  `cargo: command not found` inside `build-xcframework.sh` — a `PATH` problem that reads as a
+  toolchain problem. Prefix `. "$HOME/.cargo/env" &&`. Now rule 3 of AGENTS.md's build sequence.
+- ⚠️ **T157's break is in Rust, so watching it costs two full engine rebuilds** —
+  `core-xcframework` → `ios-gen` on the way in *and* out, ~15 minutes for one line. It is worth
+  it: X3 went red twice over, end to end through the app.
+- ⚠️ **`make a11y-sweep` is a 21-minute gate** (it runs the whole UI bundle under Increase
+  Contrast) and it is **not** part of `make ios-test`. FR-065 is satisfied across two targets and
+  that is permanent, not a gap waiting on a fix (T180).
 
 **020 PR F is DONE** (T141–T159). A person can now see, on the app's first screen, how many of
 their transactions have no category; open exactly those across every account; narrow them
@@ -167,6 +226,8 @@ finished — in words, never as a "0". `ios/Sources/Categorize/` gains `Uncatego
 predicted. Every gate green: `make lint` **0 violations (127 files)**, `make ios-test` **TEST
 SUCCEEDED — 409 passed, 0 failed, 57 UI tests, 1,194 s at load 4.1**, `make import-audit` ten
 scans OK. `ImportService.swift` **unchanged at 398 lines**; `git diff core/` empty.
+⚠️ **That run's "2 skipped" is two pre-existing *unit* tests** — `databaseFileIsProtected`
+(device-only) and `readsTheReferenceSet` (opt-in) — **not** the `XCTSkip` PR G found.
 `specs/020-categorize/tasks.md` § *PR F — RECORDED* has the full account; the five things worth
 carrying:
 

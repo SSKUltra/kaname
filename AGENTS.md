@@ -90,3 +90,27 @@ time*, so after any change to `core/src/ffi.rs` or any `#[uniffi::export]` you m
 `make core-xcframework` **then** `make ios-gen` (which depends on it). Skipping the rebuild
 yields "cannot find `HistoryPage` in scope" — a Swift error that is not a Swift problem, and
 which sends you looking in the wrong language.
+
+## The build sequence, in the imperative (020)
+
+Three rules. Each of them has cost this repo a rebuild or a vacuous green run.
+
+1. **Changed an `#[uniffi::export]`, a `uniffi::Record` or an enum crossing the FFI?**
+   → `make core-xcframework` **then** `make ios-gen`. Both, in that order, every time — including
+   when you *revert* a deliberate break in Rust, or the simulator keeps testing the broken engine.
+2. **Added a file anywhere under `ios/Sources/**` or `ios/Tests/**`?** → `make ios-gen`.
+   `sources: ["Sources/**"]` is resolved **at generation time**, so a new file is compiled by
+   nothing and **a test suite that never ran reports success.** This has bitten twice.
+   ⚠️ `KanameUITests` does not glob `Sources/**` at all — it hand-lists `UITests/**` plus
+   `Sources/DebugSeed/SeedScenarios.swift` and `SeedExpectations.swift`. Sharing a declaration
+   with a UI test is a `Project.swift` edit **and** a `make ios-gen`.
+3. **Running `make` from a script, a CI step or an agent shell?** → prefix
+   `. "$HOME/.cargo/env" &&`. `.zshrc` sources it and a non-interactive shell does not read
+   `.zshrc`, so `build-xcframework.sh` fails with `cargo: command not found` — which reads like a
+   missing toolchain and is a missing `PATH`.
+
+⚠️ **And never run `make core-test` and `make ios-test` concurrently.**
+`core/crates/kaname-core/tests/history_perf.rs::s5` is wall-clock and flaky under CPU contention.
+More generally: **a wall-clock failure is a claim about the machine until you measure the
+machine** — check `uptime` and, if in doubt, `git stash` and run the same test against `HEAD`
+under the same load. A `Timed out while synthesizing event` UI failure is never worth debugging.

@@ -285,9 +285,13 @@ final class SeededAccessibilityUITests: XCTestCase {
     }
 
     private func openMemoryOffer(arguments: [String]) throws -> XCUIApplication {
-        guard let subject = SeedScenario.crossing.expectedMemorySubjectRow else {
-            throw XCTSkip("the crossing scenario declares no memory")
-        }
+        // `XCTUnwrap`, never `XCTSkip`: if `crossing`'s subject row is eaten by dedup this must
+        // go red, because a skipped audit is indistinguishable from an audited surface in the
+        // run's own report — and SC-016 is a claim about surfaces that were actually audited.
+        let subject = try XCTUnwrap(
+            SeedScenario.crossing.expectedMemorySubjectRow,
+            "the crossing scenario declares no live memory subject, so neither memory surface "
+                + "was audited")
         let app = SeededLaunch.launch(scenario: .crossing, arguments: arguments)
         SeededLaunch.openTransactionList(app)
         SeededLaunch.openRow(app, labelled: subject.accessibilityLabel)
