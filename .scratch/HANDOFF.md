@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/020-categorize/`, starting at T094 (PR D, correcting one transaction).**
+**The live one is `specs/020-categorize/`, starting at T122 (PR E, the memory and the second action).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -152,13 +152,60 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: `020-categorize` PR D — correcting one transaction.** Start at **T094** in
-`specs/020-categorize/tasks.md`. ⚠️ T094–T096 come **before any code lands** in
-`ios/Sources/Categorize/`: four of `import-path-audit.sh`'s ten scans are scoped to
-`ios/Sources/Transactions/`, so new code in a new directory would be unwatched by exactly the
-scans that exist to watch it. Widen first, prove the widening reaches (T096's throwaway probe),
-then write the surface. Work is on branch **`020-categorize`** (7 commits, clean tree, not yet
-pushed or opened as a PR).
+**⬅️ NEXT: `020-categorize` PR E — the memory and the second action.** Start at **T122** in
+`specs/020-categorize/tasks.md`. ⚠️ Its first two tasks are seed scenarios that **de-duplication
+can eat before anything is asserted**: `repeated` puts one merchant in two statements of one
+account, `crossing` puts one across a ledger and a card — which is *exactly* the pair cross-source
+dedup compares. Vary the amounts or the dates, or the blast radius is wrong before it was ever
+tested. Work is on branch **`020-categorize`** (8 commits, clean tree, not yet pushed or opened as
+a PR).
+
+🚨 **One thing to do before anything else: re-run `make ios-test` on a quiet machine.** PR D closed
+without a single green full run — see the warning at the end of this section — and PR E's first
+build task (T125) is a full run anyway.
+
+**020 PR D is DONE** (`b6112a0`, T094–T121). A person can now open a transaction and change its
+category: `ios/Sources/Categorize/` (strings, scope, catalog, service, detail surface, picker),
+five new unit suites, X1/X2 over a seeded launch, three accessibility audits plus a hit-target
+measurement over the two new surfaces, and the `unfiled` scenario. `make lint` clean (111 files),
+`make import-audit` ten scans green with the widened scope, `ImportService.swift` **unchanged at
+398 lines**. `specs/020-categorize/tasks.md` § *PR D — RECORDED* has the full account; the five
+things worth carrying:
+
+- 🚨 **A row that becomes a `NavigationLink` stops being a `StaticText` and becomes a `Button`.**
+  This turned **018's `SeededTransactionListUITests` red** and looked exactly like R2 being
+  violated — the row losing its combined element. It had not: the whole sentence is intact on the
+  cell's **button**, with the description, account, category and amount still underneath it.
+  Nothing a person hears changed. `SeededLaunch.visibleLabels` now reads the sentence wherever it
+  is; anything else that identifies a row by "the first `StaticText` in the cell" will break the
+  same way. ⚠️ Both placements of `.accessibilityElement(children: .combine)` — on the link, and on
+  its content — were measured and are identical, so the placement is **not** load-bearing.
+- 🚨 **The source-level R2 assertion passed the whole time the behaviour was red.** It checks the
+  modifiers are present in `TransactionRowView.swift`, and they were. Only the seeded run could
+  tell. Keep it (it catches the `.opacity(0)` hidden-link trick, which passes a screenshot) but
+  never mistake it for the gate.
+- 🚨 **The system auditor found four real Dynamic Type defects at the DEFAULT text size** — the
+  first audit ever run against these surfaces, and precisely the return 019 was bought for. A
+  `Section("string")` header, a `Text` carrying a bare `.accessibilityLabel`, a prominent `Button`
+  inside a `List` row, and a **titled toolbar button**. The first three have structural fixes (an
+  explicit `Text` header; draw a fact the way the other facts are drawn; put the action in a
+  `.safeAreaBar`, which also gives D6 at *every* text size). The fourth passes **only** as an SF
+  Symbol with a spoken label — `Button("Cancel")`, an explicit `Text` label, and dropping the
+  redundant `.buttonStyle(.glass)` all still failed. No other audited screen here has one.
+- ⚠️ **The widened scan forbids the picker from sorting the catalog, and it is right.**
+  `list_categories()` is already `ORDER BY rowid`, so a Swift-side sort is a second opinion about
+  an order the engine settled. The grouping preserves the engine's order and U1 asserts *that*.
+- ⚠️ **T117's break turns the K3 unit assertion red and leaves X2 green.** The queue predicted
+  both would fail; the mark on the current category is simply not on X2's path. That is why K3
+  lives on `CategoryChoice.isCurrent` as a pure rule rather than privately inside the view — and
+  it is the same shape as PR C's finding that only Q3 gates the v8 index.
+
+⚠️ **`make ios-test` has never completed green in one run for PR D, and the reason is measured.**
+The full run took **18,322 s** (five hours) on a host at load average 20–120 and failed one test
+with `Failed to swipe up CollectionView: Timed out while synthesizing event` — the simulator could
+not deliver a gesture. Every test in that suite was re-run and **passed individually**, at 24 s,
+985 s, 1,075 s, 1,537 s and 3,145 s for work that normally takes 15–25 s. Repeat the run on a
+quiet host before calling PR D green; do not go looking for a defect in the empty-state suite.
 
 **020 PR C is DONE** (`e42bcf4`, T077–T093, **348 → 358 core tests**, every gate green:
 core-lint, core-test, lint, `ios-test` **TEST SUCCEEDED** (33 UI tests), `import-audit` ten scans
