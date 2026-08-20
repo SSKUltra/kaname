@@ -100,7 +100,23 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: core
+      # The XCFramework is a **pure function** of `core/`, the toolchain and the build script —
+      # unlike DerivedData, its inputs are exactly enumerable, so the key can be tight enough that
+      # a hit is never a stale build. Change one line of Rust and the key changes and it rebuilds.
+      #
+      # It is worth caching because it is paid by **every** iOS job (five of them) and it got
+      # *slower* when the job was split: 148 s in the old single job against 240-327 s here, since
+      # five jobs now race for the same `rust-cache` entry.
+      - name: Cache engine XCFramework + generated bindings
+        id: xcframework
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Frameworks
+            ios/Generated
+          key: xcframework-${{ runner.os }}-${{ hashFiles('core/**/*.rs', 'core/**/Cargo.toml', 'core/Cargo.lock', 'rust-toolchain.toml', 'core/scripts/build-xcframework.sh') }}
       - name: Build engine XCFramework (must precede tuist generate)
+        if: steps.xcframework.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
         run: make core-xcframework
       - name: Generate Xcode project
@@ -172,7 +188,23 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: core
+      # The XCFramework is a **pure function** of `core/`, the toolchain and the build script —
+      # unlike DerivedData, its inputs are exactly enumerable, so the key can be tight enough that
+      # a hit is never a stale build. Change one line of Rust and the key changes and it rebuilds.
+      #
+      # It is worth caching because it is paid by **every** iOS job (five of them) and it got
+      # *slower* when the job was split: 148 s in the old single job against 240-327 s here, since
+      # five jobs now race for the same `rust-cache` entry.
+      - name: Cache engine XCFramework + generated bindings
+        id: xcframework
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Frameworks
+            ios/Generated
+          key: xcframework-${{ runner.os }}-${{ hashFiles('core/**/*.rs', 'core/**/Cargo.toml', 'core/Cargo.lock', 'rust-toolchain.toml', 'core/scripts/build-xcframework.sh') }}
       - name: Build engine XCFramework (must precede tuist generate)
+        if: steps.xcframework.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
         run: make core-xcframework
       - name: Generate Xcode project
