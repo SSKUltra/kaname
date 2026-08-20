@@ -254,6 +254,22 @@ pub fn correctness_corpus(store: &Store, path: &str) -> Corpus {
 /// Read every page of the history and concatenate them. `limit` is the page size, so a suite
 /// can prove that paging changes nothing but where the reads are cut.
 pub fn walk(store: &Store, account_id: Option<&str>, limit: u32) -> Vec<HistoryRow> {
+    walk_where(store, account_id, limit, false)
+}
+
+/// [`walk`], narrowed to the rows nothing has answered yet — the same walk, one field apart,
+/// so a suite comparing the two is comparing the narrowing and nothing else.
+#[allow(dead_code)]
+pub fn walk_unanswered(store: &Store, account_id: Option<&str>, limit: u32) -> Vec<HistoryRow> {
+    walk_where(store, account_id, limit, true)
+}
+
+fn walk_where(
+    store: &Store,
+    account_id: Option<&str>,
+    limit: u32,
+    uncategorized_only: bool,
+) -> Vec<HistoryRow> {
     let mut rows = Vec::new();
     let mut cursor: Option<HistoryCursor> = None;
     loop {
@@ -262,6 +278,7 @@ pub fn walk(store: &Store, account_id: Option<&str>, limit: u32) -> Vec<HistoryR
                 account_id: account_id.map(str::to_string),
                 cursor: cursor.clone(),
                 limit,
+                uncategorized_only,
             })
             .expect("history page");
         rows.extend(page.rows);

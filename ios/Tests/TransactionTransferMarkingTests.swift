@@ -37,6 +37,7 @@ struct TransactionTransferMarkingTests {
                 direction: .debit,
                 currency: "INR",
                 categoryName: category,
+                categoryId: category.map { _ in "SYNTHETIC_CATEGORY" },
                 isTransfer: isTransfer
             ))
     }
@@ -72,7 +73,7 @@ struct TransactionTransferMarkingTests {
                 id: "marked", accountId: "account-1", accountName: TransactionCorpus.everyday,
                 accountLast4: "1123", date: "2026-07-15", descriptionRaw: "SYNTHETIC TRANSFER",
                 amount: TransactionCorpus.decimal("5000.00"), direction: .debit, currency: "INR",
-                categoryName: nil, isTransfer: true),
+                categoryName: nil, categoryId: nil, isTransfer: true),
         ]
         let model = await TransactionListViewModel(
             history: HistoryDouble(

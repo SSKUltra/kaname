@@ -37,6 +37,7 @@ struct TransactionAccessibilityTests {
                 direction: .debit,
                 currency: "INR",
                 categoryName: category,
+                categoryId: category.map { _ in "SYNTHETIC_CATEGORY" },
                 isTransfer: isTransfer
             ))
     }
@@ -51,7 +52,7 @@ struct TransactionAccessibilityTests {
                 id: "credit", accountId: "account-1", accountName: "Everyday Savings",
                 accountLast4: "1123", date: "2026-07-15", descriptionRaw: "SYNTHETIC SALARY",
                 amount: TransactionCorpus.decimal("450.00"), direction: .credit, currency: "INR",
-                categoryName: nil, isTransfer: false))
+                categoryName: nil, categoryId: nil, isTransfer: false))
 
         // A sign a person can see, and a word a person can hear. The row carries no colour for
         // direction at all — there is nothing to remove (FR-013, FR-071, SC-014).
@@ -218,6 +219,34 @@ struct TransactionAccessibilityTests {
         #expect(bar.contains("chrome.clearButtonShowsTitle"))
         #expect(bar.contains("chrome.axis"))
         #expect(bar.contains("FilterChromeLayout"))
+    }
+
+    /// **R1–R4** — the row became a link, and gave up nothing to do it.
+    ///
+    /// Written when the row gained a `NavigationLink`, because that change can break three
+    /// things at once and every one of them is invisible in a screenshot: a linked row
+    /// announces its labels as separate fragments unless the combined element survives (R2), a
+    /// `List` draws a disclosure chevron and an inset unless told not to (R3, FR-046), and the
+    /// tap target stops being the row if the link wraps only part of it (R4).
+    @Test("The row is a link that kept its sentence, its layout and its whole tap target")
+    func theRowIsALinkThatChangedNothingElse() throws {
+        let sources = Dictionary(uniqueKeysWithValues: try Self.transactionViewSources())
+        let row = try #require(sources["TransactionRowView.swift"])
+
+        // R1: the row itself is the link, and it carries the row as the navigation value —
+        // not an id the destination would have to look up again.
+        #expect(row.contains("NavigationLink(value: row)"))
+        // R3: the indicator is turned off with iOS 26's own API. A hidden-link trick — an
+        // `.opacity(0)` link behind the content — would pass a screenshot and leave a second,
+        // empty accessibility element on every row.
+        #expect(row.contains(".navigationLinkIndicatorVisibility(.hidden)"))
+        #expect(!row.contains(".opacity(0)"))
+        // R2: one element, one sentence, still.
+        #expect(row.contains(".accessibilityElement(children: .combine)"))
+        #expect(row.contains(".accessibilityLabel(row.accessibilityLabel)"))
+        // And the sentence itself is unchanged — a hint says what tapping does, and is spoken
+        // separately, so it cannot lengthen what a person hears when scanning a list.
+        #expect(row.contains(".accessibilityHint("))
     }
 
     /// The view sources, read from the repository rather than the bundle — the test target

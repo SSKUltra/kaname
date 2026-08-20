@@ -47,6 +47,17 @@ struct TransactionListView: View {
             // started when the list appears and cancelled when it goes away, which is the only
             // lifetime an import signal should have (I4).
             .task { await model.refreshWhenImportsComplete() }
+            // One destination for a transaction, registered where the rows are — so every row
+            // on this screen pushes the same surface with the same back behaviour.
+            .navigationDestination(for: TransactionRow.self) { row in
+                TransactionDetailView(row: row, service: CategorizeService.live()) { _, _ in
+                    // The engine has recorded the decision; the list re-reads it rather than
+                    // patching the row it is holding. A screen that edits its own copy is a
+                    // screen that can disagree with the engine about a person's own data
+                    // (K5, FR-006, SC-003).
+                    Task { await model.refreshAfterCorrection() }
+                }
+            }
     }
 
     @ViewBuilder

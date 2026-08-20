@@ -152,6 +152,7 @@ fn no_history_error_carries_a_description_amount_date_or_account_id() {
             account_id: None,
             cursor: None,
             limit: 50,
+            uncategorized_only: false,
         })
         .expect_err("a corrupt amount must be an error, never a panic");
     let rendered = error.to_string();

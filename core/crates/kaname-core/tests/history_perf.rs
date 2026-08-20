@@ -47,6 +47,7 @@ fn first_page(store: &Store, account_id: Option<&str>, limit: u32) -> Duration {
             account_id: account_id.map(str::to_string),
             cursor: None,
             limit,
+            uncategorized_only: false,
         })
         .expect("first page");
     started.elapsed()
@@ -106,6 +107,7 @@ fn s4_no_page_of_a_full_walk_exceeds_the_budget() {
                 account_id: None,
                 cursor: cursor.clone(),
                 limit: 50,
+                uncategorized_only: false,
             })
             .expect("page");
         let elapsed = started.elapsed();
@@ -185,4 +187,100 @@ fn s7_the_front_door_count_is_one_grouped_read() {
     let file = std::fs::metadata(&db.path).map(|m| m.len()).unwrap_or(0);
     eprintln!("S7 account_summaries(), 10,000 rows / 8 accounts: {elapsed:?}; db file {file} B");
     assert!(elapsed < BUDGET, "the front-door count took {elapsed:?}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Q1–Q3 — the plan shape after v8 (`020/contracts/engine-categorize.md` §4, research R13).
+//
+// ⚠️ **Read this before adding a test here.** `s1` above asserts that no plan step contains
+// `SCAN`. That rule is correct for the page statement and **wrong for the count**: a store-wide
+// count has nothing to seek on, so its optimal plan *is* a `SCAN` — of a partial index holding
+// only the rows being counted, which is precisely what makes the count get cheaper as the person
+// works through the worklist. A copy of `s1`'s assertion in `q3` would be red for the correct
+// query, and the tempting fix would be to weaken `s1`. Do neither: `s1` and `s2` are not edited,
+// not weakened and not excepted. `q3` asserts the index **by name** instead.
+// ---------------------------------------------------------------------------------------------
+
+/// The plan of any statement, against the real (SQLCipher) store rather than the system SQLite
+/// research R13 was measured on.
+fn plan_of(path: &str, sql: &str, params: &[&dyn rusqlite::ToSql]) -> Vec<String> {
+    let conn = open_sqlcipher(path);
+    let mut stmt = conn
+        .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+        .expect("prepare plan");
+    stmt.query_map(params, |row| row.get::<_, String>(3))
+        .expect("plan")
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .expect("collect plan")
+}
+
+/// **Q1** — v8 did not move the page statement's plan. The new index's `WHERE` is not implied by
+/// [`kaname_core::PAGE_SQL`]'s, so the planner cannot reach for it, and `s1`/`s2` — which are
+/// untouched by this slice and run beside this test — still describe the unnarrowed read.
+#[test]
+fn q1_the_unnarrowed_page_plan_is_untouched_by_v8() {
+    let (db, _store) = perf_store("q1", 8, 10_000);
+    let plan = query_plan(&db.path, "perf-account-03");
+
+    assert!(
+        plan.iter()
+            .any(|step| step.contains("idx_txn_live_account_date")),
+        "the unnarrowed read is still served by the v7 index: {plan:?}"
+    );
+    assert!(
+        !plan
+            .iter()
+            .any(|step| step.contains("idx_txn_unanswered_account_date")),
+        "the v8 index must be unreachable for a read that does not narrow: {plan:?}"
+    );
+}
+
+/// **Q2** — the narrowed page is served by a named index and still sorts nothing. The worklist
+/// is a page like any other: a person scrolling it pays what they pay for the whole history.
+#[test]
+fn q2_the_narrowed_page_plan_searches_a_named_index() {
+    let (db, _store) = perf_store("q2", 8, 10_000);
+    let plan = plan_of(
+        &db.path,
+        kaname_core::PAGE_SQL_UNANSWERED,
+        rusqlite::params!["perf-account-03", "9999-12-31", 0_i64, 50_i64],
+    );
+    eprintln!("Q2 narrowed page plan: {plan:?}");
+
+    assert!(
+        plan.iter()
+            .any(|step| step.contains("SEARCH") && step.contains("USING INDEX idx_txn_")),
+        "the narrowed page must seek an index, not scan: {plan:?}"
+    );
+    for step in &plan {
+        assert!(
+            !step.contains("TEMP B-TREE"),
+            "the narrowed page sorts: {step}"
+        );
+    }
+}
+
+/// **Q3** — ⚠️ the count's plan names `idx_txn_unanswered_account_date`.
+///
+/// **This test must not inherit `s1`'s "no step contains SCAN" rule.** A store-wide count has no
+/// equality term to seek on, so `SCAN` is its *optimal* plan; what the v8 index buys is the size
+/// of what gets scanned — at v7 the count walked every live row every time the entry point
+/// appeared, at v8 it walks only the unanswered ones, so it gets cheaper exactly as the worklist
+/// empties. Asserting the absence of `SCAN` here would be red for the right query and would push
+/// the next person to weaken `s1`. Assert the index by **name**.
+#[test]
+fn q3_the_count_plan_names_the_unanswered_index() {
+    let (db, _store) = perf_store("q3", 8, 10_000);
+    let plan = plan_of(
+        &db.path,
+        kaname_core::UNCATEGORIZED_COUNT_SQL,
+        rusqlite::params![],
+    );
+    eprintln!("Q3 count plan: {plan:?}");
+
+    assert!(
+        plan.iter()
+            .any(|step| step.contains("idx_txn_unanswered_account_date")),
+        "the count must read the index that holds exactly the rows it counts: {plan:?}"
+    );
 }

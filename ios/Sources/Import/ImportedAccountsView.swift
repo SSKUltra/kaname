@@ -14,7 +14,8 @@ struct ImportedAccountsView: View {
     var body: some View {
         List(accounts) { account in
             NavigationLink(
-                value: AccountFilter.account(id: account.id, name: account.name, last4: account.last4)
+                value: TransactionScope(
+                    filter: .account(id: account.id, name: account.name, last4: account.last4))
             ) {
                 row(account)
             }

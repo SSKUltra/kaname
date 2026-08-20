@@ -1,0 +1,170 @@
+{
+  "_comment": "Synthetic merchant-portion golden vector (no real data). A flat list of {narration, expected_portion} pairs pinning the FR-027a derivation: normalise via dedup::normalize_narration (unchanged), split on the closed separator set (whitespace and - / \\ | * : ; , # _ % ( ) [ ] \" ', where @ and . are deliberately NOT separators), discard every segment that is empty, entirely digits, a mixed token carrying four or more digits, a single character, or a member of the closed stop-list (zero merchant names in it), then keep the first two survivors joined by one space; fewer than one survivor is null. Every narration here is synthetic and looks it -- there is no real VPA, no real UPI handle and no real account number in this repository (Constitution Principle I), which is also the limit of what this fixture can prove: it establishes that the rule is deterministic and stable across the shapes we have, NOT that it is adequate against the real diversity of Indian narrations (research R16). The four UPI-SWIGGY shapes and the two R15 limitation cases are carried verbatim from research R14/R15 so that this file fails the day either changes. 'covers' names the branch each case exists for.",
+  "cases": [
+    {
+      "narration": "UPI-SWIGGY-123456",
+      "expected_portion": "swiggy",
+      "covers": "SC-008 -- one of four shapes differing only by a per-transaction reference"
+    },
+    {
+      "narration": "UPI-SWIGGY-1",
+      "expected_portion": "swiggy",
+      "covers": "SC-008 -- the same merchant with a one-digit reference"
+    },
+    {
+      "narration": "UPI-SWIGGY",
+      "expected_portion": "swiggy",
+      "covers": "SC-008 -- the same merchant with no reference at all"
+    },
+    {
+      "narration": "UPI-SWIGGY-RRN1234",
+      "expected_portion": "swiggy",
+      "covers": "SC-008 -- an RRN token, removed by normalize_narration"
+    },
+    {
+      "narration": "POS SWIGGY BANGALORE RRN1234",
+      "expected_portion": "swiggy bangalore",
+      "covers": "two survivors kept; the POS prefix and the RRN token both leave upstream"
+    },
+    {
+      "narration": "NEFT-EXAMPLE MART-SALARY",
+      "expected_portion": "example mart",
+      "covers": "stop-list group 1 (channel): 'neft' survives normalisation and is dropped here"
+    },
+    {
+      "narration": "ONLINE TRF EXAMPLE MART",
+      "expected_portion": "example mart",
+      "covers": "stop-list group 2 (channel modifier): 'online', 'trf'"
+    },
+    {
+      "narration": "CC EMI FEE EXAMPLE MART",
+      "expected_portion": "example mart",
+      "covers": "stop-list group 3 (instrument): 'cc', 'emi', 'fee'"
+    },
+    {
+      "narration": "AUTOPAY PYMT EXAMPLE MART",
+      "expected_portion": "example mart",
+      "covers": "stop-list group 4 (payment scaffolding): 'autopay', 'pymt'"
+    },
+    {
+      "narration": "PAID TO EXAMPLE MART VIA IND",
+      "expected_portion": "example mart",
+      "covers": "stop-list group 5 (narration function words): 'to', 'via', 'ind'"
+    },
+    {
+      "narration": "778899 EXAMPLE MART",
+      "expected_portion": "example mart",
+      "covers": "discard: a segment that is entirely digits"
+    },
+    {
+      "narration": "RT0001 EXAMPLE MART",
+      "expected_portion": "example mart",
+      "covers": "discard: a mixed token carrying four or more digits"
+    },
+    {
+      "narration": "X EXAMPLE MART",
+      "expected_portion": "example mart",
+      "covers": "discard: a single-character segment"
+    },
+    {
+      "narration": "EXAMPLE--MART",
+      "expected_portion": "example mart",
+      "covers": "discard: the empty segment two adjacent separators produce"
+    },
+    {
+      "narration": "POS/SYNTHETIC CAFE COFFEE/EXAMPLECITY",
+      "expected_portion": "synthetic cafe",
+      "covers": "max count boundary: four survivors, the first two kept"
+    },
+    {
+      "narration": "POS SYNTHETIC CAFE EXAMPLECITY BRANCH",
+      "expected_portion": "synthetic cafe",
+      "covers": "max count boundary: the outlet and its city are dropped, so a chain is one memory"
+    },
+    {
+      "narration": "POS EXAMPLEMART",
+      "expected_portion": "examplemart",
+      "covers": "a single survivor is a portion; only zero survivors is null"
+    },
+    {
+      "narration": "POS SYNTHETIC MART 9876543210123",
+      "expected_portion": "synthetic mart",
+      "covers": "a trailing 10-16 digit reference number leaves in normalize_narration"
+    },
+    {
+      "narration": "UPI-SYNTHETICCAFE@EXAMPLEBANK-778899",
+      "expected_portion": "syntheticcafe@examplebank",
+      "covers": "'@' is NOT a separator -- a VPA is one stable token, and splitting it would force PSP handles into the stop-list"
+    },
+    {
+      "narration": "POS EXAMPLEMART.IN EXAMPLECITY",
+      "expected_portion": "examplemart.in examplecity",
+      "covers": "'.' is NOT a separator -- 'examplemart.in' survives whole rather than yielding 'in'"
+    },
+    {
+      "narration": "NEFT-N123-EMPLOYER PRIVATE LIMITED-SALARY",
+      "expected_portion": "n123 employer",
+      "covers": "R15 limitation 1, pinned as it behaves: NARRATION_LEADING_PREFIX matches 'NEFT/' but not 'NEFT-', and a three-digit reference is under the four-digit rule"
+    },
+    {
+      "narration": "MTR1924 LALBAGH",
+      "expected_portion": "lalbagh",
+      "covers": "R15 limitation 2, pinned as it behaves: a merchant whose own name carries four digits is discarded, leaving an over-broad location"
+    },
+    {
+      "narration": "ATM CASH WITHDRAWAL",
+      "expected_portion": null,
+      "covers": "FR-027d: a cash withdrawal has no shop in it"
+    },
+    {
+      "narration": "CC PAYMENT RECEIVED",
+      "expected_portion": null,
+      "covers": "FR-027d: a bill payment has no shop in it"
+    },
+    {
+      "narration": "4262 BBPS Payment received",
+      "expected_portion": null,
+      "covers": "FR-027d: digits plus scaffolding"
+    },
+    {
+      "narration": "ONLINE TRF - PYMT RECD - THANK YOU",
+      "expected_portion": null,
+      "covers": "FR-027d: the app must not remember 'thank you'"
+    },
+    {
+      "narration": "PAYMENT RECEIVED BBPS - Ref No: RT0001",
+      "expected_portion": null,
+      "covers": "FR-027d: scaffolding plus a four-digit reference"
+    },
+    {
+      "narration": "TO ECM/600000000001 TFR",
+      "expected_portion": null,
+      "covers": "FR-027d: a transfer scaffold whose digits are not at the end, so normalisation leaves them"
+    },
+    {
+      "narration": "",
+      "expected_portion": null,
+      "covers": "degenerate: the empty string, without panicking"
+    },
+    {
+      "narration": "   ",
+      "expected_portion": null,
+      "covers": "degenerate: whitespace only, without panicking"
+    },
+    {
+      "narration": "-----",
+      "expected_portion": null,
+      "covers": "degenerate: separators only, so every segment is empty"
+    },
+    {
+      "narration": "778899",
+      "expected_portion": null,
+      "covers": "degenerate: digits only"
+    },
+    {
+      "narration": "RRN1234",
+      "expected_portion": null,
+      "covers": "degenerate: nothing survives normalisation itself"
+    }
+  ]
+}

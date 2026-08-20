@@ -203,20 +203,38 @@ if [ -n "$raw_hits" ]; then
     exit 1
 fi
 
+# The four scans below watch the code that *renders* a person's transactions — the list, and
+# now the surfaces that change a category. `ios/Sources/Categorize/` is included from the
+# moment this line exists rather than from the moment that directory does: a scan that starts
+# watching a directory only once somebody remembers to widen it is a scan that was absent for
+# exactly the changes it existed to catch.
+#
+# ⚠️ The directory may not exist yet, so the list is built from what is actually there. Under
+# `set -u` an empty array cannot be expanded, which is why every scan below is guarded on the
+# array's length rather than on a single directory's existence.
 TRANSACTIONS_DIR="$SOURCES_DIR/Transactions"
+CATEGORIZE_DIR="$SOURCES_DIR/Categorize"
+WATCHED_DIRS=()
+for watched in "$TRANSACTIONS_DIR" "$CATEGORIZE_DIR"; do
+    if [ -d "$watched" ]; then
+        WATCHED_DIRS+=("$watched")
+    fi
+done
+WATCHED_NAMES="ios/Sources/{Transactions,Categorize}"
+
 SECOND_OPINION=(
     'isLive' 'supersededBy' 'isDeleted'
     '\brows\.filter' '\bgroups\.filter'
     '\bsorted\b' '\bsort\(' '\breversed\b'
 )
 
-if [ -d "$TRANSACTIONS_DIR" ]; then
+if [ ${#WATCHED_DIRS[@]} -gt 0 ]; then
     second_pattern="$(printf '%s|' "${SECOND_OPINION[@]}")"
     second_pattern="(${second_pattern%|})"
-    second_hits="$(grep -rInE "$second_pattern" "$TRANSACTIONS_DIR" || true)"
+    second_hits="$(grep -rInE "$second_pattern" "${WATCHED_DIRS[@]}" || true)"
 
     if [ -n "$second_hits" ]; then
-        echo "import-audit: FAIL — the transaction list re-derives its own population:" >&2
+        echo "import-audit: FAIL — a screen re-derives its own population:" >&2
         echo "$second_hits" >&2
         echo "Which rows exist, and in what order, is the engine's answer alone — the list" >&2
         echo "renders it and never re-decides it (FR-008, FR-045). The ordering key lives in" >&2
@@ -237,17 +255,17 @@ echo "import-audit: OK (the engine is the only definition of the live population
 # iCloud key-value store, a scene-restoration payload — would make that possible, so the
 # symbols are banned outright rather than reviewed for.
 
-if [ -d "$TRANSACTIONS_DIR" ]; then
+if [ ${#WATCHED_DIRS[@]} -gt 0 ]; then
     PERSISTENCE_DENYLIST=(
         'UserDefaults' '@AppStorage' '@SceneStorage'
         'NSUbiquitousKeyValueStore' 'NSUserActivity' 'FileManager'
     )
     persistence_pattern="$(printf '%s|' "${PERSISTENCE_DENYLIST[@]}")"
     persistence_pattern="(${persistence_pattern%|})"
-    persistence_hits="$(grep -rInE "$persistence_pattern" "$TRANSACTIONS_DIR" || true)"
+    persistence_hits="$(grep -rInE "$persistence_pattern" "${WATCHED_DIRS[@]}" || true)"
 
     if [ -n "$persistence_hits" ]; then
-        echo "import-audit: FAIL — the transaction list can remember something:" >&2
+        echo "import-audit: FAIL — a screen can remember something:" >&2
         echo "$persistence_hits" >&2
         echo "The account filter must not survive a launch: a person who filtered on Friday" >&2
         echo "must not open a fraction of their spending on Monday (FR-041)." >&2
@@ -255,7 +273,7 @@ if [ -d "$TRANSACTIONS_DIR" ]; then
     fi
 fi
 
-echo "import-audit: OK (the transaction list persists nothing of its own)"
+echo "import-audit: OK ($WATCHED_NAMES persist nothing of their own)"
 
 # ---------------------------------------------------------------------------
 # Aggregate audit (FR-025, FR-026, SC-011) — two currencies must never quietly become one.
@@ -269,7 +287,7 @@ echo "import-audit: OK (the transaction list persists nothing of its own)"
 # why they are absent, and a scan that fires on its own explanation teaches people to delete
 # the explanation.
 
-if [ -d "$TRANSACTIONS_DIR" ]; then
+if [ ${#WATCHED_DIRS[@]} -gt 0 ]; then
     AGGREGATE_DENYLIST=(
         '\.reduce\(' '\breduce\(into:'
         '(var|let|func)[[:space:]]+(sum|total|subtotal|average|balance|aggregate)\\b'
@@ -277,10 +295,10 @@ if [ -d "$TRANSACTIONS_DIR" ]; then
     )
     aggregate_pattern="$(printf '%s|' "${AGGREGATE_DENYLIST[@]}")"
     aggregate_pattern="(${aggregate_pattern%|})"
-    aggregate_hits="$(grep -rInE "$aggregate_pattern" "$TRANSACTIONS_DIR" || true)"
+    aggregate_hits="$(grep -rInE "$aggregate_pattern" "${WATCHED_DIRS[@]}" || true)"
 
     if [ -n "$aggregate_hits" ]; then
-        echo "import-audit: FAIL — the transaction list computes a figure of its own:" >&2
+        echo "import-audit: FAIL — a screen computes a figure of its own:" >&2
         echo "$aggregate_hits" >&2
         echo "A day can hold more than one currency, so no total, subtotal, balance or" >&2
         echo "average may exist on this screen — not hidden, not conditional, not at all" >&2
@@ -289,7 +307,7 @@ if [ -d "$TRANSACTIONS_DIR" ]; then
     fi
 fi
 
-echo "import-audit: OK (no total, subtotal, balance or average under ios/Sources/Transactions)"
+echo "import-audit: OK (no total, subtotal, balance or average under $WATCHED_NAMES)"
 
 # ---------------------------------------------------------------------------
 # Tint audit (FR-073) — the app's accent is structural, not per-screen.
@@ -299,11 +317,11 @@ echo "import-audit: OK (no total, subtotal, balance or average under ios/Sources
 # system default (or a second accent) could come back on this screen, and a screen that
 # tints differently from the rest of the app reads as a different app.
 
-if [ -d "$TRANSACTIONS_DIR" ]; then
-    tint_hits="$(grep -rInE '\.tint\(' "$TRANSACTIONS_DIR" || true)"
+if [ ${#WATCHED_DIRS[@]} -gt 0 ]; then
+    tint_hits="$(grep -rInE '\.tint\(' "${WATCHED_DIRS[@]}" || true)"
 
     if [ -n "$tint_hits" ]; then
-        echo "import-audit: FAIL — a tint under ios/Sources/Transactions:" >&2
+        echo "import-audit: FAIL — a tint under $WATCHED_NAMES:" >&2
         echo "$tint_hits" >&2
         echo "The accent is applied app-wide in KanameApp.swift; a per-screen tint is how" >&2
         echo "the system default comes back (FR-073)." >&2
@@ -311,7 +329,7 @@ if [ -d "$TRANSACTIONS_DIR" ]; then
     fi
 fi
 
-echo "import-audit: OK (the transaction list inherits the app's own accent)"
+echo "import-audit: OK ($WATCHED_NAMES inherit the app's own accent)"
 
 # ---------------------------------------------------------------------------
 # Transfer-detection audit (FR-018) — the app does not detect transfers, and must not start

@@ -89,11 +89,7 @@ enum SeededLaunch {
     /// on the *wording* of a heading would have been a filter on copy, and would have quietly
     /// started counting a row the day a description ended in the word "transactions".
     static func rowLabels(_ app: XCUIApplication) -> [String] {
-        app.cells.allElementsBoundByIndex.compactMap { cell in
-            let texts = cell.staticTexts.allElementsBoundByIndex
-            guard texts.count > 1 else { return nil }
-            return texts.first?.label
-        }
+        visibleLabels(app).filter(\.1).map(\.0)
     }
 
     /// Every row of the whole list, in the order it is rendered, by scrolling to the end.
@@ -145,8 +141,20 @@ enum SeededLaunch {
     }
 
     /// Every labelled cell on screen, and whether it is a row.
+    ///
+    /// ⚠️ **A row's sentence is not on its cell, and since 020 it is not on a `StaticText`
+    /// either.** The row became a `NavigationLink`, so its combined accessibility element
+    /// surfaces as a **button** carrying the whole announcement; the description, account,
+    /// category and amount remain underneath it as separate texts. A date heading is a cell
+    /// too, and has neither a button nor a second text — which is still how the two are told
+    /// apart, structurally rather than by wording.
+    ///
+    /// Reading `cell.staticTexts.first` here is what made every 018 row assertion go red the
+    /// moment the row gained a link, while VoiceOver's own reading had not changed at all.
     private static func visibleLabels(_ app: XCUIApplication) -> [(String, Bool)] {
         app.cells.allElementsBoundByIndex.compactMap { cell in
+            let announcement = cell.buttons.allElementsBoundByIndex.first?.label
+            if let announcement, !announcement.isEmpty { return (announcement, true) }
             let texts = cell.staticTexts.allElementsBoundByIndex
             guard let label = texts.first?.label else { return nil }
             return (label, texts.count > 1)

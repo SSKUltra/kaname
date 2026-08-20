@@ -213,6 +213,13 @@ final class TransactionListViewModel {
         }
     }
 
+    /// Re-read after a person changed a category — the same single-change re-read an import
+    /// gets, for the same reason: something the engine knows about these rows changed, and the
+    /// screen's job is to show what the engine now says rather than to edit its own copy.
+    func refreshAfterCorrection() async {
+        await refreshAfterImport()
+    }
+
     private func reload() async {
         state = .loading
         groups = []

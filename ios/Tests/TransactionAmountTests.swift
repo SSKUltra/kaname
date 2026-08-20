@@ -36,6 +36,7 @@ struct TransactionAmountTests {
                 // can tell "the transaction's currency" from "the account's".
                 currency: currency,
                 categoryName: nil,
+                categoryId: nil,
                 isTransfer: false
             ))
     }

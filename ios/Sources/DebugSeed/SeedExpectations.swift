@@ -83,6 +83,21 @@ extension SeedScenario {
         }
     }
 
+    /// How many live rows nothing has answered yet — the worklist this scenario declares.
+    ///
+    /// ⚠️ Declared here, but **not believed here**: `SeedContractUITests` asserts it against
+    /// `uncategorizedCount()`, the engine's own number. A declaration that merely restated the
+    /// author's belief about what the engine would categorize would agree with itself forever,
+    /// including on the day the engine changed its mind.
+    var expectedUncategorizedCount: Int {
+        expectedLiveRows.count - expectedCategorizedRowCount
+    }
+
+    /// Live rows the declaration says the engine will place.
+    var expectedCategorizedRowCount: Int {
+        placement.live.filter { $0.row.expectedCategory != nil }.count
+    }
+
     /// One account by name, as the front door will announce it.
     func expectedAccount(named name: String) -> SeedAccountExpectation? {
         expectedAccounts.first { $0.name == name }

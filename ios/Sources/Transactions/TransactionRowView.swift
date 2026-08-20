@@ -17,6 +17,29 @@ struct TransactionRowView: View {
     }
 
     var body: some View {
+        // The row is the link (R1, FR-003). Its **visual layout does not change**: the
+        // indicator a `List` would add is turned off with iOS 26's own API rather than with a
+        // hidden-link trick, because a chevron and an inset would silently redo 018's row
+        // (R3, FR-046). The tap target is the whole row, which a `List` row already makes
+        // ≥44pt tall (R4, FR-062).
+        NavigationLink(value: row) {
+            rowBody
+        }
+        .navigationLinkIndicatorVisibility(.hidden)
+        // Preserved: the row is still **one** element announcing one sentence (R2, FR-060).
+        //
+        // ⚠️ What the link does change is the element's *kind*. A combined row used to surface
+        // to an automated run as a `StaticText`; as a link it surfaces as a **button** carrying
+        // the same sentence — measured, both with this modifier here and with it applied to the
+        // link's content, which behave identically. Nothing a person hears moved, and 018's
+        // seeded suite still went red, because its helper identified a row by "the first
+        // `StaticText` inside the cell". `SeededLaunch` reads the sentence wherever it is now.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityHint(CategorizeStrings.rowHint)
+    }
+
+    private var rowBody: some View {
         Group {
             if layout.axis == .vertical {
                 VStack(alignment: .leading, spacing: 6) {
@@ -34,8 +57,6 @@ struct TransactionRowView: View {
             }
         }
         .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(row.accessibilityLabel)
     }
 
     private var details: some View {
@@ -102,6 +123,7 @@ struct TransactionRowView: View {
                     direction: .debit,
                     currency: "INR",
                     categoryName: nil,
+                    categoryId: nil,
                     isTransfer: false
                 )))
     }

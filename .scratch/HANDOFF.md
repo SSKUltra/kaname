@@ -19,7 +19,7 @@ Kaname (要, "the key") is the **privacy-first, local-first** open-source iOS cl
 slice from 016 onward is specified here: `spec.md` → `plan.md` → `research.md` →
 `contracts/` → **`tasks.md`** (the executable queue, checkbox per task) → `quickstart.md`.
 A feature here is picked up by working `tasks.md` in order, respecting its PR split.
-**The live one is `specs/019-debug-test-seeding/`, starting at T001 (PR A, the absence proof).**
+**The live one is `specs/020-categorize/`, starting at T122 (PR E, the memory and the second action).**
 
 **B. `.scratch/<feature-slug>/` — the older local ticket convention** (see
 `docs/agents/issue-tracker.md`): `spec.md` plus `issues/<NN>-<slug>.md`, each with a
@@ -152,15 +152,170 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: the categorize slice.** `019-debug-test-seeding` is **DONE** — T001–T101, all four
-PRs, every gate green. Run `speckit.specify` for the next slice; do **not** re-run it for 019.
+**⬅️ NEXT: `020-categorize` PR E — the memory and the second action.** Start at **T122** in
+`specs/020-categorize/tasks.md`. ⚠️ Its first two tasks are seed scenarios that **de-duplication
+can eat before anything is asserted**: `repeated` puts one merchant in two statements of one
+account, `crossing` puts one across a ledger and a card — which is *exactly* the pair cross-source
+dedup compares. Vary the amounts or the dates, or the blast radius is wrong before it was ever
+tested. Work is on branch **`020-categorize`** (8 commits, clean tree, not yet pushed or opened as
+a PR).
+
+✅ **PR D's gate is green.** `make ios-test`: **297 unit tests in 59 suites + 39 UI tests, 0
+failures, 782 s**. ⚠️ The same commit had previously taken **18,322 s** and failed one test with
+`Timed out while synthesizing event`, at load average 20–120; on a quiet host (load 3.7) it is 23×
+faster and clean. **A UI-test failure on this machine is a claim about the machine until the load
+average has been looked at** — check `uptime` before debugging one.
+
+**020 PR D is DONE** (`b6112a0`, T094–T121). A person can now open a transaction and change its
+category: `ios/Sources/Categorize/` (strings, scope, catalog, service, detail surface, picker),
+five new unit suites, X1/X2 over a seeded launch, three accessibility audits plus a hit-target
+measurement over the two new surfaces, and the `unfiled` scenario. `make lint` clean (111 files),
+`make import-audit` ten scans green with the widened scope, `ImportService.swift` **unchanged at
+398 lines**. `specs/020-categorize/tasks.md` § *PR D — RECORDED* has the full account; the five
+things worth carrying:
+
+- 🚨 **A row that becomes a `NavigationLink` stops being a `StaticText` and becomes a `Button`.**
+  This turned **018's `SeededTransactionListUITests` red** and looked exactly like R2 being
+  violated — the row losing its combined element. It had not: the whole sentence is intact on the
+  cell's **button**, with the description, account, category and amount still underneath it.
+  Nothing a person hears changed. `SeededLaunch.visibleLabels` now reads the sentence wherever it
+  is; anything else that identifies a row by "the first `StaticText` in the cell" will break the
+  same way. ⚠️ Both placements of `.accessibilityElement(children: .combine)` — on the link, and on
+  its content — were measured and are identical, so the placement is **not** load-bearing.
+- 🚨 **The source-level R2 assertion passed the whole time the behaviour was red.** It checks the
+  modifiers are present in `TransactionRowView.swift`, and they were. Only the seeded run could
+  tell. Keep it (it catches the `.opacity(0)` hidden-link trick, which passes a screenshot) but
+  never mistake it for the gate.
+- 🚨 **The system auditor found four real Dynamic Type defects at the DEFAULT text size** — the
+  first audit ever run against these surfaces, and precisely the return 019 was bought for. A
+  `Section("string")` header, a `Text` carrying a bare `.accessibilityLabel`, a prominent `Button`
+  inside a `List` row, and a **titled toolbar button**. The first three have structural fixes (an
+  explicit `Text` header; draw a fact the way the other facts are drawn; put the action in a
+  `.safeAreaBar`, which also gives D6 at *every* text size). The fourth passes **only** as an SF
+  Symbol with a spoken label — `Button("Cancel")`, an explicit `Text` label, and dropping the
+  redundant `.buttonStyle(.glass)` all still failed. No other audited screen here has one.
+- ⚠️ **The widened scan forbids the picker from sorting the catalog, and it is right.**
+  `list_categories()` is already `ORDER BY rowid`, so a Swift-side sort is a second opinion about
+  an order the engine settled. The grouping preserves the engine's order and U1 asserts *that*.
+- ⚠️ **T117's break turns the K3 unit assertion red and leaves X2 green.** The queue predicted
+  both would fail; the mark on the current category is simply not on X2's path. That is why K3
+  lives on `CategoryChoice.isCurrent` as a pure rule rather than privately inside the view — and
+  it is the same shape as PR C's finding that only Q3 gates the v8 index.
+
+⚠️ **What a loaded machine does to this gate, measured on one unchanged commit.** The first full
+run took **18,322 s** (five hours) at load average 20–120 and failed one test with `Failed to
+swipe up CollectionView: Timed out while synthesizing event` — the simulator could not deliver a
+gesture. Individual re-runs of that suite passed at 24 s, 985 s, 1,075 s, 1,537 s and 3,145 s for
+work that normally takes 15–25 s. The **same commit** then ran clean in **782 s** at load 3.7.
+Nothing was changed between them. Check `uptime` before chasing a UI-test failure here, and never
+chase a `synthesizing event` timeout at all.
+
+**020 PR C is DONE** (`e42bcf4`, T077–T093, **348 → 358 core tests**, every gate green:
+core-lint, core-test, lint, `ios-test` **TEST SUCCEEDED** (33 UI tests), `import-audit` ten scans
+OK). It shipped `HistoryQuery.uncategorized_only`, `HistoryRow.category_id`,
+`Store::uncategorized_count()`, the `page_sql!` macro that spells the page statement once, and
+Q1–Q3. `specs/020-categorize/tasks.md` § *PR C — RECORDED* has the full account; the five things
+worth carrying:
+
+- 🚨 **PR C could not be engine-only, and the queue says it is.** A new `HistoryRow` field breaks
+  **every Swift memberwise construction of it** — ten call sites, seven files — because uniffi
+  generates an initializer with no default for a new field. `#[uniffi(default = None)]` would have
+  kept the Swift tree untouched and was **rejected**: a double that can silently omit a fact the
+  engine always populates is the exact quiet failure this repo keeps finding. Expect the same the
+  next time a `uniffi::Record` grows a field. (`HistoryQuery`'s new field *does* carry a default —
+  it is an **input**, and FR-046's "every existing caller keeps its behaviour" is the point.)
+- ⚠️ **Q2 does not gate the v8 index — only Q3 does.** T091's break turned Q3 red with `s1`, `s2`
+  and Q1 green as predicted; **Q2 stayed green too**, because the narrowed page falls back to the
+  v7 index and is still a `SEARCH` on a named index with no `TEMP B-TREE`. If Q3 is ever weakened,
+  nothing else in the suite notices `idx_txn_unanswered_account_date` going missing.
+- ⚠️ **H5 is a drift gate, not a correctness one.** Break the provenance arm of
+  `unanswered_predicate!()` and C5 and H2 go red — **H5 stays green**, because the count and the
+  list agreed, on the wrong set. Do not read a green H5 in PR F as "the worklist is right".
+- **One predicate, one spelling — via the macro, not the constant.** A `const` cannot be
+  interpolated into another `const`, so `PAGE_SQL` / `PAGE_SQL_UNANSWERED` are two expansions of
+  one `page_sql!` and the count is `UNCATEGORIZED_COUNT_SQL`. `UNANSWERED` keeps its
+  `#[allow(dead_code)]`: it is now a *name* for the rule, not a reader of it. **H1 pins
+  `PAGE_SQL`'s full text**, which is the only reason the macro was safe to introduce.
+- **R13's plans are now measured on the real SQLCipher store** and reproduce exactly: `SEARCH t
+  USING INDEX idx_txn_unanswered_account_date` for the narrowed page, `SCAN transactions USING
+  INDEX idx_txn_unanswered_account_date` for the count. That settles **three** statements on one
+  corpus on one machine — T178's "not a survey" is recorded as such.
+
+⚠️ **A wall-clock failure is a claim about the machine until you measure the machine.** A re-run of
+`history_perf` alone failed `s4` (worst page 73.7 ms, budget 25 ms) and `s5` on a host at **load
+average 120** with an unrelated `ffmpeg` at 392% CPU. `HEAD` was stashed to and run under the same
+load: **`s4` fails there too, worse — 127.2 ms.** Two minutes of `git stash` settled it. Do that
+before chasing `s3`–`s7`.
+
+⚠️ **Do NOT re-run `speckit.specify` / `plan` / `tasks` for 020** — all three are committed
+(`adf9206`, `8268268`, `2d05d56`), Q1–Q3 are answered (D / B / C), and the design is locked.
+019 is **DONE** — T001–T101, all four PRs, every gate green; do not re-run it either.
+
+**020 PR B is DONE** (T041–T076, **324 → 348 core tests**, fmt + lint clean, **no tracked Swift
+file touched**). It shipped the derivation (`core/src/merchant.rs` + its 33-case fixture), the
+`merchant_memory` upsert inside `set_transaction_category`'s existing transaction, the
+consultation of that memory in `categorize_account_in` **before** the stack, and
+`preview_memory_application` / `apply_memory` with set-equality staleness.
+`specs/020-categorize/tasks.md` § *PR B — RECORDED* has the full account; the five things worth
+carrying:
+
+- 🚨 **T051's break turns P1 and P5 red, not P2 — the queue named the wrong test.** Keeping three
+  segments instead of two does not stop the four `UPI-SWIGGY-*` shapes collapsing, because each
+  has exactly **one** surviving segment. What actually protects SC-008 is the **reference-token
+  discard**: remove it and P2 fails with `swiggy 123456` against `swiggy`. Both breaks were run;
+  both reverted.
+- ⚠️ **M6 cannot be staged by importing another matching row**, which is what T067 says to do. An
+  import re-categorizes the account's undecided rows through the same memory, so the rows change
+  for a *legitimate* reason and the test cannot tell that apart from a partial apply. M6 removes
+  a row instead. The underlying fact matters for PR D: **a preview goes stale because an import
+  happened**, and `StaleSet` is what the person meets when it does.
+- **`apply_memory` is guarded on `PERSON`, not on `ENGINE_MAY_DECIDE`**, deliberately: the write
+  *is* a person deciding, so it must replace an earlier `PERSON_MEMORY` (FR-031a) while never
+  touching a hand correction. `ENGINE_MAY_DECIDE` there would make a second offer write 0 rows.
+- **C7 passed on its first run and was broken on purpose to prove it can fail** (commit the row,
+  then open a second transaction for the memory → C7 red). T059 was satisfied by T055's code, not
+  by new code, and that is recorded rather than dressed up.
+- **Two doc discrepancies, resolved toward the contract**: the function is **`apply_memory`**
+  (not `apply_memory_application`), and research R14's "69-word" stop-list actually lists **76** —
+  the list shipped, with a unit test pinning the count, no duplicates and no upper-case entry.
+
+⚠️ **PR B changed the FFI surface twice** (the free `merchant_portion`, then `MemoryImpact` /
+`AccountImpact` / `StaleSet` / the two `Store` methods); both `make core-xcframework` **then**
+`make ios-gen` runs are done and the Swift bindings are present
+(`previewMemoryApplication`, `applyMemory`, `merchantPortion`). PR C changes it again (T086/T087).
+⚠️ `cargo` is not on the default PATH: `export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"`.
+⚠️ Never run `make core-test` and `make ios-test` concurrently (`history_perf::s5` is wall-clock).
+
+**020 PR A is DONE** (`5ce166b`, T001–T040, **310 → 324 core tests**, lint clean, privacy audit
+OK, **no tracked Swift file touched**). It shipped schema **v8** — additive only, a
+`merchant_memory` table and one partial index — the three predicates spelled once, the
+`set_transaction_category` write path with `'PERSON'` provenance, and guards on both engine
+write paths. `specs/020-categorize/tasks.md` § *PR A — RECORDED* has the full account; the four
+things worth carrying:
+
+- 🚨 **`NULL NOT IN ('PERSON', 'PERSON_MEMORY')` is `NULL`, not `TRUE`.** Watched: with the naive
+  guard, **C2 went red and C1 stayed green** — every row an import had just inserted was
+  discarded and *nothing errored*. `ENGINE_MAY_DECIDE` must keep its `IS NULL OR` arm forever.
+- **Two live defects were fixed, both watched failing first**: a re-import wrote
+  `FOOD_AND_DINING / T1_SOURCE_CATEGORY` over a person's `GROCERIES / PERSON`, and
+  `detect_transfers` wrote `CREDIT_CARD_BILL_PAYMENT` over a person's `SHOPPING`.
+- ⚠️ **The two guards are not independent, and the queue assumed they were.** Removing the
+  *load*-site guard turns nothing red — the write-site guard covers C1 alone. **C8** now pins it:
+  without it the stack decides a category, reports it as `categorized`, and writes nothing.
+- **PR A deferred C4/C7 to PR B and C5 to PR C**, with reasons. **C4 and C7 are now paid**;
+  **C5 is still open and belongs to T085.**
+- **One finding for PR D**: `everyStoreFailureMapsToTheSameThing` in
+  `ios/Tests/TransactionHistoryServiceTests.swift` is now one case short of the "every" in its
+  name (`.NotFound`) — and **`.StaleSet` makes it two short as of PR B**. Harmless today — the
+  mapping takes `_: Error` and discards it.
 
 **What 019 bought, in one sentence:** an automated run can now open a screen with a person's own
 transactions on it, so the accessibility auditor finally has something to audit — **UI tests went
 from 6 to 33**, and six of 018's fourteen manual gate steps are now run by a machine.
 
 **What it cost the shipping app:** three lines in `ios/Sources/KanameApp.swift`, inside
-`#if DEBUG`. Nothing else. No Rust file, no FFI change, **schema still v7**.
+`#if DEBUG`. Nothing else. No Rust file, no FFI change — **schema was v7, and 020 PR A took it
+to v8**.
 
 ⚠️ **It paid for itself on its first run.** The first `performAccessibilityAudit` ever pointed at
 a populated list found two shipped defects: a date heading rendering grey because

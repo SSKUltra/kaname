@@ -91,6 +91,7 @@ struct TransactionRowLayoutTests {
                 direction: .debit,
                 currency: "INR",
                 categoryName: nil,
+                categoryId: nil,
                 isTransfer: false
             ))
     }
