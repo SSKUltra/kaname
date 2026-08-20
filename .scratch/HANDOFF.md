@@ -152,12 +152,50 @@ grouped by date; narrow to one account and clear it in a tap; be told which of s
 the case when a screen is empty; and watch a statement they import while reading appear **without
 a relaunch**, without losing their filter or their place in the list.
 
-**⬅️ NEXT: `020-categorize` PR E — the memory and the second action.** Start at **T122** in
-`specs/020-categorize/tasks.md`. ⚠️ Its first two tasks are seed scenarios that **de-duplication
-can eat before anything is asserted**: `repeated` puts one merchant in two statements of one
-account, `crossing` puts one across a ledger and a card — which is *exactly* the pair cross-source
-dedup compares. Vary the amounts or the dates, or the blast radius is wrong before it was ever
-tested.
+**⬅️ NEXT: `020-categorize` PR F — the worklist.** Start at **T141** in
+`specs/020-categorize/tasks.md`. ⚠️ Its engine half **already shipped in #42**:
+`uncategorized_count()` has had no Swift caller since PR C, so a "nothing calls this" search is
+not evidence of a mistake. Two things to expect: **T154 and T155 are the breaks the widened
+`import-audit` scans 5–7 exist for**, and this is the PR where a Swift second opinion is most
+tempting — the front door's count was deliberately moved out of Swift into SQL by 018 and this is
+exactly where it creeps back.
+
+**020 PR E is DONE** (`0468cee`, T122–T140). A person can now correct a transaction, be asked in
+their own words whether Kaname should remember the merchant, decline that without touching the
+correction, and — if they accept — be told exactly how many transactions in which accounts would
+change **before** anything is written. `ios/Sources/Categorize/` gains `MemoryOfferView.swift` and
+`SecondActionView.swift`; `ios/Sources/DebugSeed/SeedMemoryScenarios.swift` adds the `repeated`
+and `crossing` scenarios; three unit suites and two UI suites are new. Every gate green:
+`make lint` **0 violations (119 files)**, `make ios-test` **TEST SUCCEEDED (49 UI tests, 1,024 s
+at load 2.8)**, `make import-audit` ten scans OK, `make release-audit` OK.
+`ImportService.swift` **unchanged at 398 lines**. `specs/020-categorize/tasks.md` § *PR E —
+RECORDED* has the full account; the five things worth carrying:
+
+- 🚨 **A geometry assertion found a real hit-target defect that the accessibility auditor did
+  not.** Both new sheets' answers rendered **34.33 pt** tall **at the default text size** — under
+  FR-062's 44 pt — while all four `performAccessibilityAudit` runs stayed green. The cause:
+  `.buttonStyle` draws its background around what the **label** asks for, so a `.frame(minHeight:)`
+  outside a styled button sizes the space around a control that stayed small. `SheetAnswer` puts
+  the minimum on the label. **Second time this repo has recorded it** — A12 was the first. On
+  these controls, hit targets are measured or they are not checked.
+- 🚨 **Every correction now leads to a sheet, and that broke a test that changed by nothing.** X2
+  reached for the detail surface underneath the new offer and failed as "not hittable", which
+  reads exactly like a layout defect. `SeededLaunch.dismissMemoryOffer` is the shared way through
+  it. ⚠️ Anything that changes a category from now on must expect the offer.
+- 🚨 **The second action changed rows the list behind it was still holding, and nothing said so.**
+  Watched: agree, go back, read three stale categories. Fixed through `refreshAfterCorrection` —
+  the seam a single correction already uses — rather than by patching rows. **The queue did not
+  ask for this**: K5 is written about one row, and this is the first thing in the app that changes
+  rows the current screen is not showing.
+- ⚠️ **The picker cannot be found by the name of the thing you are choosing.** The current choice's
+  spoken label carries its mark (`No category, Current category`), so `app.buttons["No category"]`
+  finds nothing on an *unanswered* transaction — which is every transaction a memory test starts
+  from, and it reads as a missing control. `SeededLaunch.chooseCategory` matches the prefix.
+- ⚠️ **A declared blast radius has to be adjudicated for completeness, not just correctness.**
+  `SeedMemoryExpectationTests` asks the engine in both directions — every named description
+  derives to the portion, and **no other row in the scenario does**. Dropping one entry from
+  `repeated`'s `alsoMatching` was watched turning both arms red. An `alsoMatching` that is merely
+  correct understates the one number the second action exists to state.
 
 **`020-categorize` PRs A–D are MERGED — [PR #42](https://github.com/SSKUltra/kaname/pull/42),
 merge commit `f6171b3`, both CI jobs green (Rust core 1m6s, iOS 30m31s).** A person can open a
