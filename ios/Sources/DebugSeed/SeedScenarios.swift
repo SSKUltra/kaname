@@ -30,6 +30,10 @@ struct SeedScenario: Sendable {
     /// Applied in order. The order is load-bearing: it fixes account order, the history's
     /// account tie-break, and which row wins a de-duplication.
     let statements: [SeedStatement]
+    /// What this scenario declares about the memory a test forms in it, or `nil` when it
+    /// declares none. `var` with a default so the scenarios written before memories existed
+    /// keep their memberwise initializer unchanged (see `SeedMemoryScenarios.swift`).
+    var memory: SeedMemorySubject?
 }
 
 /// One statement, as a person's document would have arrived.
@@ -113,7 +117,9 @@ struct SeedAccountExpectation: Sendable, Equatable {
 
 extension SeedScenario {
     /// Every scenario a launch may name. An unrecognised name fails the launch (FR-006).
-    static let declared: [SeedScenario] = [.empty, .small, .deep, .barren, .unfiled]
+    static let declared: [SeedScenario] = [
+        .empty, .small, .deep, .barren, .unfiled, .repeated, .crossing,
+    ]
 
     static func named(_ name: String) -> SeedScenario? {
         declared.first { $0.name == name }

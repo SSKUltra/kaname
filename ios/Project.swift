@@ -88,11 +88,12 @@ let project = Project(
             // The seeded suites assert against the same declaration the DEBUG app writes, so
             // the fixture is compiled into both and drift has nowhere to happen (019 R11,
             // FR-010). These are the only files shared this way, and they may import Foundation
-            // and nothing else: this bundle links neither the app nor KanameCore. Two files
+            // and nothing else: this bundle links neither the app nor KanameCore. Three files
             // rather than one only because SwiftLint's 400-line limit is `--strict`.
             sources: [
                 "UITests/**",
                 "Sources/DebugSeed/SeedScenarios.swift",
+                "Sources/DebugSeed/SeedMemoryScenarios.swift",
                 "Sources/DebugSeed/SeedExpectations.swift",
             ],
             dependencies: [

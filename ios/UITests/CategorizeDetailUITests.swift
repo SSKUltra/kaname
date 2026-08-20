@@ -65,15 +65,14 @@ final class CategorizeDetailUITests: XCTestCase {
         row.tap()
         XCTAssertTrue(app.navigationBars["Transaction"].waitForExistence(timeout: 10))
 
-        app.buttons["Change category"].tap()
-        XCTAssertTrue(
-            app.navigationBars["Choose a category"].waitForExistence(timeout: 10),
-            "the picker did not open")
-
         let chosen = "Groceries"
-        let choice = app.buttons[chosen].firstMatch
-        XCTAssertTrue(choice.waitForExistence(timeout: 10), "the picker does not offer \(chosen)")
-        choice.tap()
+        SeededLaunch.chooseCategory(app, named: chosen)
+
+        // ⚠️ **Since PR E a correction is followed by the memory offer**, and this test did not
+        // change: the sheet sits over the surface below, so reaching for that surface without
+        // dismissing it fails as "not hittable" and reads like a layout defect. Declining is
+        // also the assertion X2 needs it to be — the change below must survive it (M2, FR-028).
+        SeededLaunch.dismissMemoryOffer(app)
 
         // The surface that changed it, without a refresh.
         XCTAssertTrue(

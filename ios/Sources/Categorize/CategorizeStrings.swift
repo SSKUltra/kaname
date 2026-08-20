@@ -79,11 +79,112 @@ enum CategorizeStrings {
         }
     }
 
+    // MARK: - The memory offer
+
+    /// **M1** — what the app is asking, before it learns anything (FR-026).
+    static let memoryOfferTitle = "Remember this for next time?"
+
+    /// **M1**, **M4** — the offer itself, showing the portion the **engine** derived, verbatim
+    /// and in quotation marks so a person can see exactly how much of their description Kaname
+    /// took (FR-026a). Nothing here is derived on this side of the bridge.
+    static func memoryOffer(portion: String, category: String) -> String {
+        "When a transaction says “\(portion)”, Kaname will file it under \(category)."
+    }
+
+    static let memoryOfferAccept = "Remember it"
+
+    /// **M2** — declining, said as a person would decline: not an error, not a cancellation,
+    /// and with nothing in the wording to suggest the correction is at stake (FR-028).
+    static let memoryOfferDecline = "Not now"
+
+    /// **M3** — nothing was specific enough to recognise again, or the person deliberately
+    /// filed the transaction under nothing. Either way the app says so plainly and offers
+    /// nothing (FR-027d).
+    static let nothingToRememberTitle = "Nothing to remember here"
+
+    static let nothingToRememberBody =
+        "There is nothing in this transaction Kaname could recognise on another statement. "
+        + "Your change is saved."
+
+    /// What the offer says once it has learned something and there is nothing else to change.
+    static func memoryRemembered(portion: String) -> String {
+        "Kaname will remember “\(portion)” from now on."
+    }
+
+    static let memoryOfferDone = "Done"
+
+    // MARK: - The second action
+
+    /// **S1** — the question, asked before anything is written (FR-035a).
+    static let secondActionTitle = "Change the ones you already have?"
+
+    /// **S1**, **S3** — the blast radius, in the engine's numbers. `count` is the length of the
+    /// list the engine returned; nothing on this side counts anything.
+    static func secondActionSummary(count: Int, portion: String, category: String) -> String {
+        let transactions = count == 1 ? "1 transaction" : "\(count) transactions"
+        return "\(transactions) already say “\(portion)”. Kaname can file them under "
+            + "\(category) too."
+    }
+
+    /// **S1** — which accounts they are in, so a person is told where the change lands and not
+    /// only how much of it there is (FR-035c).
+    static let secondActionAccountsHeading = "Where they are"
+
+    /// One account's share, from `AccountImpact` — its name and its own count, both the
+    /// engine's.
+    static func secondActionAccount(name: String, count: Int) -> String {
+        let transactions = count == 1 ? "1 transaction" : "\(count) transactions"
+        return "\(name): \(transactions)"
+    }
+
+    static let secondActionApply = "Change them"
+
+    /// **S7** — declining changes nothing that was already decided: the correction stands and
+    /// the memory stays learned (FR-028).
+    static let secondActionDecline = "Leave them as they are"
+
+    static func secondActionChanged(count: Int) -> String {
+        count == 1 ? "1 transaction changed." : "\(count) transactions changed."
+    }
+
+    /// **S5** — the one failure a person can act on, said as a fact about *their* data rather
+    /// than about the app: the rows moved while the offer was open, so the offer is no longer
+    /// about what it said it was (FR-035f, SC-027).
+    ///
+    /// ⚠️ Deliberately not "something went wrong". Told that things changed, a person looks
+    /// again; told that something went wrong, they try the same thing twice.
+    static let secondActionStale =
+        "These transactions changed while this was open, so nothing here was changed. "
+        + "Take another look."
+
+    static let secondActionFailed =
+        "Those transactions could not be changed. Nothing was changed."
+
     /// Every classification, in the order the picker draws them, so the heading table and the
     /// grouping cannot disagree about which groups exist.
     static let everyGroupHeading: [String] =
         (CategoryCatalog.classificationOrder.map { Optional($0) } + [nil])
         .map(groupHeading)
+
+    /// Every sentence this table *builds*, rendered with stand-in values.
+    ///
+    /// ⚠️ A sentence assembled at runtime is a sentence the audit would otherwise never see —
+    /// and the memory surfaces are almost entirely assembled, because both of them quote a
+    /// person's own merchant back at them. Both counts of every pluralised sentence are here,
+    /// because "1 transactions" is exactly the kind of thing nobody notices in a table of
+    /// constants.
+    static var everyBuiltSentence: [String] {
+        [
+            memoryOffer(portion: "a shop", category: "a category"),
+            memoryRemembered(portion: "a shop"),
+            secondActionSummary(count: 1, portion: "a shop", category: "a category"),
+            secondActionSummary(count: 4, portion: "a shop", category: "a category"),
+            secondActionAccount(name: "an account", count: 1),
+            secondActionAccount(name: "an account", count: 4),
+            secondActionChanged(count: 1),
+            secondActionChanged(count: 4),
+        ]
+    }
 
     /// Every sentence in this table, gathered in one place so a new string cannot escape the
     /// audit by being added somewhere else.
@@ -94,6 +195,11 @@ enum CategorizeStrings {
             changeCategory, pickerTitle, cancel,
             noCategoryChoice, noCategoryExplanation,
             currentCategoryAnnouncement, rowHint, changeFailed,
-        ] + everyGroupHeading
+            memoryOfferTitle, memoryOfferAccept, memoryOfferDecline,
+            nothingToRememberTitle, nothingToRememberBody, memoryOfferDone,
+            secondActionTitle, secondActionAccountsHeading,
+            secondActionApply, secondActionDecline,
+            secondActionStale, secondActionFailed,
+        ] + everyGroupHeading + everyBuiltSentence
     }
 }

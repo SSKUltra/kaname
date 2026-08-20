@@ -234,6 +234,98 @@ final class SeededAccessibilityUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(blank.frame.width, 44, "a choice is too narrow to hit")
     }
 
+    // MARK: - 020 PR E — the memory offer and the second action
+
+    /// A13 — the memory offer, at the default size in Light.
+    func testTheMemoryOfferPassesTheAudit() throws {
+        SeededLaunch.pin(.light, in: self)
+        try auditMemorySurfaces(arguments: [], types: audited)
+    }
+
+    /// A14 — and at the largest accessibility size, where the offer's sentence quotes a
+    /// merchant back and the second action lists an account name per line.
+    func testTheMemoryOfferSurvivesTheLargestTextSize() throws {
+        SeededLaunch.pin(.light, in: self)
+        try auditMemorySurfaces(arguments: Self.xxxl, types: auditedAtLargeSizes)
+    }
+
+    /// A15 — Dark Mode, its own problem rather than a repaint.
+    func testTheMemoryOfferPassesTheAuditInDarkMode() throws {
+        SeededLaunch.pin(.dark, in: self)
+        try auditMemorySurfaces(arguments: [], types: audited)
+    }
+
+    /// A16 — Dark Mode at the largest size, because each passing alone says nothing about the
+    /// layout the other produces.
+    func testTheMemoryOfferPassesTheAuditInDarkModeAtTheLargestTextSize() throws {
+        SeededLaunch.pin(.dark, in: self)
+        try auditMemorySurfaces(arguments: Self.xxxl, types: auditedAtLargeSizes)
+    }
+
+    /// A17 — **geometry, not audit** (S1, FR-062). Every answer either sheet offers is the whole
+    /// of what a person can do on it; a control too small to hit there is a person stuck inside
+    /// a sheet with an unanswered question.
+    ///
+    /// ⚠️ **This found a real defect, and the auditor did not.** Both sheets' answers rendered
+    /// **34.33 pt** tall at the *default* text size — a glass button sized to its label, and the
+    /// label had no minimum. `performAccessibilityAudit`'s own hit-target check stayed green
+    /// through it, which is the same finding A12 records one surface over: on this repository's
+    /// controls, hit targets are measured or they are not checked.
+    func testBothAnswersToTheSecondActionAreBigEnoughToHit() throws {
+        SeededLaunch.pin(.light, in: self)
+        let app = try openMemoryOffer(arguments: [])
+        measureAnswers(app, [SeededLaunch.memoryOfferAccept, SeededLaunch.memoryOfferDecline])
+
+        app.buttons[SeededLaunch.memoryOfferAccept].tap()
+        XCTAssertTrue(
+            app.staticTexts[SeededLaunch.secondActionTitle].waitForExistence(timeout: 15),
+            "accepting the offer never led to the second action")
+        measureAnswers(app, ["Change them", "Leave them as they are"])
+    }
+
+    private func measureAnswers(_ app: XCUIApplication, _ labels: [String]) {
+        for label in labels {
+            let button = app.buttons[label].firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 10), "there is no \"\(label)\"")
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44, "\(label) is too short to hit")
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44, "\(label) is too narrow to hit")
+        }
+    }
+
+    /// Correct a transaction, audit the offer it produces, accept it, and audit the second
+    /// action — one launch, because neither surface is reachable except through the one before
+    /// it, and auditing them apart would audit each out of the state the previous one leaves.
+    ///
+    /// `crossing` rather than `repeated`: its radius spans two accounts, so the second action
+    /// renders the case that has more to lay out, which is the case an accessibility size
+    /// breaks first.
+    private func auditMemorySurfaces(
+        arguments: [String], types: XCUIAccessibilityAuditType
+    ) throws {
+        let app = try openMemoryOffer(arguments: arguments)
+        try audit(app, types: types)
+
+        app.buttons[SeededLaunch.memoryOfferAccept].tap()
+        XCTAssertTrue(
+            app.staticTexts[SeededLaunch.secondActionTitle].waitForExistence(timeout: 15),
+            "the second action never appeared, so the audit would have run on the offer twice")
+        try audit(app, types: types)
+    }
+
+    private func openMemoryOffer(arguments: [String]) throws -> XCUIApplication {
+        guard let subject = SeedScenario.crossing.expectedMemorySubjectRow else {
+            throw XCTSkip("the crossing scenario declares no memory")
+        }
+        let app = SeededLaunch.launch(scenario: .crossing, arguments: arguments)
+        SeededLaunch.openTransactionList(app)
+        SeededLaunch.openRow(app, labelled: subject.accessibilityLabel)
+        SeededLaunch.chooseCategory(app, named: "Groceries")
+        XCTAssertTrue(
+            app.staticTexts[SeededLaunch.memoryOfferTitle].waitForExistence(timeout: 10),
+            "no memory offer followed the correction")
+        return app
+    }
+
     /// Open a transaction, then the picker over it, and audit both — one launch, because the
     /// picker is only reachable through the surface and auditing them apart would audit the
     /// second one out of the state the first one puts it in.

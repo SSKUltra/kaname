@@ -623,33 +623,106 @@ debugging anything.
 
 > ⚠️ **Both scenarios can be eaten by de-duplication before anyone tests anything.** `repeated` puts one merchant in two statements of one account — vary the amounts or the dates or dedup supersedes the copies and the memory has one row to match. `crossing` puts a ledger and a card across two accounts — 🚨 that is **exactly** the pair cross-source dedup compares (two credit cards never de-duplicate; the source-kind guard compares a ledger against a card and nothing else), so its rows must differ in amount or date or the blast radius will be wrong before it was ever asserted.
 
-- [ ] T122 [US3] Add the `repeated` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant appearing across **two statements of one account** (FR-066), with amounts or dates varied per the warning above.
-- [ ] T123 [US3] Add the `crossing` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant across **two accounts**, a ledger and a card, with amounts or dates varied.
-- [ ] T124 [US3] Declare both scenarios' expectations in `ios/Sources/DebugSeed/SeedExpectations.swift`, **derived from the engine's answer**, not authored by hand.
-- [ ] T125 ⚠️ **BUILD** — `make ios-gen`, then `make ios-test`; confirm `SeedContractUITests` still passes with the expanded declared set.
+- [x] T122 [US3] Add the `repeated` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant appearing across **two statements of one account** (FR-066), with amounts or dates varied per the warning above.
+- [x] T123 [US3] Add the `crossing` scenario to `ios/Sources/DebugSeed/SeedScenarios.swift` — one merchant across **two accounts**, a ledger and a card, with amounts or dates varied.
+- [x] T124 [US3] Declare both scenarios' expectations in `ios/Sources/DebugSeed/SeedExpectations.swift`, **derived from the engine's answer**, not authored by hand.
+- [x] T125 ⚠️ **BUILD** — `make ios-gen`, then `make ios-test`; confirm `SeedContractUITests` still passes with the expanded declared set.
 
 ## Phase 18: The memory offer [US3]
 
-- [ ] T126 [US3] Create `ios/Sources/Categorize/MemoryOfferView.swift` (rules M1–M5): after a correction the app states, in the person's words and showing the **derived merchant portion**, what it will remember (M1, FR-026, FR-026a); the offer can be **declined** and declining leaves the correction fully intact and protected (M2, FR-028); the portion shown is `merchant_portion(narration)` **from the engine** — the Swift side derives nothing (M4, FR-021, FR-076); no engine vocabulary (M5, FR-029).
-- [ ] T127 ⚠️ **BUILD** — `make ios-gen`.
-- [ ] T128 [US3] **X4** in a new `ios/UITests/CategorizeMemoryUITests.swift` over `repeated`: the memory offer names the merchant portion and can be declined, and the correction survives the decline. Then `make ios-gen` and confirm the suite ran.
-- [ ] T129 [US3] Assert **M3** in `ios/Tests/MemoryOfferTests.swift`: when derivation returns nothing, or the correction was to *no category*, the app says plainly there is nothing to remember and offers no memory — it must **not** show an empty or degenerate portion (FR-027d, plan § *Spec amendments* §3). Run `make ios-gen` for the new test file.
+- [x] T126 [US3] Create `ios/Sources/Categorize/MemoryOfferView.swift` (rules M1–M5): after a correction the app states, in the person's words and showing the **derived merchant portion**, what it will remember (M1, FR-026, FR-026a); the offer can be **declined** and declining leaves the correction fully intact and protected (M2, FR-028); the portion shown is `merchant_portion(narration)` **from the engine** — the Swift side derives nothing (M4, FR-021, FR-076); no engine vocabulary (M5, FR-029).
+- [x] T127 ⚠️ **BUILD** — `make ios-gen`.
+- [x] T128 [US3] **X4** in a new `ios/UITests/CategorizeMemoryUITests.swift` over `repeated`: the memory offer names the merchant portion and can be declined, and the correction survives the decline. Then `make ios-gen` and confirm the suite ran.
+- [x] T129 [US3] Assert **M3** in `ios/Tests/MemoryOfferTests.swift`: when derivation returns nothing, or the correction was to *no category*, the app says plainly there is nothing to remember and offers no memory — it must **not** show an empty or degenerate portion (FR-027d, plan § *Spec amendments* §3). Run `make ios-gen` for the new test file.
 
 ## Phase 19: The second action [US3]
 
 > 🚨 Q1-D's second action applies **exactly one memory** — the one just formed. Everything below exists to keep it from becoming a bulk editor.
 
-- [ ] T130 [US3] Create `ios/Sources/Categorize/SecondActionView.swift` (rules S1–S7): states the blast radius **before** the person agrees — how many transactions and which accounts, from `MemoryImpact` (S1, FR-035a, FR-035c, SC-026); offers **no choice of which transactions** — no checkboxes, no multi-select, no "select all" (S2, FR-035b, SC-028); the counts and accounts shown are `MemoryImpact`'s, unmodified — the view does not count, filter or re-derive (S3, FR-043, FR-078); on confirm calls `applyMemory(portion, expecting: impact.transactionIds)` with the ids from the preview it showed, unmodified (S4, FR-035f); declining leaves the memory formed and the correction intact (S7, FR-028).
-- [ ] T131 ⚠️ **BUILD** — `make ios-gen`.
-- [ ] T132 [US3] **X5** in a new `ios/UITests/CategorizeSecondActionUITests.swift` over `crossing`: the screen states a count **and** account names before confirmation, and there is **no** multi-select control on it. Then `make ios-gen` and confirm the suite ran.
-- [ ] T133 [US3] Assert **S5** in `ios/Tests/CategorizeServiceTests.swift` with a doubled service: a `StaleSet` error is surfaced as a person-legible "things changed, take another look", **nothing is written**, and it is **not** retried silently with a fresh set (FR-035f, SC-027).
-- [ ] T134 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; confirm both new suites ran.
-- [ ] T135 [US3] Record in the PR description that **S2 is a UI rule and is not the enforcement**. The enforcement is engine-side set equality (`contracts/engine-categorize.md` §2.4, test **M7**, task T066). A UI without a checkbox proves nothing about a future UI (SC-028).
-- [ ] T136 [US3] Assert **S6** in `ios/Tests/CategorizeServiceTests.swift`: given a preview that contains no `'PERSON'` row, rows the person corrected by hand are neither counted nor changed — the view merely displays the engine's truth (FR-035d, SC-031, engine test M4).
-- [ ] T137 [US3] Record plan § *Judgement calls* §2 where a reader of `MemoryOfferView.swift` will find it: a memory beats a rule, and the offer's wording must not promise more than engine test **M2** asserts.
-- [ ] T138 **DELIBERATE BREAK** — make `SecondActionView` pass a **trimmed** id list to `applyMemory`. Expected: the engine returns `StaleSet`, the S5 path fires and **nothing is written**. Revert per non-negotiable 7, then `make ios-gen`. This break proves S4 end-to-end and, more importantly, proves the engine — not the view — is where the guarantee lives.
-- [ ] T139 [US3] Accessibility over `MemoryOfferView` and `SecondActionView` in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8, FR-060–FR-062, SC-016). `.contrast` excluded (`019/01`); `.textClipped` / `.dynamicType` excluded at XXXL (`019/03`).
-- [ ] T140 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+- [x] T130 [US3] Create `ios/Sources/Categorize/SecondActionView.swift` (rules S1–S7): states the blast radius **before** the person agrees — how many transactions and which accounts, from `MemoryImpact` (S1, FR-035a, FR-035c, SC-026); offers **no choice of which transactions** — no checkboxes, no multi-select, no "select all" (S2, FR-035b, SC-028); the counts and accounts shown are `MemoryImpact`'s, unmodified — the view does not count, filter or re-derive (S3, FR-043, FR-078); on confirm calls `applyMemory(portion, expecting: impact.transactionIds)` with the ids from the preview it showed, unmodified (S4, FR-035f); declining leaves the memory formed and the correction intact (S7, FR-028).
+- [x] T131 ⚠️ **BUILD** — `make ios-gen`.
+- [x] T132 [US3] **X5** in a new `ios/UITests/CategorizeSecondActionUITests.swift` over `crossing`: the screen states a count **and** account names before confirmation, and there is **no** multi-select control on it. Then `make ios-gen` and confirm the suite ran.
+- [x] T133 [US3] Assert **S5** in `ios/Tests/CategorizeServiceTests.swift` with a doubled service: a `StaleSet` error is surfaced as a person-legible "things changed, take another look", **nothing is written**, and it is **not** retried silently with a fresh set (FR-035f, SC-027).
+- [x] T134 ⚠️ **BUILD** — `make ios-gen` then `make ios-test`; confirm both new suites ran.
+- [x] T135 [US3] Record in the PR description that **S2 is a UI rule and is not the enforcement**. The enforcement is engine-side set equality (`contracts/engine-categorize.md` §2.4, test **M7**, task T066). A UI without a checkbox proves nothing about a future UI (SC-028).
+- [x] T136 [US3] Assert **S6** in `ios/Tests/CategorizeServiceTests.swift`: given a preview that contains no `'PERSON'` row, rows the person corrected by hand are neither counted nor changed — the view merely displays the engine's truth (FR-035d, SC-031, engine test M4).
+- [x] T137 [US3] Record plan § *Judgement calls* §2 where a reader of `MemoryOfferView.swift` will find it: a memory beats a rule, and the offer's wording must not promise more than engine test **M2** asserts.
+- [x] T138 **DELIBERATE BREAK** — make `SecondActionView` pass a **trimmed** id list to `applyMemory`. Expected: the engine returns `StaleSet`, the S5 path fires and **nothing is written**. Revert per non-negotiable 7, then `make ios-gen`. This break proves S4 end-to-end and, more importantly, proves the engine — not the view — is where the guarantee lives.
+- [x] T139 [US3] Accessibility over `MemoryOfferView` and `SecondActionView` in `ios/UITests/SeededAccessibilityUITests.swift`: default and XXXL, Light and Dark, zero findings for the audit types that run (X8, FR-060–FR-062, SC-016). `.contrast` excluded (`019/01`); `.textClipped` / `.dynamicType` excluded at XXXL (`019/03`).
+- [x] T140 **GATE** — `make lint && make ios-test && make import-audit`. ⚠️ Never concurrently with `make core-test`.
+
+---
+
+## PR E — RECORDED
+
+**T122–T140 are done.** A person can now correct a transaction, be asked in their own words
+whether Kaname should remember the merchant, decline that without touching the correction, and —
+if they accept — be told exactly how many transactions in exactly which accounts would change
+**before** anything is written. `ios/Sources/Categorize/` gains `MemoryOfferView.swift` and
+`SecondActionView.swift`; `ios/Sources/DebugSeed/` gains `SeedMemoryScenarios.swift` with the
+`repeated` and `crossing` scenarios; three unit suites and two UI suites are new.
+`ImportService.swift` is **unchanged at 398 lines**.
+
+**T135 — S2 is a UI rule, and it is not the enforcement.** The screen has no checkbox, no
+multi-select and no "select all", and `CategorizeSecondActionUITests` looks for all four
+(switches, check boxes, and the four wordings a selection control would use). None of that
+proves anything about a *future* UI. The enforcement is engine-side set equality
+(`contracts/engine-categorize.md` §2.4, test **M7**, task T066): `apply_memory` recomputes the
+affected set inside its own writing transaction and refuses **any** difference, a trimmed list
+included. T138 is the proof, and it is the reason S2's absence is safe to rely on (SC-028).
+
+**T138 — the break, and what it showed.** `SecondActionView` was made to pass
+`Array(request.impact.transactionIds.dropLast())`. Observed exactly as predicted, and end to
+end: `testAgreeingChangesTheRowsItNamed` went red with the screen reading **"These transactions
+changed while this was open, so nothing here was changed. Take another look."**, the corrected
+row still reading `Category: Groceries`, and **nothing written** anywhere. The refusal came from
+the engine, not from the view — which is the point of running it through the app rather than
+through a double. Reverted.
+
+**The six things worth carrying:**
+
+- 🚨 **A geometry assertion found a real hit-target defect that the accessibility auditor did
+  not.** Both sheets' answers rendered **34.33 pt** tall **at the default text size** — under
+  FR-062's 44 pt — and `performAccessibilityAudit` was green through all four of A13–A16. The
+  cause is that `.buttonStyle` draws its background around what the **label** asks for, so a
+  `.frame(minHeight:)` applied outside a styled button sizes the space around a control that
+  stayed small; the minimum has to be on the label, which is what `SheetAnswer` exists for. This
+  is the second time this repository has recorded that its hit targets are measured or they are
+  not checked (A12 is the first).
+- 🚨 **Every correction now leads to a sheet, and that broke a test that changed by nothing.**
+  X2 reached for the detail surface underneath the new offer and failed as "not hittable", which
+  reads exactly like a layout defect. `SeededLaunch.dismissMemoryOffer` is the shared way
+  through it, and declining is also the assertion X2 wanted — the change must survive it.
+  Anything that corrects a category from now on must expect the offer.
+- 🚨 **The second action changed rows the list behind it was still holding, and nothing said
+  so.** Watched: agreeing, going back, and reading three old categories on a list that had just
+  been changed underneath. Fixed through the seam a single correction already uses
+  (`refreshAfterCorrection`) rather than by patching rows — a screen that edits its own copy is
+  a screen that can disagree with the engine. **The queue does not ask for this**; K5 is written
+  about one row, and the second action is the first thing in the app that changes rows the
+  current screen is not showing.
+- ⚠️ **The picker cannot be found by the name of the thing you are choosing.** The current
+  choice's spoken label carries its mark — `No category, Current category` — so
+  `app.buttons["No category"]` finds nothing on an *unanswered* transaction, which is every
+  transaction a memory test starts from. It reads as a missing control. `chooseCategory` matches
+  the prefix, and A12 already carried the same note for the same reason.
+- ⚠️ **`alsoMatching` had to be adjudicated for completeness, not just correctness.** A declared
+  set that is merely *correct* understates the blast radius, which is the one number the second
+  action exists to state. `SeedMemoryExpectationTests` asks the engine in both directions —
+  every named description derives to the portion, and **no other row in the scenario does** —
+  and dropping one entry from `repeated` was watched turning **both** the completeness arm and
+  the impact-count arm red.
+- ⚠️ **Neither sheet has a navigation bar, deliberately.** Both headlines are questions, and an
+  inline navigation title is one line that truncates. They are `Text` in the content, where they
+  wrap at every size — which is also why A14/A16 pass at `AccessibilityXXXL`.
+
+**One judgement recorded in code (T137).** `MemoryOfferView.swift`'s doc comment carries plan
+§ *Judgement calls* §2 where somebody editing the wording will read it: a memory outranks every
+stage including the credit-card narration rules, the offer may **not** explain that (FR-029 bans
+the vocabulary, and whether to say it at all is unanswered), and the offer may not promise more
+than engine test **M2** asserts — a future import, not the rows already imported.
+
+**Deferred, unchanged.** `018/06`'s three device timings still need a phone (T176).
 
 ---
 
