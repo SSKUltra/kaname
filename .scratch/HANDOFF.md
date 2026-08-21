@@ -189,6 +189,22 @@ in words when they are finished.
 - **`019/03`** and **`.scratch/020-categorize/issues/01`** — the same Dynamic Type design question
   at two text sizes, both still open, neither this slice's to settle.
 
+⚠️ **CI is now three jobs and ~19 minutes** (was one job and ~40): `core`, **`ios-fast`**
+(lint, audits, the 335 unit tests — **9m36s**, so most failures report in under ten minutes) and
+**`ios-ui`**, the 57 UI tests in **four parallel shards**. `.github/scripts/ui-test-shards.sh`
+owns the split and its `--verify` — which runs in `ios-fast` — is what stands between a new UI
+suite and never being run at all. **Adding a UI suite means editing that script.**
+
+🚨 **THE UI SUITE HAS THREE KNOWN FLAKES, and all three read like product defects when they
+fire.** They are now the dominant cost of a red CI run and are worth one session:
+- **`issues/04`** — `testAnUnrecognisedScenarioNameNeverReachesTheForeground`: the deliberate
+  crash has **two spellings** and the matcher knows one.
+- **`issues/05`** — `testSeedingDoesNotMakeTheLaunchSlow`: a flat 20-second bound, failed at
+  **20.206s**. A generous wall clock is still a wall clock.
+- **`issues/06`** — `"tapping a row did not open the transaction"`: an **animation race**, and
+  the fix already exists in `CategorizeWorklistUITests` and was never applied to the other three
+  suites.
+
 ⚠️ **A CI failure here is a claim about the runner until it has been re-run.** #43's iOS job went
 red on a test that had never failed, on a change that touched neither it nor anything it uses,
 and passed on re-run of the identical commit. Read the *failure text* before the test name: an
