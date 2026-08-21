@@ -195,15 +195,20 @@ in words when they are finished.
 owns the split and its `--verify` — which runs in `ios-fast` — is what stands between a new UI
 suite and never being run at all. **Adding a UI suite means editing that script.**
 
-🚨 **THE UI SUITE HAS THREE KNOWN FLAKES, and all three read like product defects when they
-fire.** They are now the dominant cost of a red CI run and are worth one session:
-- **`issues/04`** — `testAnUnrecognisedScenarioNameNeverReachesTheForeground`: the deliberate
-  crash has **two spellings** and the matcher knows one.
-- **`issues/05`** — `testSeedingDoesNotMakeTheLaunchSlow`: a flat 20-second bound, failed at
-  **20.206s**. A generous wall clock is still a wall clock.
-- **`issues/06`** — `"tapping a row did not open the transaction"`: an **animation race**, and
-  the fix already exists in `CategorizeWorklistUITests` and was never applied to the other three
-  suites.
+✅ **The three UI-test flakes are FIXED** (PR #46, `df21317`) — CI went green first attempt, no
+re-runs. `issues/04` (the crash had **two spellings**), `issues/05` (a flat 20 s bound → a
+machine-relative `baseline * 5`, `K` measured from four points spanning 1.22–2.92) and `issues/06`
+(an animation race → `XCUIElement.tapWhenSettled()` in `ios/UITests/SettledTap.swift`). Each fix
+was **watched failing**. ⚠️ **Anything that taps after something animates should use
+`tapWhenSettled()`** — `waitForExistence` returns while the element is still moving.
+
+🚨 **One finding came out of that work and is NOT fixed** — recorded with its numbers in
+`.scratch/020-categorize/issues/05`. **The *delta* assertion in `testSeedingDoesNotMakeTheLaunchSlow`
+is confounded by cold start**: the unseeded launch runs first and pays warmup, so the baseline is
+inflated and the "seed cost" reads **−1.44 s** and **−0.59 s** locally. It is the assertion the
+test is *named* for, and it would stay green through a seeding regression roughly the size of the
+warmup it absorbs. Fixing it is a design decision (warm first? discard the first launch? measure
+in-process?) and deliberately was not bundled into a ticket about a different assertion.
 
 ⚠️ **A CI failure here is a claim about the runner until it has been re-run.** #43's iOS job went
 red on a test that had never failed, on a change that touched neither it nor anything it uses,
