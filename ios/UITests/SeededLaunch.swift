@@ -279,7 +279,7 @@ enum SeededLaunch {
         XCTAssertTrue(
             target.waitForExistence(timeout: 10), "the list never showed \(label)",
             file: file, line: line)
-        target.tap()
+        target.tapWhenSettled()
         XCTAssertTrue(
             app.navigationBars["Transaction"].waitForExistence(timeout: 10),
             "tapping a row did not open the transaction", file: file, line: line)
@@ -304,7 +304,7 @@ enum SeededLaunch {
         XCTAssertTrue(
             change.waitForExistence(timeout: 10), "the surface offers no way to change",
             file: file, line: line)
-        change.tap()
+        change.tapWhenSettled()
         XCTAssertTrue(
             app.navigationBars["Choose a category"].waitForExistence(timeout: 10),
             "the picker did not open", file: file, line: line)
@@ -319,7 +319,7 @@ enum SeededLaunch {
         XCTAssertTrue(
             choice.waitForExistence(timeout: 10), "the picker does not offer \(category)",
             file: file, line: line)
-        choice.tap()
+        choice.tapWhenSettled()
     }
 
     /// The sentences the memory offer can lead with.
@@ -358,7 +358,7 @@ enum SeededLaunch {
         for label in [memoryOfferDecline, "Done"] {
             let button = app.buttons[label].firstMatch
             if button.exists {
-                button.tap()
+                button.tapWhenSettled()
                 return
             }
         }

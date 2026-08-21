@@ -40,7 +40,7 @@ final class CategorizeSecondActionUITests: XCTestCase {
         XCTAssertTrue(
             app.staticTexts[SeededLaunch.memoryOfferTitle].waitForExistence(timeout: 10),
             "no memory offer followed the correction")
-        app.buttons[SeededLaunch.memoryOfferAccept].tap()
+        app.buttons[SeededLaunch.memoryOfferAccept].tapWhenSettled()
 
         XCTAssertTrue(
             app.staticTexts[SeededLaunch.secondActionTitle].waitForExistence(timeout: 15),
@@ -99,11 +99,11 @@ final class CategorizeSecondActionUITests: XCTestCase {
         SeededLaunch.chooseCategory(app, named: "Groceries")
         XCTAssertTrue(
             app.staticTexts[SeededLaunch.memoryOfferTitle].waitForExistence(timeout: 10))
-        app.buttons[SeededLaunch.memoryOfferAccept].tap()
+        app.buttons[SeededLaunch.memoryOfferAccept].tapWhenSettled()
         XCTAssertTrue(
             app.staticTexts[SeededLaunch.secondActionTitle].waitForExistence(timeout: 15))
 
-        app.buttons["Leave them as they are"].tap()
+        app.buttons["Leave them as they are"].tapWhenSettled()
 
         XCTAssertTrue(
             app.staticTexts["Category: Groceries"].waitForExistence(timeout: 10),
@@ -123,11 +123,11 @@ final class CategorizeSecondActionUITests: XCTestCase {
         SeededLaunch.chooseCategory(app, named: "Groceries")
         XCTAssertTrue(
             app.staticTexts[SeededLaunch.memoryOfferTitle].waitForExistence(timeout: 10))
-        app.buttons[SeededLaunch.memoryOfferAccept].tap()
+        app.buttons[SeededLaunch.memoryOfferAccept].tapWhenSettled()
         XCTAssertTrue(
             app.staticTexts[SeededLaunch.secondActionTitle].waitForExistence(timeout: 15))
 
-        app.buttons["Change them"].tap()
+        app.buttons["Change them"].tapWhenSettled()
 
         let changed = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "\(expected.rows.count) transactions changed")
@@ -137,7 +137,7 @@ final class CategorizeSecondActionUITests: XCTestCase {
             "the screen never says what changed. On screen: "
                 + "\(app.staticTexts.allElementsBoundByIndex.map(\.label))")
 
-        app.buttons["Done"].tap()
+        app.buttons["Done"].tapWhenSettled()
 
         // And the rows themselves: back on the list, every row the radius named now reads the
         // new category. ⚠️ Asserted on the **rendered sentence**, which is where a person would
