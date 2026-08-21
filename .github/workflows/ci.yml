@@ -100,13 +100,22 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: core
-      # The XCFramework is a **pure function** of `core/`, the toolchain and the build script —
-      # unlike DerivedData, its inputs are exactly enumerable, so the key can be tight enough that
-      # a hit is never a stale build. Change one line of Rust and the key changes and it rebuilds.
+      # The XCFramework is a **pure function** of `core/crates`, the toolchain and the build
+      # script — unlike DerivedData, its inputs are exactly enumerable, so the key can be tight
+      # enough that a hit is never a stale build. Change one line of Rust and it rebuilds.
       #
       # It is worth caching because it is paid by **every** iOS job (five of them) and it got
-      # *slower* when the job was split: 148 s in the old single job against 240-327 s here, since
-      # five jobs now race for the same `rust-cache` entry.
+      # *slower* when the job was split: 148 s in the old single job against 240-327 s across the
+      # new ones, since five jobs now race for the same `rust-cache` entry.
+      #
+      # 🚨 **The globs say `core/crates/**`, never `core/**`, and that is not tidiness.**
+      # `Swatinem/rust-cache` above restores `core/target/` *before* this step, and that tree
+      # holds ~30 generated `.rs` files — including `libsqlite3-sys-<hash>/out/bindgen.rs`, whose
+      # **path contains a hash that changes between runs**. A `core/**/*.rs` glob therefore
+      # produces a different key every time: it never hits, it silently saves a new entry each
+      # run, and the only symptom is a cache that appears to be working and never helps. That is
+      # what the first version of this step did, proved by two runs of identical source producing
+      # keys `dd73d0f2…` and `572f77c4…`. Every real source file is under `core/crates`.
       - name: Cache engine XCFramework + generated bindings
         id: xcframework
         uses: actions/cache@v4
@@ -114,7 +123,7 @@ jobs:
           path: |
             ios/Frameworks
             ios/Generated
-          key: xcframework-${{ runner.os }}-${{ hashFiles('core/**/*.rs', 'core/**/Cargo.toml', 'core/Cargo.lock', 'rust-toolchain.toml', 'core/scripts/build-xcframework.sh') }}
+          key: xcframework-${{ runner.os }}-${{ hashFiles('core/crates/**/*.rs', 'core/crates/**/Cargo.toml', 'core/Cargo.toml', 'core/Cargo.lock', 'rust-toolchain.toml', 'core/scripts/build-xcframework.sh') }}
       - name: Build engine XCFramework (must precede tuist generate)
         if: steps.xcframework.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
@@ -188,13 +197,22 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: core
-      # The XCFramework is a **pure function** of `core/`, the toolchain and the build script —
-      # unlike DerivedData, its inputs are exactly enumerable, so the key can be tight enough that
-      # a hit is never a stale build. Change one line of Rust and the key changes and it rebuilds.
+      # The XCFramework is a **pure function** of `core/crates`, the toolchain and the build
+      # script — unlike DerivedData, its inputs are exactly enumerable, so the key can be tight
+      # enough that a hit is never a stale build. Change one line of Rust and it rebuilds.
       #
       # It is worth caching because it is paid by **every** iOS job (five of them) and it got
-      # *slower* when the job was split: 148 s in the old single job against 240-327 s here, since
-      # five jobs now race for the same `rust-cache` entry.
+      # *slower* when the job was split: 148 s in the old single job against 240-327 s across the
+      # new ones, since five jobs now race for the same `rust-cache` entry.
+      #
+      # 🚨 **The globs say `core/crates/**`, never `core/**`, and that is not tidiness.**
+      # `Swatinem/rust-cache` above restores `core/target/` *before* this step, and that tree
+      # holds ~30 generated `.rs` files — including `libsqlite3-sys-<hash>/out/bindgen.rs`, whose
+      # **path contains a hash that changes between runs**. A `core/**/*.rs` glob therefore
+      # produces a different key every time: it never hits, it silently saves a new entry each
+      # run, and the only symptom is a cache that appears to be working and never helps. That is
+      # what the first version of this step did, proved by two runs of identical source producing
+      # keys `dd73d0f2…` and `572f77c4…`. Every real source file is under `core/crates`.
       - name: Cache engine XCFramework + generated bindings
         id: xcframework
         uses: actions/cache@v4
@@ -202,7 +220,7 @@ jobs:
           path: |
             ios/Frameworks
             ios/Generated
-          key: xcframework-${{ runner.os }}-${{ hashFiles('core/**/*.rs', 'core/**/Cargo.toml', 'core/Cargo.lock', 'rust-toolchain.toml', 'core/scripts/build-xcframework.sh') }}
+          key: xcframework-${{ runner.os }}-${{ hashFiles('core/crates/**/*.rs', 'core/crates/**/Cargo.toml', 'core/Cargo.toml', 'core/Cargo.lock', 'rust-toolchain.toml', 'core/scripts/build-xcframework.sh') }}
       - name: Build engine XCFramework (must precede tuist generate)
         if: steps.xcframework.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
