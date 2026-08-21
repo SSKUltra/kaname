@@ -99,9 +99,23 @@ cached** — a key loose enough to hit on a pull request that changes Swift is a
 serve a stale build, and a green run against code that is not under review is worse than five slow
 minutes. The cargo cache stays, because it keys on the lockfile and cannot do that.
 
+🚨 **The XCFramework cache key globs `core/crates/**`, never `core/**`, and that is not
+tidiness.** `Swatinem/rust-cache` restores `core/target/` *before* that step, and that tree holds
+~30 generated `.rs` files — including `libsqlite3-sys-<hash>/out/bindgen.rs`, whose **path carries
+a hash that changes between runs**. A `core/**/*.rs` glob therefore computes a different key every
+time: it never hits, it silently writes a fresh entry every run, and **the only symptom is a cache
+that looks like it is working and never helps**. That was the first version of this step, proved
+by two runs of identical source producing keys `dd73d0f2…` and `572f77c4…`. If you add an input to
+that key, check it cannot match anything under `core/target`.
+
 ⚠️ **`fail-fast: false` on the matrix is load-bearing.** When a UI test goes red the first question
 is always "did anything else fail, or just this one?" — and this bundle has a known
 load-dependent flake (`.scratch/020-categorize/issues/04`).
+
+⚠️ **`SeedContractUITests` holds both known CI flakes in the repository** — `issues/04` (a crash
+report with two spellings) and `issues/05` (a 20-second wall clock that fails by 1% on a slow
+runner). **A red there is a claim about the runner until it has been re-run**; read the failure
+*text* before the test name.
 
 ## Two traps this repo will spring on you (018)
 
