@@ -57,7 +57,7 @@ final class CategorizeMemoryUITests: XCTestCase {
         XCTAssertTrue(quoting.label.contains(chosen), "the offer does not say where it would file")
 
         // M2 — declining is a decline, not a cancellation.
-        app.buttons[SeededLaunch.memoryOfferDecline].tap()
+        app.buttons[SeededLaunch.memoryOfferDecline].tapWhenSettled()
 
         XCTAssertTrue(
             app.staticTexts["Category: \(chosen)"].waitForExistence(timeout: 10),

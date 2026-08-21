@@ -70,12 +70,23 @@ final class SeedContractUITests: XCTestCase {
         // The launch itself is what fails, and XCUITest reports the crash as a test failure of
         // its own — after `launch()` has returned, which is why the expectation is registered
         // for the remainder of the test rather than around a block. ⚠️ The matcher is narrow on
-        // purpose: **only** the crash report is absorbed, so the assertion below is still a real
-        // assertion. Without it, an expectation covering the rest of the test would swallow the
-        // very verdict this test exists to reach.
+        // purpose: **only** the report that the app is gone is absorbed, so the assertion below
+        // is still a real assertion. Without it, an expectation covering the rest of the test
+        // would swallow the very verdict this test exists to reach.
+        //
+        // 🚨 **Two spellings, one event** (`.scratch/020-categorize/issues/04`). Which one arrives
+        // depends on how far the launch got before the runner noticed: normally
+        // `… crashed in <external symbol>`, but on a slow runner the app can die before the
+        // automation session ever gets a background assertion for it, and the report is then
+        // `Failed to get background assertion for target app with pid N`. Matching only "crashed"
+        // made this test flaky on CI — red at 37m42s, green on re-run of the identical commit.
         let options = XCTExpectedFailure.Options()
         options.isStrict = false
-        options.issueMatcher = { $0.compactDescription.contains("crashed") }
+        options.issueMatcher = { issue in
+            let text = issue.compactDescription
+            return text.contains("crashed")
+                || text.contains("Failed to get background assertion")
+        }
         XCTExpectFailure("an unrecognised scenario must fail the launch", options: options)
         app.launch()
 
@@ -136,7 +147,24 @@ final class SeedContractUITests: XCTestCase {
         XCTAssertLessThan(
             toFrontDoor - baseline, 3.0,
             "seeding cost \(toFrontDoor - baseline)s over an unseeded launch of the same screen")
-        XCTAssertLessThan(toFirstRow, 20.0, "a seeded launch took \(toFirstRow)s to show a row")
+        // ⚠️ **Relative to the machine, never absolute** (`.scratch/020-categorize/issues/05`).
+        //
+        // This was `XCTAssertLessThan(toFirstRow, 20.0)` and it went red on CI at **20.21 s** —
+        // by 1%, on a run where the seed itself cost **0.45 s** of its 3 s budget. The bound was
+        // failing on a number that is almost entirely the machine: 6.93 s of cold simulator
+        // start, plus a tap-to-row leg dominated by XCUITest's own full-tree query.
+        //
+        // The ratio is measured, not guessed: **1.22 on a developer's machine, 2.92 on the CI
+        // runner that failed**. `K` is 5, which clears the worst observed by 71%.
+        //
+        // 🚨 **The real collapse detector is the `waitForExistence(timeout: 30)` above**, which
+        // fails on its own if a row never arrives. This bound only covers the narrow band between
+        // "degrading" and "gone", so it is deliberately generous: it is here to notice a journey
+        // sliding toward that timeout, not to police a duration.
+        XCTAssertLessThan(
+            toFirstRow, baseline * 5,
+            "a seeded launch took \(toFirstRow)s to show a row, against an unseeded launch of "
+                + "\(baseline)s for the same machine — a ratio of \(toFirstRow / baseline)")
     }
 
     /// L6 — the reset lives inside the request. A launch that asks for nothing deletes nothing,

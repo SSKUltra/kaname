@@ -1,7 +1,7 @@
 # 06 — "tapping a row did not open the transaction" is an animation race, not a broken row
 
-**Status:** ready-for-agent (the fix is the wait helper the worklist suite already has; it just
-needs applying to the other suites)
+**Status:** resolved (2026-08-21) — `XCUIElement.tapWhenSettled()` in
+`ios/UITests/SettledTap.swift`, used at every tap that follows an animation
 
 **Found:** 2026-08-21, on `main` (run `32452725396`, shard 4). It passed locally, passed in the
 previous three CI runs, and passed on re-run of the identical commit.

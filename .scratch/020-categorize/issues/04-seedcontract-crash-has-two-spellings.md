@@ -1,6 +1,7 @@
 # 04 — `testAnUnrecognisedScenarioNameNeverReachesTheForeground` is flaky on CI: the crash has two spellings
 
-**Status:** ready-for-agent (one line plus a comment; the reasoning is already written, below)
+**Status:** resolved (2026-08-21) — the matcher now absorbs both spellings, and the verdict it
+must *not* absorb was watched still firing
 
 **Found:** 2026-08-20, by PR #43's CI run. It cost **37m42s** of CI, a re-run of **39m49s**, and
 would have cost the next person the same. `020-categorize` PR G, but the test is **019's** and
