@@ -1,7 +1,8 @@
 # 02 — `EmptyKind.accountAnswered` is rendered by nothing, and no automated run reaches it
 
-**Status:** ready-for-agent (small, well-understood, and the cost is a ~15-tap prologue, not a
-design question)
+**Status:** resolved (2026-08-22) — `CategorizeWorklistUITests
+.testFinishingOneAccountSaysSoAndClearingTheFilterStillFindsWork`, **X8**. Written exactly as
+*What would close it* describes, and **watched failing twice**; see *How it was closed* below.
 
 **Found:** 2026-08-20, by **T183**'s hand-back walk — reading every FR-001–FR-078 and
 SC-001–SC-036 for a discharging task id rather than trusting the traceability tables. PR G,
@@ -61,3 +62,32 @@ does not.
 T183's own instruction: *"Anything that is neither is a gap and is reported as one, not closed."*
 PR G builds nothing. The cost is a fifteen-tap prologue to a two-line assertion, and whether that
 is worth it belongs to whoever picks it up — not to the audit that found it.
+
+---
+
+## How it was closed
+
+`CategorizeWorklistUITests.testFinishingOneAccountSaysSoAndClearingTheFilterStillFindsWork`
+(**X8**), over `crossing`: open the worklist, narrow to the ledger, answer both of its rows,
+read the empty state, then clear the filter and walk what is left. 4/4 green in the suite,
+**49 s** for the new test; `--verify` still OK (12 suites, 4 shards — `CategorizeWorklistUITests`
+was already in shard 3, so no new file and no `make ios-gen`).
+
+**Two deliberate breaks, both watched, and the second is the one that mattered.**
+
+1. `EmptyKind.finished` returning `.allAnswered` where it returned `.accountAnswered` — the state
+   collapse this ticket is about. ⛔ Red at the title, and **the observed failure text is the
+   defect in one line**: `("Nothing left to file") is not equal to ("Nothing left to file in
+   SYNTHETIC RIVERSIDE COMMUNITY BANK")`, with the screen also reading *"Every transaction Kaname
+   has imported has a category"* while a whole card sat untouched.
+2. `clearFilter()` dropping the uncategorized narrowing along with the account. ⛔ Red at
+   **line 158 only** — the title assertion stayed green — naming the two rows a person had just
+   answered coming back onto the worklist. This is what proves the second assertion is
+   load-bearing rather than decorative: break 1 cannot fail it, and it cannot fail break 1.
+
+⚠️ **The wording assertion cannot use `hasPrefix`.** `accountFiledTitle(name)` *begins with*
+`allFiledTitle`, so a prefix match passes on exactly the day one finished account starts claiming
+the whole store is done — which is break 1. `SeededLaunch.accountFiledTitle` was added beside
+`allFiledTitle` with that written on it, duplicated from `CategorizeStrings` for the same reason
+`emptyTitlePrefixes` is: this bundle links neither the app nor the engine, and an assertion made
+against the **rendered** sentence is what notices when copy and state come apart.

@@ -239,6 +239,13 @@ enum SeededLaunch {
     static let worklistFinished = "Everything has a category"
     static let allFiledTitle = "Nothing left to file"
 
+    /// The same finish, about one account rather than the whole store — and a different fact.
+    ///
+    /// ⚠️ It **begins with** `allFiledTitle`, so an assertion written with `hasPrefix` cannot
+    /// tell the two apart and would pass on the day one finished account started claiming the
+    /// store was done. Compare whole sentences here.
+    static func accountFiledTitle(_ name: String) -> String { "\(allFiledTitle) in \(name)" }
+
     /// Open the worklist from the front door — the door a person taps, not a route assembled
     /// by the test.
     static func openWorklist(

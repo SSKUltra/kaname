@@ -166,21 +166,17 @@ in words when they are finished.
 
 **⚠️ What is open, and it is short:**
 
-- 🚨 **`.scratch/020-categorize/issues/04`** (`ready-for-agent`) — **`SeedContractUITests
-  .testAnUnrecognisedScenarioNameNeverReachesTheForeground` is flaky on CI**, and it cost #43
-  **37m42s + a 39m49s re-run**. The test deliberately crashes the app and absorbs XCUITest's
-  crash report with `issueMatcher = { $0.compactDescription.contains("crashed") }` — but the
-  **same event has two spellings**, and on a differently-loaded runner it arrives as
-  `Failed to get background assertion for target app with pid N`, which the matcher does not
-  absorb. One line to fix; the narrowness must be preserved, and the ticket says exactly why and
-  how to watch it fail. **Fix this before the next CI-gated PR.**
-- **`.scratch/020-categorize/issues/02`** (`ready-for-agent`) — **`EmptyKind.accountAnswered` is
-  rendered by nothing.** One account finished while another still has work: asserted twice as a
-  value and a sentence, reached by no automated run of any kind. **Not** FR-070's kind of state —
-  it is perfectly seedable (`crossing` has two accounts), so it is a strict hole in SC-018. Found
-  by T183's mechanical walk of all 78 FRs and 36 SCs, which is the only thing that could have
-  found it: the traceability tables are complete for *assertions* and silent about requirements
-  no assertion is named after. Reported and not closed, per T183's own instruction.
+- ✅ **`.scratch/020-categorize/issues/04`** — **resolved in PR #46**, along with `05` and `06`.
+  See the flake section below; it is no longer a blocker on the next CI-gated PR.
+- ✅ **`.scratch/020-categorize/issues/02`** — **resolved 2026-08-22.** `EmptyKind.accountAnswered`
+  is now rendered and read by a machine: `CategorizeWorklistUITests
+  .testFinishingOneAccountSaysSoAndClearingTheFilterStillFindsWork` (**X8**, over `crossing`,
+  49 s, in the existing shard 3 — no new file, so no `make ios-gen`). It closes the strict hole
+  T183 found in SC-018/SC-035. **Two breaks watched**: collapsing the state to `.allAnswered`
+  (⛔ the title), and `clearFilter()` dropping the narrowing (⛔ **line 158 only**, which is what
+  proves the clear-the-filter assertion is load-bearing rather than a test of copy).
+  ⚠️ `accountFiledTitle(name)` **begins with** `allFiledTitle`, so the wording assertion must
+  compare whole sentences — `hasPrefix` passes on exactly the defect break 1 injects.
 - **`018/06`** (`ready-for-human`) — still **the only thing between 018 and SC-012**, and 020 did
   not sign it either. Three device timings, ~20 minutes with a physical phone.
 - **`018/05`** (`needs-info`) — the render hang. 020 pushes a detail view over a deeply-scrolled

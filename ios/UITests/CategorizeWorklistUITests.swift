@@ -1,6 +1,7 @@
 import XCTest
 
-/// **X6**, **X7** and **X3** — the worklist, over the `unfiled` scenario.
+/// **X6**, **X7**, **X3** and **X8** — the worklist, over `unfiled` and, for the one state that
+/// needs a second account, `crossing`.
 ///
 /// `unfiled` is one card with five live rows, of which the engine can place two: a cashback
 /// inflow and a second one. The remaining three are what a person opens this door for, and
@@ -107,6 +108,56 @@ final class CategorizeWorklistUITests: XCTestCase {
             after.contains(subject),
             "a transaction a person deliberately left blank is still on the worklist")
         XCTAssertEqual(after.count, before.count - 1)
+    }
+
+    /// **X8** — one account finished while another still has work.
+    ///
+    /// The state `EmptyKind.accountAnswered` names: *this* card is done, and the app has to say
+    /// so about the card rather than congratulate the person for finishing everything. It was
+    /// asserted twice as a value and once as a sentence and **rendered by nothing** until this
+    /// test existed (`.scratch/020-categorize/issues/02`), which is a hole in SC-018 rather than
+    /// one of FR-070's unreachable states — a seed constructs it in fifteen taps.
+    ///
+    /// ⚠️ **Clearing the filter and still finding work is the assertion**, not the wording. It
+    /// is the entire difference between this state and `allAnswered`; a test that stopped at the
+    /// sentence would be testing copy, and would stay green if the two states swapped.
+    ///
+    /// `crossing` is the scenario for it: two accounts, every row unanswered, and a ledger/card
+    /// pair — the only pair cross-source de-duplication compares, so the rows that survive here
+    /// survive on purpose.
+    func testFinishingOneAccountSaysSoAndClearingTheFilterStillFindsWork() throws {
+        let scenario = SeedScenario.crossing
+        XCTAssertEqual(
+            scenario.expectedAccounts.count, 2,
+            "the crossing scenario stopped spanning two accounts, so no account can finish alone")
+        let finishing = try XCTUnwrap(scenario.expectedAccounts.first)
+        let untouched = try XCTUnwrap(scenario.expectedAccounts.last)
+        let mine = scenario.expectedLiveRows(inAccountNamed: finishing.name)
+        let theirs = scenario.expectedLiveRows(inAccountNamed: untouched.name)
+        XCTAssertFalse(mine.isEmpty, "there is nothing to answer in \(finishing.name)")
+        XCTAssertFalse(
+            theirs.isEmpty, "no work would be left over, so this is `allAnswered` in disguise")
+
+        let app = SeededLaunch.launch(scenario: .crossing)
+        SeededLaunch.openWorklist(app)
+        SeededLaunch.filter(app, to: finishing)
+        answerEveryRowOfTheWorklist(app, expecting: mine.count)
+
+        let expected = SeededLaunch.accountFiledTitle(finishing.name)
+        waitUntil("the account that finished never said so") {
+            SeededLaunch.emptyState(app)?.title == expected
+        }
+        XCTAssertEqual(
+            SeededLaunch.emptyState(app)?.title, expected,
+            "the finished account is not named. On screen: "
+                + "\(app.staticTexts.allElementsBoundByIndex.map(\.label))")
+
+        // The half that makes it a different state: the filter was the reason, and dropping it
+        // finds the other account's rows still waiting.
+        SeededLaunch.clearFilter(app)
+        XCTAssertEqual(
+            SeededLaunch.walk(app).rows, theirs.map(\.accessibilityLabel),
+            "clearing the filter did not leave exactly the other account's unanswered rows")
     }
 
     /// Work the whole list to zero, one row at a time, always taking whatever is at the top.

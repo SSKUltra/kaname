@@ -29,7 +29,7 @@ cd "$(dirname "$0")/../.."
 # re-reading a run's own timings, and expect them to drift as suites grow.
 SHARD_1="SeededAccessibilityUITests"                                    # ~441 s
 SHARD_2="SeededDeterminismUITests SeedContractUITests CategorizeMemoryUITests"  # ~470 s
-SHARD_3="SeededEmptyStateUITests SeededHistoryShapeUITests CategorizeWorklistUITests"  # ~435 s
+SHARD_3="SeededEmptyStateUITests SeededHistoryShapeUITests CategorizeWorklistUITests"  # ~484 s
 SHARD_4="CategorizeDetailUITests SeededWorklistAccessibilityUITests CategorizeSecondActionUITests SeededTransactionListUITests ImportFrontDoorUITests"  # ~445 s
 
 SHARD_COUNT=4
